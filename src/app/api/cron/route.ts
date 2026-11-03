@@ -1,10 +1,14 @@
 import { sql } from "@/lib/db";
 import { listCalendars, listEvents, type Ev } from "@/lib/calendar";
+import { loadPriorities } from "@/lib/priorities";
 import { sendPush } from "@/lib/push";
 import { dueReminders, LOOKAHEAD_MS } from "@/lib/reminders";
 
+const DIGEST_HOUR = 8;
+
 // GET /api/cron — called every minute by the scheduler (Supabase pg_cron in production) with the shared secret.
-// Sends due reminders, re-sends snoozed ones, and deletes old reminder records.
+// Sends due reminders and deadline check-ins, re-sends snoozed reminders, sends the 8 am priorities summary,
+// and deletes old records.
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) return new Response("Unauthorized", { status: 401 });
@@ -30,8 +34,61 @@ export async function GET(req: Request) {
     returning id, user_id, title, body`;
   for (const d of snoozed) await sendPush(d.user_id, { id: d.id, title: d.title, body: d.body });
 
+  const checkins = await sendCheckins();
+  let digests = 0;
+  for (const u of users) {
+    try {
+      digests += await morningDigest(u.id, u.timezone, u.hidden_calendars, now);
+    } catch (err) {
+      console.error(`Morning summary for user ${u.id} failed:`, err);
+    }
+  }
+
   await sql`delete from reminder_deliveries where fire_at < now() - interval '2 days'`;
-  return Response.json({ users: users.length, sent, snoozed: snoozed.length });
+  await sql`delete from deadline_states where due_at < now() - interval '7 days'`;
+  return Response.json({ users: users.length, sent, snoozed: snoozed.length, checkins, digests });
+}
+
+// Check-ins you asked for ("Later", "Doing it now", "Stuck"). Unanswered ones repeat every 30 minutes until
+// you answer or the deadline passes.
+async function sendCheckins() {
+  const due = await sql<{ id: string; user_id: string; title: string; due_at: Date; status: string; timezone: string }[]>`
+    update deadline_states d set next_check_at = now() + interval '30 minutes'
+    from users u
+    where u.id = d.user_id and d.next_check_at <= now() and d.status in ('doing', 'later', 'stuck') and d.due_at > now()
+    returning d.id, d.user_id, d.title, d.due_at, d.status, u.timezone`;
+  for (const d of due) {
+    const when = d.due_at.toLocaleString("en-IN", { timeZone: d.timezone, weekday: "short", hour: "numeric", minute: "2-digit" });
+    await sendPush(d.user_id, {
+      kind: "checkin",
+      id: d.id,
+      ask: d.status === "later" ? "start" : "finished",
+      title: d.status === "later" ? `Time to start “${d.title}”` : `Finished “${d.title}”?`,
+      body: `Due ${when}${d.status === "stuck" ? " · still stuck? Open Almanac to replan" : ""}`,
+    });
+  }
+  return due.length;
+}
+
+// Once a day after 8 am (user's time): "3 deadlines in the next 5 days · 1 critical".
+async function morningDigest(userId: string, timeZone: string, hidden: string[], now: Date) {
+  const [claim] = await sql<{ id: string }[]>`
+    update users set last_digest_on = (now() at time zone ${timeZone})::date
+    where id = ${userId}
+      and extract(hour from now() at time zone ${timeZone}) >= ${DIGEST_HOUR}
+      and (last_digest_on is null or last_digest_on < (now() at time zone ${timeZone})::date)
+    returning id`;
+  if (!claim) return 0;
+  const open = (await loadPriorities(userId, timeZone, hidden, now)).filter((p) => p.status !== "done");
+  if (!open.length) return 0;
+  const critical = open.filter((p) => p.severity === "critical").length;
+  const top = open[0];
+  await sendPush(userId, {
+    kind: "digest",
+    title: `${open.length} deadline${open.length === 1 ? "" : "s"} in the next 5 days${critical ? ` · ${critical} critical` : ""}`,
+    body: `First: ${top.title} (${top.reason.toLowerCase()})`,
+  });
+  return 1;
 }
 
 async function remindUser(userId: string, timeZone: string, hidden: string[], now: Date) {

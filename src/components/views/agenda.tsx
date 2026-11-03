@@ -1,14 +1,24 @@
 "use client";
 import { AnimatePresence, motion } from "motion/react";
 import type { Ev } from "@/lib/calendar";
+import type { Severity } from "@/lib/priority";
 import { addDays, formatTime, myReply, overlapsDay, startOfDay } from "@/lib/time";
+import { SeverityChip } from "../priorities-panel";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
-type Props = { days: Date[]; events: Ev[]; color: (e: Ev) => string; now: Date; onOpen: (e: Ev) => void; showFree?: boolean };
+type Props = {
+  days: Date[];
+  events: Ev[];
+  color: (e: Ev) => string;
+  severityOf: (e: Ev) => Severity | undefined;
+  now: Date;
+  onOpen: (e: Ev) => void;
+  showFree?: boolean;
+};
 
 // A day-by-day list. Also used for search results (showFree off, only days with matches).
-export function Agenda({ days, events, color, now, onOpen, showFree = true }: Props) {
+export function Agenda({ days, events, color, severityOf, now, onOpen, showFree = true }: Props) {
   const today = startOfDay(now);
   return (
     <ol className="space-y-6">
@@ -47,6 +57,11 @@ export function Agenda({ days, events, color, now, onOpen, showFree = true }: Pr
                     >
                       <span className="w-28 shrink-0 pt-0.5 font-mono text-xs text-muted">{timeLabel(e, day)}</span>
                       <span className="min-w-0">
+                        {severityOf(e) && (
+                          <span className="mr-2 align-middle">
+                            <SeverityChip severity={severityOf(e)!} />
+                          </span>
+                        )}
                         <span className={`font-medium ${myReply(e).className}`}>{e.title}</span>
                         {e.recurringEventId && <span className="ml-2 text-xs text-muted" aria-label="repeats">↻</span>}
                         {myReply(e).note && <span className="ml-2 text-xs text-muted">{myReply(e).note.slice(3)}</span>}

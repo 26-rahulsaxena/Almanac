@@ -19,7 +19,9 @@ import {
   type Scope,
   type SendUpdates,
 } from "@/lib/recurrence";
+import type { Priority } from "@/lib/priorities";
 import { describeReminder } from "@/lib/reminders";
+import { SeverityChip } from "./priorities-panel";
 import { addDays, parseWhen } from "@/lib/time";
 import { useDialog } from "./use-dialog";
 
@@ -96,6 +98,8 @@ type Props = {
   initial: Form;
   event?: Ev;
   calendars: Cal[];
+  priority?: Priority; // set when this event is a tracked deadline in the next 5 days
+  onDeadline: (deadline: boolean | null) => Promise<void>;
   onClose: () => void;
   onSave: (input: SaveInput) => Promise<void>;
   onDelete: (scope?: Scope, sendUpdates?: SendUpdates) => void;
@@ -104,7 +108,7 @@ type Props = {
 const field = "w-full rounded-lg border border-line bg-paper px-3 py-2 text-sm focus:border-ink/40 focus:outline-none";
 const label = "font-mono text-[10px] uppercase tracking-[0.18em] text-muted";
 
-export function EventPanel({ initial, event, calendars, onClose, onSave, onDelete }: Props) {
+export function EventPanel({ initial, event, calendars, priority, onDeadline, onClose, onSave, onDelete }: Props) {
   const [f, setF] = useState(initial);
   // undefined while the series rule loads; null when the event doesn't repeat
   const [originalRule, setOriginalRule] = useState<string | null | undefined>(event?.recurringEventId ? undefined : null);
@@ -263,6 +267,28 @@ export function EventPanel({ initial, event, calendars, onClose, onSave, onDelet
                 {!f.allDay && <input type="time" aria-label="End time" value={f.endTime} onChange={(e) => set("endTime", e.target.value)} className={field} required />}
               </div>
             </div>
+
+            {event && (
+              <div className="flex items-center justify-between gap-2 rounded-lg bg-ink/[0.04] px-3 py-2 text-sm">
+                {priority ? (
+                  <>
+                    <span className="flex items-center gap-2">
+                      <SeverityChip severity={priority.severity} /> Tracked deadline{priority.manual ? "" : " (spotted automatically)"}
+                    </span>
+                    <button type="button" onClick={() => onDeadline(false).catch((e) => setError(e.message))} className="shrink-0 text-muted underline hover:text-ink">
+                      Not a deadline
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-muted">Not tracked as a deadline</span>
+                    <button type="button" onClick={() => onDeadline(true).catch((e) => setError(e.message))} className="shrink-0 underline">
+                      Track as deadline
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
 
             <div className="space-y-2">
               <label htmlFor="repeat" className={label}>

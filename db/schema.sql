@@ -52,9 +52,30 @@ create table if not exists reminder_deliveries (
 );
 create index if not exists reminder_deliveries_snoozed on reminder_deliveries(snooze_until) where status = 'snoozed';
 
+-- Priorities: your choices and check-in progress per deadline. Title and due time are kept so
+-- check-in notifications can name the task; rows are deleted a week after the deadline.
+create table if not exists deadline_states (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id) on delete cascade,
+  calendar_id text not null,
+  event_id text not null,
+  title text not null,
+  due_at timestamptz not null,
+  is_deadline boolean, -- null = decide automatically
+  severity_override text check (severity_override in ('low', 'medium', 'high', 'critical')),
+  status text not null default 'open' check (status in ('open', 'doing', 'later', 'stuck', 'done')),
+  next_check_at timestamptz,
+  later_count int not null default 0,
+  updated_at timestamptz not null default now(),
+  unique (user_id, calendar_id, event_id)
+);
+create index if not exists deadline_states_due_check on deadline_states(next_check_at) where next_check_at is not null;
+alter table users add column if not exists last_digest_on date;
+
 -- Row Level Security with no policies blocks Supabase's public API from these tables.
 -- The app connects as the database owner, which is unaffected.
 alter table users enable row level security;
 alter table google_tokens enable row level security;
 alter table push_subscriptions enable row level security;
 alter table reminder_deliveries enable row level security;
+alter table deadline_states enable row level security;

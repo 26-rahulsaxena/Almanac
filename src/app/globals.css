@@ -19,9 +19,18 @@
   --cat-4: #8a4fa0;
   --cat-5: #c2456b;
   --cat-6: #4f8a8b;
+  /* Deadline severity, always shown with its word so colour isn't the only signal. */
+  --sev-critical: #c62828;
+  --sev-high: #e8590c;
+  --sev-medium: #c99700;
+  --sev-low: #2e8b57;
 }
 
 .dark {
+  --sev-critical: #ff6b6b;
+  --sev-high: #ff922b;
+  --sev-medium: #ffd43b;
+  --sev-low: #69db7c;
   --paper: #141311;
   --surface: #1c1b18;
   --ink: #ece8df;

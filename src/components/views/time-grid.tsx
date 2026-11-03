@@ -1,6 +1,8 @@
 "use client";
 import { AnimatePresence, motion } from "motion/react";
 import type { Ev } from "@/lib/calendar";
+import type { Severity } from "@/lib/priority";
+import { SEVERITY_LABEL, sevColor } from "../priorities-panel";
 import {
   addDays,
   bookableWindow,
@@ -24,6 +26,7 @@ type Props = {
   days: Date[];
   events: Ev[];
   color: (e: Ev) => string;
+  severityOf: (e: Ev) => Severity | undefined;
   now: Date;
   onPickDay: (d: Date) => void;
   onOpen: (e: Ev) => void;
@@ -31,7 +34,7 @@ type Props = {
 };
 
 // Day view (1 column) and week view (7 columns).
-export function TimeGrid({ days, events, color, now, onPickDay, onOpen, onBook }: Props) {
+export function TimeGrid({ days, events, color, severityOf, now, onPickDay, onOpen, onBook }: Props) {
   const cols = `3.5rem repeat(${days.length}, minmax(0, 1fr))`;
   const today = +startOfDay(now);
   const allDay = events.filter((e) => e.allDay);
@@ -86,6 +89,7 @@ export function TimeGrid({ days, events, color, now, onPickDay, onOpen, onBook }
                     style={{ background: `color-mix(in srgb, ${color(e)} 28%, var(--surface))` }}
                     title={e.title}
                   >
+                    <Flag severity={severityOf(e)} />
                     {e.title}
                   </motion.button>
                 ))}
@@ -109,6 +113,7 @@ export function TimeGrid({ days, events, color, now, onPickDay, onOpen, onBook }
               day={d}
               events={timed.filter((e) => overlapsDay(e, d))}
               color={color}
+              severityOf={severityOf}
               now={now}
               onOpen={onOpen}
               onBook={onBook}
@@ -129,7 +134,21 @@ function pickTime(slot: Interval, offsetPx: number): [Date, Date] {
 
 type ColumnProps = Omit<Props, "days" | "onPickDay"> & { day: Date };
 
-function DayColumn({ day, events, color, now, onOpen, onBook }: ColumnProps) {
+// A deadline's severity: coloured dot plus its name for screen readers and on hover.
+function Flag({ severity }: { severity?: Severity }) {
+  if (!severity) return null;
+  return (
+    <span
+      className="mr-1 inline-block size-2 rounded-full align-middle ring-2 ring-surface"
+      style={{ background: sevColor(severity) }}
+      role="img"
+      aria-label={`${SEVERITY_LABEL[severity]} deadline`}
+      title={`${SEVERITY_LABEL[severity]} deadline`}
+    />
+  );
+}
+
+function DayColumn({ day, events, color, severityOf, now, onOpen, onBook }: ColumnProps) {
   const dayStart = startOfDay(day);
   const dayEnd = addDays(dayStart, 1);
   const y = (d: Date) => ((+d - +dayStart) / 3_600_000) * HOUR;
@@ -176,6 +195,7 @@ function DayColumn({ day, events, color, now, onOpen, onBook }: ColumnProps) {
           const h = y(en) - y(s);
           const c = color(e);
           const reply = myReply(e);
+          const sev = severityOf(e);
           return (
             <motion.button
               key={`${e.calendarId}:${e.id}`}
@@ -194,12 +214,13 @@ function DayColumn({ day, events, color, now, onOpen, onBook }: ColumnProps) {
                 width: `calc(${100 / cols}% - 8px)`,
                 background: `color-mix(in srgb, ${c} 22%, var(--surface))`,
                 borderLeft: `3px ${e.busy ? "solid" : "dashed"} ${c}`,
-                outline: reply.dashed ? `1px dashed ${c}` : undefined,
+                outline: reply.dashed ? `1px dashed ${c}` : sev ? `2px solid ${sevColor(sev)}` : undefined,
                 outlineOffset: -1,
               }}
               title={`${e.title} · ${formatTime(s)} – ${formatTime(en)}${e.busy ? "" : " · shown as free"}${reply.note}`}
             >
               <p className="truncate font-medium">
+                <Flag severity={sev} />
                 {e.meetLink && (
                   <span className="mr-1" aria-label="has video call">
                     ▶

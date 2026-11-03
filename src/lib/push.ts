@@ -1,7 +1,10 @@
 import webpush from "web-push";
 import { sql } from "./db";
 
-export type PushPayload = { title: string; body: string; id?: string }; // id = reminder delivery, enables Snooze/Done
+// kind "reminder" (default): id = reminder delivery, buttons Snooze / Done.
+// kind "checkin": id = deadline, ask "start" (buttons Doing it now / Open) or "finished" (Yes, done / Need 30 more min).
+// kind "digest": morning priorities summary, opens the priorities list.
+export type PushPayload = { title: string; body: string; id?: string; kind?: "reminder" | "checkin" | "digest"; ask?: "start" | "finished" };
 
 // Push services run by browser makers. Only these may receive subscriptions, so nobody can make
 // the server post to an arbitrary address.

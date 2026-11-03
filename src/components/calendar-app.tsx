@@ -7,7 +7,10 @@ import { CATEGORIES, categoryHex } from "@/lib/categories";
 import type { DeleteInput, SaveInput, Scope, SendUpdates } from "@/lib/recurrence";
 import { addDays, atHour, parseWhen, startOfDay, startOfMonth, startOfWeek } from "@/lib/time";
 import { draftFromEvent, draftFromSlot, EventPanel, type Form } from "./event-panel";
+import type { Priority } from "@/lib/priorities";
+import type { Severity } from "@/lib/priority";
 import { NotifySettings } from "./notify-settings";
+import { PrioritiesPanel, sevColor, type PriorityAction } from "./priorities-panel";
 import { ThemeToggle } from "./theme-toggle";
 import { Agenda } from "./views/agenda";
 import { MonthGrid } from "./views/month-grid";
@@ -108,6 +111,9 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
     pendingRef.current = pending;
   }, [pending]);
   const [cats, setCats] = useState<Set<string>>(() => new Set());
+  const [priorities, setPriorities] = useState<Priority[] | null>(null);
+  const [showPriorities, setShowPriorities] = useState(false);
+  const firstPriorities = useRef(true);
 
   const calIds = useMemo(() => calendars.map((c) => c.id), [calendars]);
   const colorOf = useMemo(() => new Map(calendars.map((c) => [c.id, c.color])), [calendars]);
@@ -231,6 +237,55 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
     setPending((p) => p.filter((x) => x.key !== key));
   }
 
+  // Priorities: reloaded whenever the calendar is. Opens by itself once a day when something is due,
+  // or when a notification asked for it (?priorities=1, or a message from the service worker).
+  useEffect(() => {
+    fetch("/api/priorities")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((list: Priority[] | null) => {
+        if (!list) return;
+        setPriorities(list);
+        if (!firstPriorities.current) return;
+        firstPriorities.current = false;
+        const today = new Date().toDateString();
+        let autoOpen = false;
+        try {
+          autoOpen = list.some((p) => p.status !== "done") && localStorage.prioritiesShown !== today;
+          if (autoOpen) localStorage.prioritiesShown = today;
+        } catch {}
+        if (autoOpen || new URLSearchParams(location.search).has("priorities")) setShowPriorities(true);
+        history.replaceState(null, "", location.pathname);
+      })
+      .catch(() => {});
+  }, [gen]);
+
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => e.data === "show-priorities" && setShowPriorities(true);
+    navigator.serviceWorker?.addEventListener("message", onMessage);
+    return () => navigator.serviceWorker?.removeEventListener("message", onMessage);
+  }, []);
+
+  async function priorityAction(p: Pick<Priority, "calendarId" | "eventId">, a: PriorityAction) {
+    const r = await fetch("/api/priorities", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ calendarId: p.calendarId, eventId: p.eventId, ...a }),
+    });
+    const body = await r.json().catch(() => null);
+    if (!r.ok) throw new Error(body?.error === "reauth" ? "Google needs you to sign in again." : (body?.error ?? "Something went wrong."));
+    setPriorities(body);
+  }
+
+  const priorityOf = useMemo(() => new Map((priorities ?? []).map((p) => [p.key, p])), [priorities]);
+  const severityOf = useCallback(
+    (e: Ev): Severity | undefined => {
+      const p = priorityOf.get(`${e.calendarId}:${e.id}`);
+      return p && p.status !== "done" ? p.severity : undefined;
+    },
+    [priorityOf],
+  );
+  const openPriorities = (priorities ?? []).filter((p) => p.status !== "done");
+
   // Closing the tab during the undo window still carries out the delete.
   useEffect(() => {
     const flush = () => {
@@ -245,11 +300,12 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (panel || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (panel || showPriorities || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.target instanceof HTMLElement && e.target.closest("input, textarea, select, [contenteditable]")) return;
       if (KEYS[e.key]) changeView(KEYS[e.key]);
       else if (e.key === "t") goToday();
       else if (e.key === "n") newEvent();
+      else if (e.key === "p") setShowPriorities(true);
       else if (e.key === "ArrowLeft") go(-1);
       else if (e.key === "ArrowRight") go(1);
       else if (e.key === "/") {
@@ -396,6 +452,26 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
               >
                 + New
               </motion.button>
+              <motion.button
+                type="button"
+                onClick={() => setShowPriorities(true)}
+                whileTap={{ scale: 0.95 }}
+                aria-label={`Priorities, ${openPriorities.length} open`}
+                className="mr-1 flex items-center gap-2 rounded-full border border-line px-3 py-1.5 text-sm hover:border-ink/40"
+              >
+                Priorities
+                {openPriorities.length > 0 && (
+                  <motion.span
+                    key={openPriorities.length}
+                    initial={{ scale: 0.4 }}
+                    animate={{ scale: 1 }}
+                    className="grid min-w-5 place-items-center rounded-full px-1.5 text-xs font-semibold text-white"
+                    style={{ background: sevColor(openPriorities[0].severity) }}
+                  >
+                    {openPriorities.length}
+                  </motion.span>
+                )}
+              </motion.button>
               <button type="button" onClick={goToday} className="rounded-full border border-line px-4 py-1.5 text-sm hover:border-ink/40">
                 Today
               </button>
@@ -466,7 +542,7 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
                 <p className="mb-4 text-sm text-muted">
                   {found ? `${found.length} result${found.length === 1 ? "" : "s"} for “${q}” in the past and next year` : `Searching for “${q}”…`}
                 </p>
-                {found && <Agenda days={foundDays} events={found} color={color} now={now} onOpen={openEvent} showFree={false} />}
+                {found && <Agenda days={foundDays} events={found} color={color} severityOf={severityOf} now={now} onOpen={openEvent} showFree={false} />}
               </section>
             ) : (
               <div className="overflow-hidden">
@@ -481,14 +557,15 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
                     transition={{ duration: 0.35, ease }}
                   >
                     {view === "month" ? (
-                      <MonthGrid days={days} month={anchor.getMonth()} events={visible} color={color} now={now} onPickDay={openDay} />
+                      <MonthGrid days={days} month={anchor.getMonth()} events={visible} color={color} severityOf={severityOf} now={now} onPickDay={openDay} />
                     ) : view === "agenda" ? (
-                      <Agenda days={days} events={visible} color={color} now={now} onOpen={openEvent} />
+                      <Agenda days={days} events={visible} color={color} severityOf={severityOf} now={now} onOpen={openEvent} />
                     ) : (
                       <TimeGrid
                         days={days}
                         events={visible}
                         color={color}
+                        severityOf={severityOf}
                         now={now}
                         onPickDay={openDay}
                         onOpen={openEvent}
@@ -510,11 +587,17 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
             initial={panel.form}
             event={panel.event}
             calendars={calendars}
+            priority={panel.event && priorityOf.get(`${panel.event.calendarId}:${panel.event.id}`)}
+            onDeadline={(deadline) => priorityAction({ calendarId: panel.event!.calendarId, eventId: panel.event!.id }, { action: "deadline", deadline })}
             onClose={() => setPanel(null)}
             onSave={saveEvent}
             onDelete={(scope, send) => scheduleDelete(panel.event!, scope, send)}
           />
         )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showPriorities && <PrioritiesPanel key="priorities" items={priorities} onClose={() => setShowPriorities(false)} onAction={priorityAction} />}
       </AnimatePresence>
 
       <div role="status" aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-4 z-30 flex flex-col items-center gap-2 px-4">

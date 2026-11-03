@@ -1,11 +1,21 @@
 ﻿"use client";
 import { motion } from "motion/react";
 import type { Ev } from "@/lib/calendar";
+import type { Severity } from "@/lib/priority";
+import { SEVERITY_LABEL, sevColor } from "../priorities-panel";
 import { atHour, busyIntervals, formatTime, FREE_FROM_HOUR, FREE_TO_HOUR, overlapsDay, parseWhen, startOfDay } from "@/lib/time";
 
-type Props = { days: Date[]; month: number; events: Ev[]; color: (e: Ev) => string; now: Date; onPickDay: (d: Date) => void };
+type Props = {
+  days: Date[];
+  month: number;
+  events: Ev[];
+  color: (e: Ev) => string;
+  severityOf: (e: Ev) => Severity | undefined;
+  now: Date;
+  onPickDay: (d: Date) => void;
+};
 
-export function MonthGrid({ days, month, events, color, now, onPickDay }: Props) {
+export function MonthGrid({ days, month, events, color, severityOf, now, onPickDay }: Props) {
   const today = +startOfDay(now);
   return (
     <div className="overflow-hidden rounded-2xl border border-line bg-surface">
@@ -52,7 +62,11 @@ export function MonthGrid({ days, month, events, color, now, onPickDay }: Props)
               <span className="hidden min-w-0 flex-col gap-0.5 sm:flex">
                 {dayEvents.slice(0, 3).map((e) => (
                   <span key={`${e.calendarId}:${e.id}`} className="flex min-w-0 items-center gap-1 text-[11px] leading-tight">
-                    <span className="size-1.5 shrink-0 rounded-full" style={{ background: color(e) }} />
+                    <span
+                      className="size-1.5 shrink-0 rounded-full"
+                      style={{ background: color(e), boxShadow: severityOf(e) ? `0 0 0 2px ${sevColor(severityOf(e)!)}` : undefined }}
+                      title={severityOf(e) && `${SEVERITY_LABEL[severityOf(e)!]} deadline`}
+                    />
                     {!e.allDay && <span className="shrink-0 font-mono text-muted">{formatTime(parseWhen(e.start, false)).replace(" ", "")}</span>}
                     <span className="truncate">{e.title}</span>
                   </span>
