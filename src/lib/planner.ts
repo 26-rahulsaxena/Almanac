@@ -309,7 +309,7 @@ export const dismissSuggestion = (u: User, id: string) => sql`update plan_sugges
 
 // Ticking a to-do also ticks its calendar block in Priorities (and unticking reopens it).
 export async function setTodoDone(u: User, todoId: string, done: boolean) {
-  const [t] = await sql<Todo[]>`update todos set done = ${done} where id = ${todoId} and user_id = ${u.id} returning *`;
+  const [t] = await sql<Todo[]>`update todos set done = ${done}, done_at = ${done ? new Date() : null} where id = ${todoId} and user_id = ${u.id} returning *`;
   if (!t) throw new InvalidInput("That to-do no longer exists.");
   if (t.calendar_id && t.event_id) {
     const row = await ensureState(u.id, u.timezone, t.calendar_id, t.event_id).catch(() => null); // block may have been deleted

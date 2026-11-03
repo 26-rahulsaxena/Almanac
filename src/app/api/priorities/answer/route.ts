@@ -15,7 +15,7 @@ export async function POST(req: Request) {
     const [s] = await sql<{ user_id: string; calendar_id: string; event_id: string }[]>`
       update deadline_states set status = 'done', next_check_at = null, checkin_sent_at = null where id = ${b.id}
       returning user_id, calendar_id, event_id`;
-    if (s) await sql`update todos set done = true where user_id = ${s.user_id} and calendar_id = ${s.calendar_id} and event_id = ${s.event_id}`;
+    if (s) await sql`update todos set done = true, done_at = now() where user_id = ${s.user_id} and calendar_id = ${s.calendar_id} and event_id = ${s.event_id}`;
   }
   if (b.action === "more")
     await sql`update deadline_states set status = 'doing', next_check_at = now() + interval '30 minutes', checkin_sent_at = null where id = ${b.id}`;

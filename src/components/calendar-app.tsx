@@ -15,6 +15,7 @@ import { AlertStageSettings, NotifySettings } from "./notify-settings";
 import { PrioritiesPanel, type PriorityAction } from "./priorities-panel";
 import { SheetSync } from "./sheet-sync";
 import { ThemeToggle } from "./theme-toggle";
+import { Review, TodayCard, WhatNow } from "./coach";
 import { PlanModeSetting, Suggestions, type PlanMode } from "./suggestions";
 import { TodoDialog } from "./todo-dialog";
 import { TodoList } from "./todo-list";
@@ -146,6 +147,8 @@ export function CalendarApp({
   const menuClose = useRef<HTMLButtonElement>(null);
   const menuWasOpen = useRef(false);
   const [todos, setTodos] = useState(false); // the "+ To-do" pop-up
+  const [nowOpen, setNowOpen] = useState(false); // "What now?"
+  const [review, setReview] = useState(false); // the week in review
   // Focus moves into the menu when it opens and back to ☰ when it closes.
   useEffect(() => {
     if (menu) menuClose.current?.focus();
@@ -349,9 +352,17 @@ export function CalendarApp({
   }, [gen]);
 
   useEffect(() => {
-    const onMessage = (e: MessageEvent) => e.data === "show-priorities" && showPriorities();
+    const onMessage = (e: MessageEvent) => {
+      if (e.data === "show-priorities") showPriorities();
+      if (e.data === "show-review") setReview(true);
+    };
     navigator.serviceWorker?.addEventListener("message", onMessage);
-    return () => navigator.serviceWorker?.removeEventListener("message", onMessage);
+    // Opened from the Sunday notification (?review=1): show the week in review.
+    const t = setTimeout(() => new URLSearchParams(location.search).has("review") && setReview(true));
+    return () => {
+      navigator.serviceWorker?.removeEventListener("message", onMessage);
+      clearTimeout(t);
+    };
   }, []);
 
   async function priorityAction(p: Pick<Priority, "calendarId" | "eventId">, a: PriorityAction) {
@@ -559,6 +570,16 @@ export function CalendarApp({
 
           <h2 className="mt-6 font-mono text-xs uppercase tracking-[0.2em] text-muted">Planning mode</h2>
           <PlanModeSetting initial={planMode} onChange={() => setGen((g) => g + 1)} />
+          <button
+            type="button"
+            onClick={() => {
+              setMenu(false);
+              setReview(true);
+            }}
+            className="mt-3 rounded-full border border-line px-3 py-1.5 text-sm hover:border-ink/40"
+          >
+            Your week in review
+          </button>
 
           <h2 className="mt-6 font-mono text-xs uppercase tracking-[0.2em] text-muted">Google Sheet</h2>
           <SheetSync now={now} onCalendarChange={() => setGen((g) => g + 1)} />
@@ -628,6 +649,9 @@ export function CalendarApp({
               </motion.button>
               <button type="button" onClick={goToday} className="rounded-full border border-line px-4 py-1.5 text-sm hover:border-ink/40">
                 Today
+              </button>
+              <button type="button" onClick={() => setNowOpen(true)} className="rounded-full border border-accent/60 px-3 py-1.5 text-sm text-accent hover:border-accent">
+                What now?
               </button>
               <NavButton label="Previous" onClick={() => go(-1)} d="M15 18l-6-6 6-6" />
               <NavButton label="Next" onClick={() => go(1)} d="M9 6l6 6-6 6" />
@@ -737,6 +761,7 @@ export function CalendarApp({
           </div>
           </div>
           <div className="min-w-0 space-y-4">
+            <TodayCard version={gen} onCalendarChange={() => setGen((g) => g + 1)} />
             <Suggestions version={gen} onCalendarChange={() => setGen((g) => g + 1)} />
             <PrioritiesPanel items={priorities} onAction={priorityAction} />
           </div>
@@ -774,6 +799,11 @@ export function CalendarApp({
             onClose={() => setTodos(false)}
           />
         )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {nowOpen && <WhatNow key="now" onClose={() => setNowOpen(false)} onCalendarChange={() => setGen((g) => g + 1)} />}
+        {review && <Review key="review" onClose={() => setReview(false)} />}
       </AnimatePresence>
 
       <FullScreenAlert onChanged={() => setGen((g) => g + 1)} />

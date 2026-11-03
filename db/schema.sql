@@ -110,6 +110,8 @@ create index if not exists todos_user on todos(user_id);
 -- that was split into sessions (kept on different days).
 alter table todos add column if not exists auto boolean not null default false;
 alter table todos add column if not exists group_id uuid;
+alter table todos add column if not exists done_at timestamptz; -- when it was ticked off, for the week in review
+alter table users add column if not exists last_review_on date; -- last Sunday the week-in-review notification went out
 -- Focus time and habits ("Gym, 3 times a week, evenings"). Their blocks live only in Google Calendar, tagged
 -- almanacPlan=routine:<id>, so no event data is stored here.
 create table if not exists routines (

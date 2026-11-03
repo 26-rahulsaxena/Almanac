@@ -42,12 +42,12 @@ self.addEventListener("notificationclick", (event) => {
         }).catch(() => {});
       }
       if (action !== "open") return;
-      const url = kind === "reminder" ? "/" : "/?priorities=1";
+      const url = kind === "reminder" ? "/" : kind === "review" ? "/?review=1" : "/?priorities=1";
       const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
       const open = windows.find((w) => new URL(w.url).origin === self.location.origin);
       if (!open) return self.clients.openWindow(url);
       await open.focus();
-      if (kind !== "reminder") open.postMessage("show-priorities");
+      if (kind !== "reminder") open.postMessage(kind === "review" ? "show-review" : "show-priorities");
     })(),
   );
 });

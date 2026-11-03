@@ -1,13 +1,16 @@
 import { healthCheck, sql } from "@/lib/db";
 import { listCalendars, listEvents, type Ev } from "@/lib/calendar";
 import { replan } from "@/lib/planner";
-import { checkinText, loadPriorities } from "@/lib/priorities";
+import { dayPlanText } from "@/lib/coach";
+import { coachToday, coachWeek } from "@/lib/coach-data";
+import { checkinText } from "@/lib/priorities";
 import { sendPush } from "@/lib/push";
 import { syncSheet } from "@/lib/sheet-sync";
 import { dueReminders, LOOKAHEAD_MS } from "@/lib/reminders";
 
 const DIGEST_HOUR = 8;
 const ROLLOVER_HOUR = 21; // from 9 pm, to-dos whose time has passed unfinished move on
+const REVIEW_HOUR = 18; // Sunday from 6 pm: the week-in-review notification
 
 // GET /api/cron — called every minute by the scheduler (Supabase pg_cron in production) with the shared secret.
 // Sends due reminders and deadline check-ins, re-sends snoozed reminders, sends the 8 am priorities summary,
@@ -123,25 +126,48 @@ async function sendCheckins() {
   return due.length;
 }
 
-// Once a day after 8 am (user's time): "3 deadlines in the next 5 days · 1 critical".
+// Once a day after 8 am (user's time), today's plan: "Today: 4 events, first 9:00 am · 3 h free" ·
+// "2:40 pm → Finance assignment". On Sunday evenings, also a pointer to the week in review.
 async function morningDigest(userId: string, timeZone: string, hidden: string[], now: Date) {
+  const u = { id: userId, timezone: timeZone, hidden_calendars: hidden };
+  let sent = 0;
   const [claim] = await sql<{ id: string }[]>`
     update users set last_digest_on = (now() at time zone ${timeZone})::date
     where id = ${userId}
       and extract(hour from now() at time zone ${timeZone}) >= ${DIGEST_HOUR}
       and (last_digest_on is null or last_digest_on < (now() at time zone ${timeZone})::date)
     returning id`;
-  if (!claim) return 0;
-  const open = (await loadPriorities(userId, timeZone, hidden, now)).filter((p) => p.status !== "done");
-  if (!open.length) return 0;
-  const critical = open.filter((p) => p.severity === "critical").length;
-  const top = open[0];
-  await sendPush(userId, {
-    kind: "digest",
-    title: `${open.length} thing${open.length === 1 ? "" : "s"} on your plate in the next 5 days${critical ? ` · ${critical} critical` : ""}`,
-    body: `First: ${top.title} (${top.reason.toLowerCase()})`,
-  });
-  return 1;
+  if (claim) {
+    const { today } = await coachToday(u, now);
+    if (today.count || today.blocks.length) {
+      await sendPush(userId, { kind: "digest", ...dayPlanText(today, timeZone) });
+      sent++;
+    }
+  }
+  const [review] = await sql<{ id: string }[]>`
+    update users set last_review_on = (now() at time zone ${timeZone})::date
+    where id = ${userId}
+      and extract(dow from now() at time zone ${timeZone}) = 0
+      and extract(hour from now() at time zone ${timeZone}) >= ${REVIEW_HOUR}
+      and (last_review_on is null or last_review_on < (now() at time zone ${timeZone})::date)
+    returning id`;
+  if (review) {
+    const r = await coachWeek(u, now);
+    const top = r.byCategory[0];
+    await sendPush(userId, {
+      kind: "review",
+      title: "Your week in review",
+      body: [
+        top && `Most time on ${top.label.toLowerCase()} (${Math.round(top.minutes / 60)} h)`,
+        r.deadlines.total && `${r.deadlines.met} of ${r.deadlines.total} deadlines marked done`,
+        r.overdue.length && `${r.overdue.length} to-do${r.overdue.length === 1 ? "" : "s"} overdue`,
+      ]
+        .filter(Boolean)
+        .join(" · ") || "Open Almanac to see where your time went.",
+    });
+    sent++;
+  }
+  return sent;
 }
 
 type Settings = { id: string; timezone: string; hidden_calendars: string[]; remind_popup: boolean; snooze_minutes: number; alarm_at_start: boolean };
