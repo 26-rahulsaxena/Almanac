@@ -1,10 +1,28 @@
-import type { DeleteInput, SaveInput, Scope } from "./recurrence";
+import type { Attendee, DeleteInput, SaveInput, Scope, SendUpdates } from "./recurrence";
 
 // Checks everything the browser sends before it reaches Google. Messages are shown to the user.
 export class InvalidInput extends Error {}
 
 type Body = Record<string, unknown>;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const EMAIL = /^[^\s@<>,;"]+@[^\s@<>,;"]+\.[^\s@<>,;"]+$/;
+const RSVP = ["needsAction", "accepted", "declined", "tentative"];
+
+// Only an explicit "all" lets Google email guests.
+const sendUpdates = (o: Body): SendUpdates => (o.sendUpdates === "all" ? "all" : "none");
+
+function attendees(v: unknown): Attendee[] | undefined {
+  if (v === undefined) return undefined;
+  if (!Array.isArray(v) || v.length > 100) throw new InvalidInput("Too many guests (100 at most)");
+  return v.map((a) => {
+    const o = asBody(a);
+    const email = str(o, "email", 254).trim().toLowerCase();
+    if (!EMAIL.test(email)) throw new InvalidInput(`"${email}" isn't an email address`);
+    const responseStatus = str(o, "responseStatus", 20, true);
+    if (responseStatus && !RSVP.includes(responseStatus)) throw new InvalidInput("Invalid reply status");
+    return { email, responseStatus: responseStatus as Attendee["responseStatus"] };
+  });
+}
 const RRULE = /^RRULE:[A-Z]+=[A-Z0-9,+-]+(?:;[A-Z]+=[A-Z0-9,+-]+)*$/;
 
 function str(o: Body, key: string, max: number): string;
@@ -74,11 +92,15 @@ export function parseSave(raw: unknown): SaveInput {
     description: str(o, "description", 8000, true) ?? "",
     colorId,
     recurrence,
+    attendees: attendees(o.attendees),
+    addMeet: o.addMeet === true,
+    sendUpdates: sendUpdates(o),
   };
 }
 
 export function parseDelete(raw: unknown): DeleteInput {
-  const t = target(asBody(raw));
+  const o = asBody(raw);
+  const t = target(o);
   if (!t.id) throw new InvalidInput("id is required");
-  return { ...t, id: t.id };
+  return { ...t, id: t.id, sendUpdates: sendUpdates(o) };
 }

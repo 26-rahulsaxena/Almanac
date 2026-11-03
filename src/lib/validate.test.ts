@@ -26,6 +26,17 @@ test("rejects bad input", () => {
   expect(() => parseSave("nope")).toThrow("Invalid request");
 });
 
+test("guests: emails checked, nothing sent unless explicitly 'all'", () => {
+  const saved = parseSave({ ...ok, attendees: [{ email: " A@Example.com " }] });
+  expect(saved.attendees).toEqual([{ email: "a@example.com", responseStatus: undefined }]);
+  expect(saved.sendUpdates).toBe("none");
+  expect(parseSave({ ...ok, sendUpdates: "yes please" }).sendUpdates).toBe("none");
+  expect(parseSave({ ...ok, sendUpdates: "all" }).sendUpdates).toBe("all");
+  expect(() => parseSave({ ...ok, attendees: [{ email: "not an email" }] })).toThrow("isn't an email");
+  expect(() => parseSave({ ...ok, attendees: [{ email: "a@b.co", responseStatus: "maybe" }] })).toThrow("reply");
+  expect(() => parseSave({ ...ok, attendees: Array(101).fill({ email: "a@b.co" }) })).toThrow("100");
+});
+
 test("editing an occurrence requires choosing which events", () => {
   expect(() => parseSave({ ...ok, id: "a_1", recurringEventId: "a", originalStart: ok.start })).toThrow("Choose which events");
   expect(() => parseDelete({ calendarId: "c", id: "a_1", recurringEventId: "a", originalStart: ok.start, scope: "everything" })).toThrow();

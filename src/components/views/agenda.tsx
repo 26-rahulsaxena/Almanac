@@ -1,7 +1,7 @@
 "use client";
 import { AnimatePresence, motion } from "motion/react";
 import type { Ev } from "@/lib/calendar";
-import { addDays, formatTime, overlapsDay, startOfDay } from "@/lib/time";
+import { addDays, formatTime, myReply, overlapsDay, startOfDay } from "@/lib/time";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
@@ -47,9 +47,10 @@ export function Agenda({ days, events, color, now, onOpen, showFree = true }: Pr
                     >
                       <span className="w-28 shrink-0 pt-0.5 font-mono text-xs text-muted">{timeLabel(e, day)}</span>
                       <span className="min-w-0">
-                        <span className="font-medium">{e.title}</span>
+                        <span className={`font-medium ${myReply(e).className}`}>{e.title}</span>
                         {e.recurringEventId && <span className="ml-2 text-xs text-muted" aria-label="repeats">↻</span>}
-                        {e.location && <span className="block truncate text-sm text-muted">{e.location}</span>}
+                        {myReply(e).note && <span className="ml-2 text-xs text-muted">{myReply(e).note.slice(3)}</span>}
+                        <Details e={e} />
                       </span>
                     </button>
                   </motion.li>
@@ -61,6 +62,12 @@ export function Agenda({ days, events, color, now, onOpen, showFree = true }: Pr
       })}
     </ol>
   );
+}
+
+function Details({ e }: { e: Ev }) {
+  const guests = e.attendees?.filter((a) => !a.self).length ?? 0;
+  const parts = [e.location, e.meetLink && "Google Meet", guests > 0 && `${guests} guest${guests === 1 ? "" : "s"}`].filter(Boolean);
+  return parts.length ? <span className="block truncate text-sm text-muted">{parts.join(" · ")}</span> : null;
 }
 
 function dayLabel(day: Date, today: Date) {

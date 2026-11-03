@@ -31,9 +31,13 @@ const master: Master = {
   start: { dateTime: "2026-11-03T09:00:00+05:30", timeZone: "Asia/Kolkata" },
   end: { dateTime: "2026-11-03T10:00:00+05:30", timeZone: "Asia/Kolkata" },
   recurrence: ["EXDATE;TZID=Asia/Kolkata:20261117T090000", "RRULE:FREQ=WEEKLY;BYDAY=TU;COUNT=10"],
+  conferenceData: { conferenceId: "abc-defg-hij" },
 };
 // The 10 Nov occurrence, moved from 09:00 to 10:00.
 const occurrence = { id: "abc_20261110T033000Z", recurringEventId: "abc", originalStart: "2026-11-10T09:00:00+05:30" };
+
+const EVENTS = "/calendars/me%40gmail.com/events";
+const NO_EMAIL = "?sendUpdates=none&conferenceDataVersion=1";
 
 describe("repeat rules", () => {
   test("weekly preset uses the start date's weekday", () => {
@@ -77,7 +81,7 @@ describe("saving", () => {
     expect(planSave(base)).toEqual([
       {
         method: "POST",
-        path: "/calendars/me%40gmail.com/events",
+        path: EVENTS + NO_EMAIL,
         body: expect.objectContaining({ summary: "Standup", recurrence: ["RRULE:FREQ=WEEKLY;BYDAY=TU"] }),
       },
     ]);
@@ -91,26 +95,24 @@ describe("saving", () => {
     const [op, ...rest] = planSave({ ...base, ...occurrence, scope: "this" }, master);
     expect(rest).toEqual([]);
     expect(op.method).toBe("PATCH");
-    expect(op.path).toBe("/calendars/me%40gmail.com/events/abc_20261110T033000Z");
+    expect(op.path).toBe(`${EVENTS}/abc_20261110T033000Z${NO_EMAIL}`);
     expect(op.body).not.toHaveProperty("recurrence");
   });
 
   test("all events: moves the whole series by the same hour and keeps skipped dates", () => {
     const [op, ...rest] = planSave({ ...base, ...occurrence, scope: "all" }, master);
     expect(rest).toEqual([]);
-    expect(op.path).toBe("/calendars/me%40gmail.com/events/abc");
+    expect(op.path).toBe(`${EVENTS}/abc${NO_EMAIL}`);
     expect(op.body!.start).toEqual({ dateTime: "2026-11-03T04:30:00.000Z", timeZone: "Asia/Kolkata", date: null }); // 10:00 IST
     expect(op.body!.end).toEqual({ dateTime: "2026-11-03T05:30:00.000Z", timeZone: "Asia/Kolkata", date: null });
     expect(op.body!.recurrence).toEqual(["EXDATE;TZID=Asia/Kolkata:20261117T090000", "RRULE:FREQ=WEEKLY;BYDAY=TU"]);
   });
 
-  test("this and following: creates the new series first, then ends the old one before it", () => {
+  test("this and following: creates the new series first (same Meet link), then ends the old one before it", () => {
     const ops = planSave({ ...base, ...occurrence, scope: "following" }, master);
-    expect(ops.map((o) => `${o.method} ${o.path}`)).toEqual([
-      "POST /calendars/me%40gmail.com/events",
-      "PATCH /calendars/me%40gmail.com/events/abc",
-    ]);
+    expect(ops.map((o) => `${o.method} ${o.path}`)).toEqual([`POST ${EVENTS}${NO_EMAIL}`, `PATCH ${EVENTS}/abc${NO_EMAIL}`]);
     expect(ops[0].body!.start).toEqual({ dateTime: base.start, timeZone: "Asia/Kolkata", date: null });
+    expect(ops[0].body!.conferenceData).toEqual({ conferenceId: "abc-defg-hij" });
     expect(ops[1].body).toEqual({
       recurrence: ["EXDATE;TZID=Asia/Kolkata:20261117T090000", "RRULE:FREQ=WEEKLY;BYDAY=TU;UNTIL=20261110T032959Z"],
     });
@@ -120,7 +122,7 @@ describe("saving", () => {
     const first = { ...occurrence, id: "abc_20261103T033000Z", originalStart: "2026-11-03T09:00:00+05:30" };
     const ops = planSave({ ...base, ...first, start: "2026-11-03T04:30:00.000Z", end: "2026-11-03T05:30:00.000Z", scope: "following" }, master);
     expect(ops).toHaveLength(1);
-    expect(ops[0].path).toBe("/calendars/me%40gmail.com/events/abc");
+    expect(ops[0].path).toBe(`${EVENTS}/abc${NO_EMAIL}`);
   });
 
   test("all-day series moved by a day shifts the series start by a day", () => {
@@ -134,25 +136,55 @@ describe("saving", () => {
   });
 });
 
+describe("guests and Meet", () => {
+  const guests = [{ email: "a@example.com" }, { email: "b@example.com", responseStatus: "accepted" as const, displayName: "B" }];
+
+  test("guests are saved but nobody is emailed unless the user chose to send", () => {
+    const [op] = planSave({ ...base, attendees: guests });
+    expect(op.path).toContain("sendUpdates=none");
+    expect(op.body!.attendees).toEqual([
+      { email: "a@example.com", responseStatus: undefined },
+      { email: "b@example.com", responseStatus: "accepted" }, // keeps existing replies
+    ]);
+  });
+
+  test("choosing Send emails the guests", () => {
+    expect(planSave({ ...base, attendees: guests, sendUpdates: "all" })[0].path).toContain("sendUpdates=all");
+  });
+
+  test("leaving the guest list alone doesn't touch it", () => {
+    expect(planSave({ ...base, id: "solo" })[0].body).not.toHaveProperty("attendees");
+  });
+
+  test("one click adds a Google Meet request", () => {
+    const [op] = planSave({ ...base, addMeet: true }, undefined, "req-1");
+    expect(op.body!.conferenceData).toEqual({ createRequest: { requestId: "req-1", conferenceSolutionKey: { type: "hangoutsMeet" } } });
+    expect(op.path).toContain("conferenceDataVersion=1");
+  });
+});
+
 describe("deleting", () => {
   const del = { calendarId: "me@gmail.com", allDay: false, ...occurrence };
 
-  test("single event", () => {
+  test("single event, no cancellation emails by default", () => {
     expect(planDelete({ calendarId: "me@gmail.com", allDay: false, id: "solo" })).toEqual([
-      { method: "DELETE", path: "/calendars/me%40gmail.com/events/solo" },
+      { method: "DELETE", path: `${EVENTS}/solo?sendUpdates=none` },
     ]);
   });
+  test("cancellation emails only when chosen", () => {
+    expect(planDelete({ calendarId: "me@gmail.com", allDay: false, id: "solo", sendUpdates: "all" })[0].path).toBe(`${EVENTS}/solo?sendUpdates=all`);
+  });
   test("this occurrence only", () => {
-    expect(planDelete({ ...del, scope: "this" })).toEqual([{ method: "DELETE", path: "/calendars/me%40gmail.com/events/abc_20261110T033000Z" }]);
+    expect(planDelete({ ...del, scope: "this" })).toEqual([{ method: "DELETE", path: `${EVENTS}/abc_20261110T033000Z?sendUpdates=none` }]);
   });
   test("all events deletes the series", () => {
-    expect(planDelete({ ...del, scope: "all" }, master)).toEqual([{ method: "DELETE", path: "/calendars/me%40gmail.com/events/abc" }]);
+    expect(planDelete({ ...del, scope: "all" }, master)).toEqual([{ method: "DELETE", path: `${EVENTS}/abc?sendUpdates=none` }]);
   });
   test("this and following ends the series before it, deleting nothing else", () => {
     expect(planDelete({ ...del, scope: "following" }, master)).toEqual([
       {
         method: "PATCH",
-        path: "/calendars/me%40gmail.com/events/abc",
+        path: `${EVENTS}/abc?sendUpdates=none`,
         body: { recurrence: ["EXDATE;TZID=Asia/Kolkata:20261117T090000", "RRULE:FREQ=WEEKLY;BYDAY=TU;UNTIL=20261110T032959Z"] },
       },
     ]);

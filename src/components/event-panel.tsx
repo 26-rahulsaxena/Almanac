@@ -1,5 +1,5 @@
 "use client";
-import { motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 import type { Cal, Ev } from "@/lib/calendar";
 import { CATEGORIES } from "@/lib/categories";
@@ -11,11 +11,13 @@ import {
   shiftDate,
   toRRule,
   ymd,
+  type Attendee,
   type Freq,
   type Preset,
   type Repeat,
   type SaveInput,
   type Scope,
+  type SendUpdates,
 } from "@/lib/recurrence";
 import { addDays, parseWhen } from "@/lib/time";
 import { useDialog } from "./use-dialog";
@@ -33,8 +35,11 @@ export type Form = {
   colorId: string | null;
   preset: Preset;
   custom: Repeat;
+  attendees: Attendee[];
+  addMeet: boolean;
 };
 
+const EMAIL = /^[^\s@<>,;"]+@[^\s@<>,;"]+\.[^\s@<>,;"]+$/;
 const pad = (n: number) => String(n).padStart(2, "0");
 const hhmm = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 
@@ -52,6 +57,8 @@ export function draftFromSlot(start: Date, end: Date, calendarId: string): Form 
     colorId: null,
     preset: "none",
     custom: NO_REPEAT,
+    attendees: [],
+    addMeet: false,
   };
 }
 
@@ -71,6 +78,8 @@ export function draftFromEvent(e: Ev): Form {
     colorId: e.colorId ?? null,
     preset: "none",
     custom: NO_REPEAT,
+    attendees: e.attendees ?? [],
+    addMeet: false,
   };
 }
 
@@ -80,7 +89,7 @@ type Props = {
   calendars: Cal[];
   onClose: () => void;
   onSave: (input: SaveInput) => Promise<void>;
-  onDelete: (scope?: Scope) => void;
+  onDelete: (scope?: Scope, sendUpdates?: SendUpdates) => void;
 };
 
 const field = "w-full rounded-lg border border-line bg-paper px-3 py-2 text-sm focus:border-ink/40 focus:outline-none";
@@ -90,14 +99,33 @@ export function EventPanel({ initial, event, calendars, onClose, onSave, onDelet
   const [f, setF] = useState(initial);
   // undefined while the series rule loads; null when the event doesn't repeat
   const [originalRule, setOriginalRule] = useState<string | null | undefined>(event?.recurringEventId ? undefined : null);
-  const [ask, setAsk] = useState<"save" | "delete" | null>(null);
+  const [ask, setAsk] = useState<"save" | "delete" | "invite" | null>(null);
+  const [scopeChosen, setScopeChosen] = useState<Scope>();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [guestText, setGuestText] = useState("");
+  const [copied, setCopied] = useState(false);
   const ref = useDialog<HTMLDivElement>(onClose);
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setF((x) => ({ ...x, [k]: v }));
 
   const cal = calendars.find((c) => c.id === f.calendarId);
   const readOnly = !cal?.canEdit;
+  const canEditGuests = !readOnly && (event?.isOrganizer ?? true);
+  const before = (event?.attendees ?? []).filter((a) => !a.self);
+  const guests = f.attendees.filter((a) => !a.self);
+  const isNew = (a: Attendee) => !before.some((b) => b.email.toLowerCase() === a.email.toLowerCase());
+  const removed = before.filter((b) => !f.attendees.some((a) => a.email.toLowerCase() === b.email.toLowerCase()));
+  // Any save that involves guests asks before Google may email anyone.
+  const asksToSend = canEditGuests && (guests.length > 0 || before.length > 0);
+
+  function addGuests(text: string) {
+    const emails = text.split(/[\s,;]+/).map((s) => s.trim().toLowerCase()).filter(Boolean);
+    const bad = emails.filter((e) => !EMAIL.test(e));
+    const fresh = emails.filter((e, i) => EMAIL.test(e) && emails.indexOf(e) === i && !f.attendees.some((a) => a.email.toLowerCase() === e));
+    if (fresh.length) set("attendees", [...f.attendees, ...fresh.map((email) => ({ email }))]);
+    setGuestText(bad.join(" "));
+    setError(bad.length ? `“${bad[0]}” isn't an email address.` : null);
+  }
   const startDate = new Date(`${f.date}T${f.allDay ? "00:00" : f.startTime}`);
   const rule = toRRule(fromPreset(f.preset, startDate, f.custom), f.allDay);
   const phone = window.matchMedia("(max-width: 639px)").matches;
@@ -116,7 +144,7 @@ export function EventPanel({ initial, event, calendars, onClose, onSave, onDelet
       .catch(() => setError("Couldn't load how this event repeats."));
   }, [event]);
 
-  function build(scope?: Scope): SaveInput | string {
+  function build(scope?: Scope, sendUpdates?: SendUpdates): SaveInput | string {
     const start = f.allDay ? f.date : startDate.toISOString();
     const end = f.allDay ? shiftDate(f.endDate, 1) : new Date(`${f.endDate}T${f.endTime}`).toISOString();
     if (f.allDay ? f.endDate < f.date : +new Date(end) <= +startDate) return "End must be after start.";
@@ -135,13 +163,20 @@ export function EventPanel({ initial, event, calendars, onClose, onSave, onDelet
       description: f.description,
       colorId: f.colorId,
       recurrence: rule,
+      attendees: asksToSend ? f.attendees : undefined,
+      addMeet: canEditGuests && f.addMeet,
+      sendUpdates,
     };
   }
 
-  async function save(scope?: Scope) {
-    const input = build(scope);
+  async function save(scope = scopeChosen, sendUpdates?: SendUpdates) {
+    const input = build(scope, sendUpdates);
     if (typeof input === "string") return setError(input);
     if (event?.recurringEventId && !scope) return setAsk("save");
+    if (asksToSend && !sendUpdates) {
+      setScopeChosen(scope);
+      return setAsk("invite");
+    }
     setAsk(null);
     setSaving(true);
     setError(null);
@@ -255,6 +290,111 @@ export function EventPanel({ initial, event, calendars, onClose, onSave, onDelet
             </div>
 
             <div className="space-y-2">
+              <label htmlFor="guests" className={label}>
+                Guests
+              </label>
+              {canEditGuests && (
+                <input
+                  id="guests"
+                  inputMode="email"
+                  autoComplete="off"
+                  value={guestText}
+                  onChange={(e) => setGuestText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (["Enter", ",", " ", ";"].includes(e.key)) {
+                      e.preventDefault();
+                      addGuests(guestText);
+                    }
+                  }}
+                  onBlur={() => guestText && addGuests(guestText)}
+                  placeholder="Add guests by email, then press Enter"
+                  className={field}
+                />
+              )}
+              <ul className="space-y-1.5">
+                <AnimatePresence initial={false}>
+                  {f.attendees.map((a) => (
+                    <motion.li
+                      key={a.email}
+                      layout
+                      initial={{ opacity: 0, x: 12 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -12, height: 0 }}
+                      className="flex items-center gap-2 text-sm"
+                    >
+                      <span className="grid size-7 shrink-0 place-items-center rounded-full bg-ink/10 text-xs uppercase" aria-hidden>
+                        {(a.displayName || a.email)[0]}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate" title={a.email}>
+                        {a.displayName || a.email}
+                        {a.self && <span className="text-muted"> (you)</span>}
+                        {a.organizer && <span className="text-muted"> · organiser</span>}
+                      </span>
+                      <Rsvp status={!a.self && isNew(a) ? "new" : a.responseStatus} />
+                      {canEditGuests && !a.self && (
+                        <button
+                          type="button"
+                          aria-label={`Remove ${a.email}`}
+                          onClick={() => set("attendees", f.attendees.filter((x) => x !== a))}
+                          className="grid size-6 place-items-center rounded-full text-muted hover:bg-ink/5 hover:text-ink"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </motion.li>
+                  ))}
+                </AnimatePresence>
+              </ul>
+              {guests.length > 0 && <p className="text-xs text-muted">{rsvpSummary(guests)}</p>}
+              {!canEditGuests && !readOnly && event && <p className="text-xs text-muted">Only the organiser can change the guest list.</p>}
+            </div>
+
+            <div className="space-y-2">
+              <span className={label}>Video call</span>
+              {event?.meetLink ? (
+                <div className="flex items-center gap-2">
+                  <a
+                    href={event.meetLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded-full bg-ink px-4 py-2 text-sm font-medium text-paper hover:opacity-90"
+                  >
+                    Join Google Meet
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => navigator.clipboard.writeText(event.meetLink!).then(() => setCopied(true))}
+                    className="rounded-full px-3 py-2 text-sm hover:bg-ink/5"
+                  >
+                    {copied ? "Copied ✓" : "Copy link"}
+                  </button>
+                </div>
+              ) : !canEditGuests ? (
+                <p className="text-sm text-muted">No video call.</p>
+              ) : f.addMeet ? (
+                <p className="flex items-center justify-between gap-2 rounded-lg bg-[color-mix(in_srgb,var(--cat-2)_14%,transparent)] px-3 py-2 text-sm">
+                  A Google Meet link will be created when you save.
+                  <button type="button" onClick={() => set("addMeet", false)} className="text-muted underline">
+                    Remove
+                  </button>
+                </p>
+              ) : (
+                <motion.button
+                  type="button"
+                  whileTap={{ scale: 0.97 }}
+                  onClick={() => set("addMeet", true)}
+                  className="flex items-center gap-2 rounded-full border border-line px-4 py-2 text-sm hover:border-ink/40"
+                >
+                  <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                    <rect x="3" y="6" width="13" height="12" rx="2" />
+                    <path d="M16 10l5-3v10l-5-3z" />
+                  </svg>
+                  Add Google Meet video call
+                </motion.button>
+              )}
+            </div>
+
+            <div className="space-y-2">
               <label htmlFor="cal" className={label}>
                 Calendar
               </label>
@@ -319,16 +459,30 @@ export function EventPanel({ initial, event, calendars, onClose, onSave, onDelet
           </div>
         </form>
 
-        {ask && (
-          <Confirm
-            action={ask}
-            title={f.title.trim() || "(No title)"}
-            recurring={!!event?.recurringEventId}
-            // Changing the repeat rule can't apply to a single occurrence.
-            allowThis={ask === "delete" || rule === originalRule}
-            onCancel={() => setAsk(null)}
-            onConfirm={(scope) => (ask === "save" ? save(scope) : onDelete(scope))}
+        {ask === "invite" ? (
+          <InviteConfirm
+            guests={guests}
+            removed={removed}
+            isNew={isNew}
+            onCancel={() => {
+              setAsk(null);
+              setScopeChosen(undefined);
+            }}
+            onChoose={(send) => save(undefined, send)}
           />
+        ) : (
+          ask && (
+            <Confirm
+              action={ask}
+              title={f.title.trim() || "(No title)"}
+              recurring={!!event?.recurringEventId}
+              // Changing the repeat rule can't apply to a single occurrence.
+              allowThis={ask === "delete" || rule === originalRule}
+              guestCount={canEditGuests ? before.length : 0}
+              onCancel={() => setAsk(null)}
+              onConfirm={(scope, send) => (ask === "save" ? save(scope) : onDelete(scope, send))}
+            />
+          )
         )}
       </motion.div>
     </>
@@ -450,6 +604,7 @@ function Confirm({
   title,
   recurring,
   allowThis,
+  guestCount,
   onCancel,
   onConfirm,
 }: {
@@ -457,10 +612,12 @@ function Confirm({
   title: string;
   recurring: boolean;
   allowThis: boolean;
+  guestCount: number;
   onCancel: () => void;
-  onConfirm: (scope?: Scope) => void;
+  onConfirm: (scope?: Scope, sendUpdates?: SendUpdates) => void;
 }) {
   const [scope, setScope] = useState<Scope>(allowThis ? "this" : "following");
+  const [notify, setNotify] = useState(false); // cancellation emails are opt-in
   const ref = useDialog<HTMLDivElement>(onCancel);
   const options: [Scope, string][] = [
     ["this", "This event"],
@@ -496,6 +653,12 @@ function Confirm({
         ) : (
           <p className="mt-2 text-sm text-muted">You&apos;ll have a few seconds to undo.</p>
         )}
+        {action === "delete" && guestCount > 0 && (
+          <label className="mt-4 flex items-start gap-2 text-sm">
+            <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} className="mt-0.5 accent-[var(--accent)]" />
+            Email {guestCount === 1 ? "the guest" : `the ${guestCount} guests`} that it&apos;s cancelled
+          </label>
+        )}
         <div className="mt-5 flex justify-end gap-2">
           <button type="button" onClick={onCancel} className="rounded-full px-4 py-2 text-sm hover:bg-ink/5">
             Cancel
@@ -503,10 +666,101 @@ function Confirm({
           <button
             type="button"
             data-autofocus
-            onClick={() => onConfirm(recurring ? scope : undefined)}
+            onClick={() => onConfirm(recurring ? scope : undefined, notify ? "all" : "none")}
             className={`rounded-full px-4 py-2 text-sm font-medium text-paper ${action === "delete" ? "bg-accent" : "bg-ink"}`}
           >
             {action === "delete" ? "Delete" : "Save"}
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+const RSVP: Record<string, [string, string]> = {
+  accepted: ["✓ Yes", "var(--cat-2)"],
+  tentative: ["? Maybe", "var(--cat-3)"],
+  declined: ["✗ No", "var(--accent)"],
+  needsAction: ["… Awaiting", "var(--muted)"],
+  new: ["Not invited yet", "var(--muted)"],
+};
+
+function Rsvp({ status = "needsAction" }: { status?: string }) {
+  const [text, color] = RSVP[status] ?? RSVP.needsAction;
+  return (
+    <span className="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium" style={{ color, background: `color-mix(in srgb, ${color} 14%, transparent)` }}>
+      {text}
+    </span>
+  );
+}
+
+function rsvpSummary(guests: Attendee[]) {
+  const n = (s: string) => guests.filter((g) => (g.responseStatus ?? "needsAction") === s).length;
+  return [
+    [n("accepted"), "yes"],
+    [n("tentative"), "maybe"],
+    [n("declined"), "no"],
+    [n("needsAction"), "awaiting"],
+  ]
+    .filter(([count]) => count)
+    .map(([count, word]) => `${count} ${word}`)
+    .join(" · ");
+}
+
+// The only path to emailing anyone: an explicit "Send". The safe choice has focus, so Enter never sends.
+function InviteConfirm({
+  guests,
+  removed,
+  isNew,
+  onCancel,
+  onChoose,
+}: {
+  guests: Attendee[];
+  removed: Attendee[];
+  isNew: (a: Attendee) => boolean;
+  onCancel: () => void;
+  onChoose: (send: SendUpdates) => void;
+}) {
+  const ref = useDialog<HTMLDivElement>(onCancel);
+  return (
+    <div className="absolute inset-0 z-10 grid place-items-center rounded-l-3xl bg-surface/70 p-6 backdrop-blur-sm">
+      <motion.div
+        ref={ref}
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="invite-title"
+        initial={{ scale: 0.92, opacity: 0, y: 8 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        transition={{ type: "spring", damping: 24, stiffness: 400 }}
+        className="w-full max-w-sm rounded-2xl border border-line bg-surface p-5 shadow-xl"
+      >
+        <h3 id="invite-title" className="font-serif text-2xl">
+          Send invites to these people?
+        </h3>
+        <p className="mt-1 text-sm text-muted">Google will email them the event{guests.some((g) => !isNew(g)) ? " and your changes" : ""}.</p>
+        <ul className="mt-3 max-h-40 space-y-1 overflow-y-auto text-sm">
+          {guests.map((g) => (
+            <li key={g.email} className="flex items-center justify-between gap-2">
+              <span className="truncate">{g.displayName || g.email}</span>
+              {isNew(g) && <span className="text-[11px] font-medium text-accent">new</span>}
+            </li>
+          ))}
+          {removed.map((g) => (
+            <li key={g.email} className="flex items-center justify-between gap-2 text-muted line-through">
+              <span className="truncate">{g.displayName || g.email}</span>
+              <span className="text-[11px] no-underline">removed: told it&apos;s cancelled</span>
+            </li>
+          ))}
+        </ul>
+        <div className="mt-5 flex flex-wrap justify-end gap-2">
+          <button type="button" onClick={onCancel} className="rounded-full px-4 py-2 text-sm hover:bg-ink/5">
+            Cancel
+          </button>
+          <button type="button" data-autofocus onClick={() => onChoose("none")} className="rounded-full border border-line px-4 py-2 text-sm hover:border-ink/40">
+            Save without sending
+          </button>
+          <button type="button" onClick={() => onChoose("all")} className="rounded-full bg-ink px-4 py-2 text-sm font-medium text-paper">
+            Send
           </button>
         </div>
       </motion.div>

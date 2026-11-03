@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { setHiddenCalendars, signInWithGoogle, signOutNow } from "@/app/actions";
 import type { Cal, Ev } from "@/lib/calendar";
 import { CATEGORIES, categoryHex } from "@/lib/categories";
-import type { DeleteInput, SaveInput, Scope } from "@/lib/recurrence";
+import type { DeleteInput, SaveInput, Scope, SendUpdates } from "@/lib/recurrence";
 import { addDays, atHour, parseWhen, startOfDay, startOfMonth, startOfWeek } from "@/lib/time";
 import { draftFromEvent, draftFromSlot, EventPanel, type Form } from "./event-panel";
 import { ThemeToggle } from "./theme-toggle";
@@ -190,6 +190,7 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
       colorId: input.colorId ?? undefined,
       location: input.location,
       description: input.description,
+      ...(input.attendees && { attendees: input.attendees }),
     };
     // Move the edited block right away so it glides into place; the refetch brings Google's final version (and new events).
     if (input.id && (!input.recurringEventId || input.scope === "this")) {
@@ -199,8 +200,16 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
     setGen((g) => g + 1);
   }
 
-  function scheduleDelete(e: Ev, scope?: Scope) {
-    const input: DeleteInput = { calendarId: e.calendarId, id: e.id, recurringEventId: e.recurringEventId, originalStart: e.originalStart, scope, allDay: e.allDay };
+  function scheduleDelete(e: Ev, scope?: Scope, sendUpdates?: SendUpdates) {
+    const input: DeleteInput = {
+      calendarId: e.calendarId,
+      id: e.id,
+      recurringEventId: e.recurringEventId,
+      originalStart: e.originalStart,
+      scope,
+      allDay: e.allDay,
+      sendUpdates,
+    };
     const key = Date.now();
     const timer = window.setTimeout(async () => {
       try {
@@ -499,7 +508,7 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
             calendars={calendars}
             onClose={() => setPanel(null)}
             onSave={saveEvent}
-            onDelete={(scope) => scheduleDelete(panel.event!, scope)}
+            onDelete={(scope, send) => scheduleDelete(panel.event!, scope, send)}
           />
         )}
       </AnimatePresence>

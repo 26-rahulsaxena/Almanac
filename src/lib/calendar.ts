@@ -1,5 +1,5 @@
 import { gcal, ReauthError } from "./google";
-import type { Master } from "./recurrence";
+import type { Attendee, Master } from "./recurrence";
 
 export type Cal = { id: string; name: string; color: string; primary: boolean; canEdit: boolean };
 // start/end are "YYYY-MM-DD" for all-day events, otherwise ISO date-times with offset (as Google sends them).
@@ -16,6 +16,9 @@ export type Ev = {
   colorId?: string;
   location?: string;
   description?: string;
+  attendees?: Attendee[];
+  meetLink?: string;
+  isOrganizer: boolean; // only the organizer can change guests
 };
 
 type GCal = { id: string; summary: string; summaryOverride?: string; backgroundColor: string; primary?: boolean; accessRole: string };
@@ -31,6 +34,9 @@ type GEvent = {
   location?: string;
   transparency?: string;
   colorId?: string;
+  attendees?: Attendee[];
+  hangoutLink?: string;
+  organizer?: { self?: boolean };
 };
 
 export async function listCalendars(userId: string): Promise<Cal[]> {
@@ -59,7 +65,9 @@ export async function listEvents(userId: string, calendarIds: string[], from: st
     orderBy: "startTime",
     // shortcut: no paging, so >2500 events per calendar in one range get cut off; add nextPageToken looping if ranges grow beyond ~2 months.
     maxResults: query ? "50" : "2500",
-    fields: "items(id,summary,description,start,end,recurringEventId,originalStartTime,location,transparency,colorId)",
+    fields:
+      "items(id,summary,description,start,end,recurringEventId,originalStartTime,location,transparency,colorId," +
+      "attendees(email,displayName,responseStatus,self,organizer),hangoutLink,organizer(self))",
   });
   if (query) q.set("q", query);
   const lists = await Promise.all(
@@ -74,12 +82,16 @@ export async function listEvents(userId: string, calendarIds: string[], from: st
             start: e.start.dateTime ?? e.start.date!,
             end: e.end.dateTime ?? e.end.date!,
             allDay: !e.start.dateTime,
-            busy: e.transparency !== "transparent",
+            // Free if Google says "Show as: Free" or you declined the invite.
+            busy: e.transparency !== "transparent" && e.attendees?.find((a) => a.self)?.responseStatus !== "declined",
             recurringEventId: e.recurringEventId,
             originalStart: e.originalStartTime?.dateTime ?? e.originalStartTime?.date,
             colorId: e.colorId,
             location: e.location,
             description: e.description,
+            attendees: e.attendees,
+            meetLink: e.hangoutLink,
+            isOrganizer: e.organizer?.self ?? true,
           }),
         );
       } catch (err) {
@@ -92,7 +104,10 @@ export async function listEvents(userId: string, calendarIds: string[], from: st
   return lists.flat();
 }
 
-// The series ("master") event behind a repeating event: its first start/end and repeat rules.
+// The series ("master") event behind a repeating event: its first start/end, repeat rules and Meet details.
 export function getMaster(userId: string, calendarId: string, id: string) {
-  return gcal<Master>(userId, `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(id)}?fields=start,end,recurrence`);
+  return gcal<Master>(
+    userId,
+    `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(id)}?fields=start,end,recurrence,conferenceData`,
+  );
 }

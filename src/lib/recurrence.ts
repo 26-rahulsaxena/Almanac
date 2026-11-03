@@ -4,7 +4,11 @@
 export type Scope = "this" | "following" | "all";
 export type Freq = "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
 export type GTime = { date?: string | null; dateTime?: string | null; timeZone?: string };
-export type Master = { start: GTime; end: GTime; recurrence?: string[] };
+export type Master = { start: GTime; end: GTime; recurrence?: string[]; conferenceData?: Record<string, unknown> };
+export type Rsvp = "needsAction" | "accepted" | "declined" | "tentative";
+export type Attendee = { email: string; responseStatus?: Rsvp; displayName?: string; self?: boolean; organizer?: boolean };
+// "all" emails guests (invites, updates, cancellations). Anything else sends nothing.
+export type SendUpdates = "all" | "none";
 
 export type SaveInput = {
   calendarId: string;
@@ -21,8 +25,13 @@ export type SaveInput = {
   description: string;
   colorId: string | null;
   recurrence: string | null; // "RRULE:..." or null for no repeat
+  attendees?: Attendee[]; // missing = leave the guest list as it is
+  addMeet?: boolean;
+  sendUpdates?: SendUpdates;
 };
-export type DeleteInput = Pick<SaveInput, "calendarId" | "recurringEventId" | "originalStart" | "scope" | "allDay"> & { id: string };
+export type DeleteInput = Pick<SaveInput, "calendarId" | "recurringEventId" | "originalStart" | "scope" | "allDay" | "sendUpdates"> & {
+  id: string;
+};
 export type Op = { method: "POST" | "PATCH" | "DELETE"; path: string; body?: Record<string, unknown> };
 
 export type Repeat = {
@@ -152,9 +161,12 @@ function seriesTimes(m: Master, i: SaveInput) {
 
 const enc = encodeURIComponent;
 
-export function planSave(i: SaveInput, master?: Master): Op[] {
+export function planSave(i: SaveInput, master?: Master, requestId: string = crypto.randomUUID()): Op[] {
+  // Every call says explicitly whether Google may email guests; it never does unless the user chose "Send".
+  const query = `?sendUpdates=${i.sendUpdates === "all" ? "all" : "none"}&conferenceDataVersion=1`;
   const list = `/calendars/${enc(i.calendarId)}/events`;
-  const one = (id: string) => `${list}/${enc(id)}`;
+  const one = (id: string) => `${list}/${enc(id)}${query}`;
+  const meet = { conferenceData: { createRequest: { requestId, conferenceSolutionKey: { type: "hangoutsMeet" } } } };
   const fields = {
     summary: i.title,
     location: i.location,
@@ -162,10 +174,12 @@ export function planSave(i: SaveInput, master?: Master): Op[] {
     colorId: i.colorId,
     start: when(i.start, i.allDay, i.timeZone),
     end: when(i.end, i.allDay, i.timeZone),
+    ...(i.attendees && { attendees: i.attendees.map(({ email, responseStatus }) => ({ email, responseStatus })) }),
+    ...(i.addMeet && meet),
   };
   const rec = i.recurrence ? [i.recurrence] : undefined;
 
-  if (!i.id) return [{ method: "POST", path: list, body: { ...fields, recurrence: rec } }];
+  if (!i.id) return [{ method: "POST", path: list + query, body: { ...fields, recurrence: rec } }];
   if (!i.recurringEventId) return [{ method: "PATCH", path: one(i.id), body: { ...fields, ...(rec && { recurrence: rec }) } }];
   if (i.scope === "this") return [{ method: "PATCH", path: one(i.id), body: fields }];
   if (!master || !i.originalStart) throw new Error("Series details missing");
@@ -183,14 +197,14 @@ export function planSave(i: SaveInput, master?: Master): Op[] {
   if (!rule) throw new Error("Series has no repeat rule");
   // shortcut: a COUNT-limited series keeps its full COUNT in the new half, so it can run longer than before; compute remaining count if that matters.
   return [
-    // New series first: if Google rejects it, the old series is still untouched.
-    { method: "POST", path: list, body: { ...fields, recurrence: rec } },
+    // New series first: if Google rejects it, the old series is still untouched. It keeps the same Meet link.
+    { method: "POST", path: list + query, body: { conferenceData: master.conferenceData, ...fields, recurrence: rec } },
     { method: "PATCH", path: one(i.recurringEventId), body: { recurrence: withRule(master.recurrence, untilBefore(rule, i.originalStart, i.allDay)) } },
   ];
 }
 
 export function planDelete(i: DeleteInput, master?: Master): Op[] {
-  const one = (id: string) => `/calendars/${enc(i.calendarId)}/events/${enc(id)}`;
+  const one = (id: string) => `/calendars/${enc(i.calendarId)}/events/${enc(id)}?sendUpdates=${i.sendUpdates === "all" ? "all" : "none"}`;
   if (!i.recurringEventId || i.scope === "this") return [{ method: "DELETE", path: one(i.id) }];
   if (!master || !i.originalStart) throw new Error("Series details missing");
   if (i.scope === "all" || isFirst(master, i.originalStart)) return [{ method: "DELETE", path: one(i.recurringEventId) }];

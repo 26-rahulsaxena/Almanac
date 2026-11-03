@@ -8,6 +8,7 @@ import {
   formatTime,
   freeSlots,
   layoutColumns,
+  myReply,
   overlapsDay,
   parseWhen,
   startOfDay,
@@ -174,6 +175,7 @@ function DayColumn({ day, events, color, now, onOpen, onBook }: ColumnProps) {
           const en = clip(parseWhen(e.end, false));
           const h = y(en) - y(s);
           const c = color(e);
+          const reply = myReply(e);
           return (
             <motion.button
               key={`${e.calendarId}:${e.id}`}
@@ -184,7 +186,7 @@ function DayColumn({ day, events, color, now, onOpen, onBook }: ColumnProps) {
               animate={{ opacity: 1, scaleY: 1 }}
               exit={{ opacity: 0, scale: 0.85, filter: "blur(2px)" }}
               transition={{ duration: 0.35, delay: Math.min(i * 0.03, 0.3), ease }}
-              className="absolute origin-top overflow-hidden rounded-md px-1.5 py-0.5 text-left text-xs leading-tight shadow-sm hover:brightness-95"
+              className={`absolute origin-top overflow-hidden rounded-md px-1.5 py-0.5 text-left text-xs leading-tight shadow-sm hover:brightness-95 ${reply.className}`}
               style={{
                 top: y(s) + 1,
                 height: Math.max(h - 2, 18),
@@ -192,10 +194,17 @@ function DayColumn({ day, events, color, now, onOpen, onBook }: ColumnProps) {
                 width: `calc(${100 / cols}% - 8px)`,
                 background: `color-mix(in srgb, ${c} 22%, var(--surface))`,
                 borderLeft: `3px ${e.busy ? "solid" : "dashed"} ${c}`,
+                outline: reply.dashed ? `1px dashed ${c}` : undefined,
+                outlineOffset: -1,
               }}
-              title={`${e.title} · ${formatTime(s)} – ${formatTime(en)}${e.busy ? "" : " · shown as free"}`}
+              title={`${e.title} · ${formatTime(s)} – ${formatTime(en)}${e.busy ? "" : " · shown as free"}${reply.note}`}
             >
               <p className="truncate font-medium">
+                {e.meetLink && (
+                  <span className="mr-1" aria-label="has video call">
+                    ▶
+                  </span>
+                )}
                 {e.title}
                 {e.recurringEventId && <span className="ml-1 text-muted" aria-label="repeats">↻</span>}
               </p>

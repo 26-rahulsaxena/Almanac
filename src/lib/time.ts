@@ -43,7 +43,16 @@ export function atHour(day: Date, hour: number) {
   return r;
 }
 
-export const formatTime = (d: Date) => d.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
+// How the viewer answered an invite, shown on event blocks. Events without guests have no answer.
+export function myReply(e: { attendees?: { self?: boolean; responseStatus?: string }[] }) {
+  const s = e.attendees?.find((a) => a.self)?.responseStatus;
+  if (s === "declined") return { className: "line-through opacity-60", note: " · you declined", dashed: false };
+  if (s === "needsAction") return { className: "", note: " · not answered yet", dashed: true };
+  if (s === "tentative") return { className: "", note: " · you said maybe", dashed: true };
+  return { className: "", note: "", dashed: false };
+}
+
+export const formatTime =(d: Date) => d.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
 
 // True if the event covers any part of that local day (handles multi-day and past-midnight events).
 export function overlapsDay(e: Timed, day: Date) {
