@@ -118,6 +118,16 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
   const [showPriorities, setShowPriorities] = useState(false);
   const firstPriorities = useRef(true);
   const [showAssistant, setShowAssistant] = useState(false);
+  const [menu, setMenu] = useState(false);
+  const menuButton = useRef<HTMLButtonElement>(null);
+  const menuClose = useRef<HTMLButtonElement>(null);
+  const menuWasOpen = useRef(false);
+  // Focus moves into the menu when it opens and back to the ☰ button when it closes.
+  useEffect(() => {
+    if (menu) menuClose.current?.focus();
+    else if (menuWasOpen.current) menuButton.current?.focus();
+    menuWasOpen.current = menu;
+  }, [menu]);
 
   const calIds = useMemo(() => calendars.map((c) => c.id), [calendars]);
   const colorOf = useMemo(() => new Map(calendars.map((c) => [c.id, c.color])), [calendars]);
@@ -304,12 +314,13 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (panel || showPriorities || showAssistant || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (panel || showPriorities || showAssistant || menu || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.target instanceof HTMLElement && e.target.closest("input, textarea, select, [contenteditable]")) return;
       if (KEYS[e.key]) changeView(KEYS[e.key]);
       else if (e.key === "t") goToday();
       else if (e.key === "n") newEvent();
       else if (e.key === "p") setShowPriorities(true);
+      else if (e.key === "\\") setMenu(true);
       else if (e.key === "k") {
         e.preventDefault(); // keep the "k" out of the chat box that opens
         setShowAssistant(true);
@@ -366,8 +377,24 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
   return (
     <div className="flex flex-1 flex-col">
       <header className="sticky top-0 z-20 border-b border-line bg-paper/85 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-8">
-          <span className="font-serif text-2xl">Almanac</span>
+        <div className="flex w-full items-center justify-between gap-4 px-3 py-3 sm:px-6">
+          <div className="flex items-center gap-2">
+            <button
+              ref={menuButton}
+              type="button"
+              onClick={() => setMenu(true)}
+              aria-label="Open menu: calendars, to-do, Google Sheet, settings"
+              aria-expanded={menu}
+              aria-controls="menu"
+              title="Menu (\)"
+              className="grid size-10 place-items-center rounded-full hover:bg-ink/5"
+            >
+              <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+                <path d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            <span className="font-serif text-2xl">Almanac</span>
+          </div>
           <div className="flex items-center gap-2">
             <span className="hidden text-sm text-muted sm:inline">{name}</span>
             <ThemeToggle />
@@ -380,10 +407,46 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
         </div>
       </header>
 
-      <div className="mx-auto grid w-full max-w-7xl flex-1 gap-6 px-4 py-5 sm:px-8 lg:grid-cols-[14rem_1fr]">
-        <aside aria-label="Calendars">
+      <div className="w-full flex-1 px-3 py-4 sm:px-6">
+        {/* The side panel slides out over the calendar. It stays mounted while closed (inert), so the to-do list
+            and sheet panel keep their state and don't reload every time it opens. */}
+        <AnimatePresence>
+          {menu && (
+            <motion.div
+              key="scrim"
+              className="fixed inset-0 z-40 bg-ink/25"
+              onClick={() => setMenu(false)}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              aria-hidden
+            />
+          )}
+        </AnimatePresence>
+        <motion.aside
+          id="menu"
+          aria-label="Calendars"
+          inert={!menu}
+          initial={false}
+          animate={{ x: menu ? 0 : "-105%" }}
+          transition={{ type: "spring", damping: 32, stiffness: 340 }}
+          onKeyDown={(e) => e.key === "Escape" && setMenu(false)}
+          className="fixed inset-y-0 left-0 z-50 w-[min(22rem,88vw)] overflow-y-auto border-r border-line bg-paper px-5 pb-8 pt-3 shadow-2xl"
+        >
+          <div className="mb-4 flex items-center justify-between">
+            <span className="font-serif text-2xl">Almanac</span>
+            <button
+              ref={menuClose}
+              type="button"
+              onClick={() => setMenu(false)}
+              aria-label="Close menu"
+              className="grid size-10 place-items-center rounded-full text-muted hover:bg-ink/5 hover:text-ink"
+            >
+              ✕
+            </button>
+          </div>
           <h2 className="font-mono text-xs uppercase tracking-[0.2em] text-muted">Calendars</h2>
-          <ul className="mt-3 flex flex-wrap gap-2 lg:flex-col lg:gap-0.5">
+          <ul className="mt-3 flex flex-col gap-0.5">
             {calendars.map((c, i) => {
               const on = !hidden.has(c.id);
               return (
@@ -392,7 +455,7 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
                     type="button"
                     aria-pressed={on}
                     onClick={() => toggle(c.id)}
-                    className="flex w-full items-center gap-2.5 rounded-lg border border-line px-3 py-1.5 text-left text-sm hover:bg-ink/5 lg:border-transparent"
+                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-1.5 text-left text-sm hover:bg-ink/5"
                   >
                     <span
                       className="grid size-4 shrink-0 place-items-center rounded-[5px] border-2 text-[10px] text-white transition-colors"
@@ -409,7 +472,15 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
           </ul>
 
           <h2 className="mt-6 font-mono text-xs uppercase tracking-[0.2em] text-muted">To-do</h2>
-          <TodoList version={gen} now={now}onCalendarChange={() => setGen((g) => g + 1)} onOpenDay={(d) => openDay(startOfDay(d))} />
+          <TodoList
+            version={gen}
+            now={now}
+            onCalendarChange={() => setGen((g) => g + 1)}
+            onOpenDay={(d) => {
+              openDay(startOfDay(d));
+              setMenu(false);
+            }}
+          />
 
           <h2 className="mt-6 font-mono text-xs uppercase tracking-[0.2em] text-muted">Google Sheet</h2>
           <SheetSync now={now} onCalendarChange={() => setGen((g) => g + 1)} />
@@ -449,10 +520,10 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
           <h2 className="mt-6 font-mono text-xs uppercase tracking-[0.2em] text-muted">Notifications</h2>
           <NotifySettings />
 
-          <p className="mt-6 hidden text-xs leading-relaxed text-muted lg:block">
-            Keys: <kbd>N</kbd> new · <kbd>K</kbd> assistant · <kbd>P</kbd> priorities ·<kbd>D</kbd> <kbd>W</kbd> <kbd>M</kbd> <kbd>A</kbd> views · <kbd>T</kbd> today · <kbd>←</kbd> <kbd>→</kbd> move · <kbd>/</kbd> search
+          <p className="mt-6 text-xs leading-relaxed text-muted">
+            Keys: <kbd>\</kbd> menu · <kbd>N</kbd> new · <kbd>K</kbd> assistant · <kbd>P</kbd> priorities · <kbd>D</kbd> <kbd>W</kbd> <kbd>M</kbd> <kbd>A</kbd> views · <kbd>T</kbd> today · <kbd>←</kbd> <kbd>→</kbd> move · <kbd>/</kbd> search
           </p>
-        </aside>
+        </motion.aside>
 
         <main className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
