@@ -3,6 +3,7 @@
 // sheet it creates for you, once). New and changed rows are written straight away; events whose row is gone are
 // only reported, and deleted when the user confirms.
 
+import { createHash } from "node:crypto";
 import { listCalendars } from "./calendar";
 import { sql } from "./db";
 import { gcal, google, GoogleError } from "./google";
@@ -45,9 +46,8 @@ function explain(err: unknown): never {
 
 const SHEETS = "https://sheets.googleapis.com/v4/spreadsheets";
 
-// The sheet's name and last-modified time (cheap; used to skip syncing when nothing changed).
-const sheetInfo = (userId: string, sheetId: string) =>
-  google<{ name: string; modifiedTime: string }>(userId, `https://www.googleapis.com/drive/v3/files/${sheetId}?fields=name,modifiedTime`).catch(explain);
+const sheetTitle = async (userId: string, sheetId: string) =>
+  (await google<{ properties: { title: string } }>(userId, `${SHEETS}/${sheetId}?fields=properties.title`).catch(explain)).properties.title;
 
 // The first tab's cells, header + rows + one more to notice overflow.
 async function readRows(userId: string, sheetId: string) {
@@ -63,7 +63,9 @@ export async function createSheet({ id: userId, timezone }: User) {
   const { spreadsheetId } = await google<{ spreadsheetId: string }>(userId, SHEETS, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ properties: { title: "Almanac events" } }),
+    // Day-first dates (5/11 = 5 November), as in India and as Almanac reads them; new sheets default to US.
+    // (Sheets doesn't accept en_IN; en_GB has the same date order.)
+    body: JSON.stringify({ properties: { title: "Almanac events", locale: "en_GB", timeZone: timezone } }),
   }).catch(explain);
   const today = ymdIn(new Date(), timezone);
   await google(userId, `${SHEETS}/${spreadsheetId}/values/A1:F3?valueInputOption=USER_ENTERED`, {
@@ -121,16 +123,18 @@ function eventFor(r: SheetRow, sheetId: string) {
 }
 
 // Reads the sheet and brings the calendar in line with it. Never deletes: rows that disappeared come back as orphans.
-// With onlyIfChanged (the minute job), it stops after one cheap check when the sheet hasn't been edited since.
+// With onlyIfChanged (the minute job), it stops after reading the cells when they match the last sync.
+// (Drive's "modified" time can't be used for this: it lags behind cell edits by minutes.)
 // shortcut: one Google call per new or changed row (fine for a few hundred rows); use batch requests for big sheets.
 export async function syncSheet(u: User, sheetId: string, onlyIfChanged = false): Promise<SyncResult | null> {
-  const info = await sheetInfo(u.id, sheetId);
+  const values = await readRows(u.id, sheetId);
+  const version = createHash("sha256").update(JSON.stringify(values)).digest("base64url");
   if (onlyIfChanged) {
     const [s] = await sql<{ sheet_version: string | null }[]>`select sheet_version from users where id = ${u.id}`;
-    if (s?.sheet_version === info.modifiedTime) return null;
+    if (s?.sheet_version === version) return null;
   }
-  const title = info.name;
-  const { rows, problems } = parseSheet(await readRows(u.id, sheetId), u.timezone);
+  const title = await sheetTitle(u.id, sheetId);
+  const { rows, problems } = parseSheet(values, u.timezone);
   const calendarId = await targetCalendar(u.id);
   const existing = await linkedEvents(u.id, calendarId, sheetId);
 
@@ -172,7 +176,7 @@ export async function syncSheet(u: User, sheetId: string, onlyIfChanged = false)
     title: e.summary ?? "(No title)",
     start: e.start.dateTime ?? e.start.date ?? "",
   }));
-  await sql`update users set sheet_synced_at = now(), sheet_name = ${title}, sheet_version = ${info.modifiedTime} where id = ${u.id}`;
+  await sql`update users set sheet_synced_at = now(), sheet_name = ${title}, sheet_version = ${version} where id = ${u.id}`;
   return { title, created, updated, unchanged: rows.length - created - updated, problems, orphans };
 }
 

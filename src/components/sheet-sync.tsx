@@ -54,14 +54,22 @@ const loadScript = (src: string) =>
     document.head.append(s);
   });
 
+// Google's picker code, loaded ahead of time: the sign-in pop-up must open right after your click, or the
+// browser blocks it.
+let libs: Promise<GoogleLibs> | null = null;
+const loadPicker = () =>
+  (libs ??= Promise.all([loadScript("https://apis.google.com/js/api.js"), loadScript("https://accounts.google.com/gsi/client")]).then(async () => {
+    // Google's scripts define these globals.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const g = window as any as GoogleLibs;
+    await new Promise<void>((r) => g.gapi.load("picker", r));
+    return g;
+  }));
+
 // Opens Google's own file picker. It runs on a separate short-lived token that can only open files you pick,
 // never Almanac's saved Google login. Resolves to the chosen sheet's id, or null if you cancel.
 async function pickSheet(cfg: Picker): Promise<string | null> {
-  await Promise.all([loadScript("https://apis.google.com/js/api.js"), loadScript("https://accounts.google.com/gsi/client")]);
-  // Re-checked once loaded: Google's scripts define these globals.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { gapi, google } = window as any as GoogleLibs;
-  await new Promise<void>((r) => gapi.load("picker", r));
+  const { google } = await loadPicker();
   const token = await new Promise<string>((resolve, reject) =>
     google.accounts.oauth2
       .initTokenClient({
@@ -125,6 +133,8 @@ export function SheetSync({ now, onCalendarChange }: { now: Date; onCalendarChan
   useEffect(() => {
     call("GET").then((s: Status) => {
       setStatus(s);
+      if (s.picker && s.canRead) loadPicker().catch(() => {}); // a failure shows when you click
+
       if (s.sheetId && s.canRead) run("sync", { action: "sync" });
     }, (e: Error) => setError(e.message));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on mount
@@ -136,6 +146,7 @@ export function SheetSync({ now, onCalendarChange }: { now: Date; onCalendarChan
       const id = await pickSheet(status!.picker!);
       if (id) await run("connect", { action: "connect", id });
     } catch {
+      libs = null; // let the next click retry loading
       setError("Couldn't open Google's file picker. Allow pop-ups for this site and try again.");
     }
   }

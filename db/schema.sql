@@ -101,7 +101,7 @@ create index if not exists todos_user on todos(user_id);
 alter table users add column if not exists sheet_id text;
 alter table users add column if not exists sheet_synced_at timestamptz; -- last checked
 alter table users add column if not exists sheet_name text;
-alter table users add column if not exists sheet_version text; -- the sheet's last-modified time at the last sync
+alter table users add column if not exists sheet_version text; -- fingerprint of the cells at the last sync, to skip unchanged sheets
 
 -- Row Level Security with no policies blocks Supabase's public API from these tables.
 -- The app connects as the database owner, which is unaffected.
