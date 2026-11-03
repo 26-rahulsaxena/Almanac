@@ -1,7 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { listCalendars } from "./calendar";
 import { sql } from "./db";
-import { freeByDay, fromLocal, toLocal } from "./plan";
+import { freeByDay, fromLocal, toLocal, ymdIn } from "./plan";
 import { bookBlock, listTodos, scheduleTodo, upcoming, type User } from "./planner";
 import { loadPriorities } from "./priorities";
 import { InvalidInput } from "./validate";
@@ -73,7 +73,7 @@ export function system(name: string, u: User, now: Date) {
   const today = now.toLocaleString("en-IN", { timeZone: u.timezone, weekday: "long", day: "numeric", month: "long", year: "numeric", hour: "numeric", minute: "2-digit" });
   return `You are the planning assistant inside Almanac, ${name}'s calendar app. Your job is to get them to everything on time and make sure the important work gets done first.
 
-Now: ${today} (${u.timezone}). Every time you read or write is in this zone, as YYYY-MM-DDTHH:MM.
+Now: ${today} (${u.timezone}). Today is ${ymdIn(now, u.timezone)}; tomorrow is ${ymdIn(new Date(+now + 86_400_000), u.timezone)} (${dayLabel(new Date(+now + 86_400_000), u.timezone)}). Every time you read or write is in this zone, as YYYY-MM-DDTHH:MM. Copy dates from the tool results; don't work them out yourself.
 
 How to work:
 - Look before you answer: use the tools rather than guessing what's on the calendar.
@@ -107,7 +107,7 @@ export async function run(u: User, name: string, input: Record<string, unknown>,
       const lines = free.flatMap(({ day, slots }) => {
         const evs = events.filter((e) => (e.allDay ? e.start <= day && e.end > day : toLocal(new Date(e.start), tz).slice(0, 10) === day));
         return [
-          `${dayLabel(fromLocal(`${day}T12:00`, tz)!, tz)} (${day})`,
+          `${["TODAY ", "TOMORROW "][free.findIndex((f) => f.day === day)] ?? ""}${dayLabel(fromLocal(`${day}T12:00`, tz)!, tz)} (${day})`,
           ...evs.map((e) =>
             e.allDay
               ? `  all day: ${e.title}${e.busy ? "" : " [free]"}`

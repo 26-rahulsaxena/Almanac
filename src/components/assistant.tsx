@@ -35,9 +35,10 @@ export function Assistant({ open, onOpenChange, onChanged }: { open: boolean; on
       const r = await fetch("/api/assistant", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: next.slice(-30) }) });
       const data = await r.json().catch(() => null);
       if (!r.ok) {
+        if (data?.changed) onChanged();
         setError(
           data?.error === "nokey"
-            ? "The assistant needs an Anthropic API key. Add ANTHROPIC_API_KEY to .env.local and restart the app."
+            ? "The assistant needs an AI key. Get a free key at console.groq.com, put it after AI_API_KEY= in .env.local, then try again."
             : data?.error === "reauth"
               ? "Google needs you to sign in again."
               : (data?.error ?? "The assistant couldn't answer. Try again."),
