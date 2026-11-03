@@ -16,6 +16,7 @@ import { PrioritiesPanel, type PriorityAction } from "./priorities-panel";
 import { SheetSync } from "./sheet-sync";
 import { ThemeToggle } from "./theme-toggle";
 import { Review, TodayCard, WhatNow } from "./coach";
+import { QuickAdd } from "./quick-add";
 import { PlanModeSetting, Suggestions, type PlanMode } from "./suggestions";
 import { TodoDialog } from "./todo-dialog";
 import { TodoList } from "./todo-list";
@@ -149,6 +150,7 @@ export function CalendarApp({
   const [todos, setTodos] = useState(false); // the "+ To-do" pop-up
   const [nowOpen, setNowOpen] = useState(false); // "What now?"
   const [review, setReview] = useState(false); // the week in review
+  const [quick, setQuick] = useState(false); // quick add by text or voice
   // Focus moves into the menu when it opens and back to ☰ when it closes.
   useEffect(() => {
     if (menu) menuClose.current?.focus();
@@ -404,6 +406,10 @@ export function CalendarApp({
       if (KEYS[e.key]) changeView(KEYS[e.key]);
       else if (e.key === "t") goToday();
       else if (e.key === "n") newEvent();
+      else if (e.key === "q") {
+        e.preventDefault(); // keep the "q" out of the box that opens
+        setQuick(true);
+      }
       else if (e.key === "p") showPriorities();
       else if (e.key === "\\") setMenu(true);
       else if (e.key === "k") {
@@ -621,7 +627,7 @@ export function CalendarApp({
           <AlertStageSettings initial={stages} />
 
           <p className="mt-6 text-xs leading-relaxed text-muted">
-            Keys: <kbd>\</kbd> menu · <kbd>N</kbd> new · <kbd>K</kbd> assistant · <kbd>P</kbd> priorities · <kbd>D</kbd> <kbd>W</kbd> <kbd>M</kbd> <kbd>A</kbd> views · <kbd>T</kbd> today · <kbd>←</kbd> <kbd>→</kbd> move · <kbd>/</kbd> search
+            Keys: <kbd>\</kbd> menu · <kbd>N</kbd> new · <kbd>Q</kbd> quick add · <kbd>K</kbd> assistant · <kbd>P</kbd> priorities · <kbd>D</kbd> <kbd>W</kbd> <kbd>M</kbd> <kbd>A</kbd> views · <kbd>T</kbd> today · <kbd>←</kbd> <kbd>→</kbd> move · <kbd>/</kbd> search
           </p>
         </motion.aside>
 
@@ -646,6 +652,15 @@ export function CalendarApp({
                 className="mr-1 rounded-full border border-line px-3 py-1.5 text-sm hover:border-ink/40"
               >
                 + To-do
+              </motion.button>
+              <motion.button
+                type="button"
+                onClick={() => setQuick(true)}
+                disabled={!writable}
+                whileTap={{ scale: 0.95 }}
+                className="mr-1 rounded-full border border-line px-3 py-1.5 text-sm hover:border-ink/40 disabled:opacity-40"
+              >
+                Quick add
               </motion.button>
               <button type="button" onClick={goToday} className="rounded-full border border-line px-4 py-1.5 text-sm hover:border-ink/40">
                 Today
@@ -804,6 +819,21 @@ export function CalendarApp({
       <AnimatePresence>
         {nowOpen && <WhatNow key="now" onClose={() => setNowOpen(false)} onCalendarChange={() => setGen((g) => g + 1)} />}
         {review && <Review key="review" onClose={() => setReview(false)} />}
+        {quick && writable && (
+          <QuickAdd
+            key="quick"
+            onClose={() => setQuick(false)}
+            onTodoAdded={() => setGen((g) => g + 1)}
+            onEvent={(p) => {
+              setQuick(false);
+              // The event form is the confirmation: nothing is saved until Save is pressed there.
+              const start = p.kind === "event" ? new Date(p.start) : new Date(`${p.date}T09:00`);
+              const end = p.kind === "event" ? new Date(p.end) : new Date(+start + 3_600_000);
+              const form = { ...draftFromSlot(start, end, writable.id), title: p.title, location: p.location };
+              setPanel({ form: p.kind === "allday" ? { ...form, allDay: true, date: p.date, endDate: p.date } : form });
+            }}
+          />
+        )}
       </AnimatePresence>
 
       <FullScreenAlert onChanged={() => setGen((g) => g + 1)} />

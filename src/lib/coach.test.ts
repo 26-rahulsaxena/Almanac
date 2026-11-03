@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { dayPlan, weekReview, whatNow, workList, type Work } from "./coach";
+import { clashFixes, dayPlan, weekReview, whatNow, workList, type Work } from "./coach";
 
 const IST = "Asia/Kolkata";
 const at = (local: string) => new Date(`${local}+05:30`);
@@ -95,5 +95,41 @@ describe("week in review", () => {
     expect(r.deadlines).toEqual({ met: 1, total: 2 });
     expect(r.unmarked).toEqual(["Exam"]);
     expect(r.overdue).toEqual(["Pay bill"]);
+  });
+});
+
+describe("morning clash check", () => {
+  const now = at("2026-11-04T08:00");
+  const mine = (title: string, a: string, b: string, extra = {}) => ({ id: title, calendarId: "me", ...ev(title, a, b), ...extra });
+  const editable = new Set(["me"]);
+  const guests = { attendees: [{ self: true }, { email: "x@y.z" }] };
+
+  test("the less important one moves to the nearest free time", () => {
+    const events = [mine("Gym", "2026-11-04T18:00", "2026-11-04T19:00"), mine("Project review", "2026-11-04T18:30", "2026-11-04T19:30")];
+    const [fix, ...more] = clashFixes(events, editable, now, IST);
+    expect(more).toEqual([]);
+    expect(fix.event.title).toBe("Gym");
+    expect(fix.other.title).toBe("Project review");
+    expect(fix.to.start).toEqual(at("2026-11-04T17:30")); // ends as the review starts: 30 min away, vs 90 after it
+  });
+
+  test("never moves events with guests, on calendars you can't edit, or Almanac's own blocks", () => {
+    const meeting = mine("Gym", "2026-11-04T18:00", "2026-11-04T19:00", guests);
+    const shared = mine("Class", "2026-11-04T18:30", "2026-11-04T19:30", { calendarId: "college" });
+    const block = mine("Read notes", "2026-11-04T18:15", "2026-11-04T18:45", { plan: "todo:1" });
+    expect(clashFixes([meeting, shared, block], editable, now, IST)).toEqual([]);
+  });
+
+  test("two fixes don't land on the same free time", () => {
+    const events = [
+      mine("Meeting", "2026-11-04T09:00", "2026-11-04T21:00", guests),
+      mine("Gym", "2026-11-04T10:00", "2026-11-04T11:00"),
+      mine("Walk", "2026-11-04T12:00", "2026-11-04T13:00"),
+    ];
+    const fixes = clashFixes(events, editable, now, IST);
+    expect(fixes.map((f) => [f.event.title, f.to.start])).toEqual([
+      ["Gym", at("2026-11-04T08:00")],
+      ["Walk", at("2026-11-04T21:00")],
+    ]);
   });
 });

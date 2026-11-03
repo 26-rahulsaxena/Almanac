@@ -5,7 +5,7 @@ import { setPlanMode } from "@/app/actions";
 
 type Suggestion = {
   id: string;
-  kind: "todo" | "routine";
+  kind: "todo" | "routine" | "event";
   title: string;
   reason: "new" | "clash" | "rollover";
   from_start: string | null;
@@ -74,7 +74,7 @@ export function Suggestions({ version, onCalendarChange }: { version: number; on
                 {s.from_start ? "Move" : s.kind === "routine" ? "Book a session of" : "Book time for"} <b className="font-medium">{s.title}</b>
               </p>
               <p className="mt-0.5 text-xs text-muted">
-                {s.from_start ? `${day(s.from_start)} → ${day(s.to_start)}` : `${day(s.to_start)} – ${time(s.to_end)}`} · {WHY[s.reason]}
+                {s.from_start ? `${day(s.from_start)} → ${day(s.to_start)}` : `${day(s.to_start)} – ${time(s.to_end)}`} · {s.kind === "event" ? "it clashes with another event today" : WHY[s.reason]}
               </p>
               <div className="mt-1.5 flex gap-1.5">
                 <button type="button" disabled={!!busy} onClick={() => answer(s.id, { id: s.id, action: "approve" }, true)} className="rounded-full bg-ink px-3 py-1 text-xs font-medium text-paper disabled:opacity-50">

@@ -5,6 +5,7 @@
 import { freeByDay, ymdIn } from "./plan";
 import { CATEGORY_LABEL, classify, SEVERITIES, suggest, type Category, type Severity, type Status } from "./priority";
 import { midnightIn } from "./reminders";
+import type { Interval } from "./time";
 
 const MIN = 60_000;
 const DAY = 24 * 60 * MIN;
@@ -177,4 +178,41 @@ export function weekReview(
     unmarked: passed.filter((d) => d.status !== "done").map((d) => d.title),
     overdue,
   };
+}
+
+type ClashEv = Busy & { id: string; calendarId: string; plan?: string; attendees?: { self?: boolean }[] };
+
+// The morning check: today's clashes between your own events, each with a fix for you to approve — move one of the
+// pair to the nearest free time today. Only events that can move without telling anyone: on a calendar you can
+// edit (`editable`), no guests, not started yet. The less important one moves (gym before a meeting); if equal, the
+// later one. Almanac's own blocks are left to the auto-planner.
+// shortcut: no free time later today → no fix; offer tomorrow if people ask for it.
+export function clashFixes<E extends ClashEv>(events: E[], editable: Set<string>, now: Date, tz: string) {
+  const today = ymdIn(now, tz);
+  const startOf = (e: E) => +new Date(e.start);
+  let busy = events.filter((e) => e.busy && !e.allDay);
+  const own = busy.filter((e) => !e.plan && ymdIn(new Date(e.start), tz) === today && new Date(e.end) > now).sort((a, b) => startOf(a) - startOf(b));
+  const movable = (e: E) => editable.has(e.calendarId) && !e.attendees?.some((a) => !a.self) && startOf(e) > +now;
+  const done = new Set<E>();
+  const fixes: { event: E; other: E; to: Interval }[] = [];
+  for (const [i, a] of own.entries()) {
+    for (const b of own.slice(i + 1)) {
+      if (startOf(b) >= +new Date(a.end)) break; // sorted by start, so the rest start later still
+      if (done.has(a) || done.has(b)) continue;
+      const pick = [b, a].filter(movable).sort((x, y) => classify(x).importance - classify(y).importance)[0];
+      if (!pick) continue;
+      const len = +new Date(pick.end) - startOf(pick);
+      const rest = busy.filter((e) => e !== pick);
+      let to: Interval | null = null;
+      for (const s of freeByDay(rest, now, tz, 1, len / MIN)[0].slots) {
+        const start = Math.max(+s.start, Math.min(startOf(pick), +s.end - len));
+        if (!to || Math.abs(start - startOf(pick)) < Math.abs(+to.start - startOf(pick))) to = { start: new Date(start), end: new Date(start + len) };
+      }
+      if (!to) continue;
+      done.add(pick);
+      fixes.push({ event: pick, other: pick === a ? b : a, to });
+      busy = [...rest, { ...pick, start: to.start.toISOString(), end: to.end.toISOString() }]; // later fixes avoid this time
+    }
+  }
+  return fixes;
 }

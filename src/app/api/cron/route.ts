@@ -1,6 +1,6 @@
 import { healthCheck, sql } from "@/lib/db";
 import { listCalendars, listEvents, type Ev } from "@/lib/calendar";
-import { replan } from "@/lib/planner";
+import { morningCheck, replan } from "@/lib/planner";
 import { dayPlanText } from "@/lib/coach";
 import { coachToday, coachWeek } from "@/lib/coach-data";
 import { checkinText } from "@/lib/priorities";
@@ -141,6 +141,11 @@ async function morningDigest(userId: string, timeZone: string, hidden: string[],
     const { today } = await coachToday(u, now);
     if (today.count || today.blocks.length) {
       await sendPush(userId, { kind: "digest", ...dayPlanText(today, timeZone) });
+      sent++;
+    }
+    const fixes = await morningCheck(u, now);
+    if (fixes.length) {
+      await sendPush(userId, { kind: "digest", title: `${fixes.length} clash${fixes.length === 1 ? "" : "es"} today. Approve the fix?`, body: fixes.join(" · ") });
       sent++;
     }
   }

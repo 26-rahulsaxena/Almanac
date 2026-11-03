@@ -133,8 +133,8 @@ create table if not exists plan_suggestions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references users(id) on delete cascade,
   key text not null,
-  kind text not null check (kind in ('todo', 'routine')),
-  item_id uuid not null,
+  kind text not null check (kind in ('todo', 'routine', 'event')), -- event: one of your own, from the morning check
+  item_id uuid, -- the to-do or habit (null for an event)
   title text not null,
   reason text not null check (reason in ('new', 'clash', 'rollover')),
   from_calendar_id text, -- the block to move (null = book a new one)

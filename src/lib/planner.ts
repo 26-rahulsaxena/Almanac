@@ -3,6 +3,7 @@
 
 import { autoPlan, type PlanRoutine, type PlanTodo, type TimeOfDay } from "./autoplan";
 import { listCalendars, listEvents, type Cal, type Ev } from "./calendar";
+import { clashFixes } from "./coach";
 import { sql } from "./db";
 import { gcal } from "./google";
 import { pickSlot, ymdIn } from "./plan";
@@ -67,7 +68,7 @@ export async function bookBlock(
   return { calendarId: cal.id, eventId: e.id };
 }
 
-// Changes one of Almanac's own blocks in Google (never used on your other events).
+// Changes one of Almanac's own blocks in Google; on your other events only for a move you approved.
 const patchBlock = (u: User, calendarId: string, eventId: string, body: object) =>
   gcal(u.id, `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`, {
     method: "PATCH",
@@ -212,7 +213,7 @@ async function planNow(u: User, rollover: boolean): Promise<Replan> {
   // Ask-first mode: nothing changes; the plan becomes suggestions for you to approve.
   const [{ plan_mode }] = await sql<{ plan_mode: "ask" | "auto" }[]>`select plan_mode from users where id = ${u.id}`;
   if (plan_mode === "ask") {
-    out.suggested = await saveSuggestions(u, changes);
+    out.suggested = await saveSuggestions(u, changes, ["todo", "routine"]);
     return out;
   }
   for (const c of changes) {
@@ -227,11 +228,12 @@ async function planNow(u: User, rollover: boolean): Promise<Replan> {
   return out;
 }
 
-// One change the planner wants: book a new block (from_* null) or move an existing one.
+// One change the planner wants: book a new block (from_* null) or move an existing one. "event": one of your own
+// events that the morning check suggests moving (item_id null).
 type Change = {
   key: string;
-  kind: "todo" | "routine";
-  item_id: string;
+  kind: "todo" | "routine" | "event";
+  item_id: string | null;
   title: string;
   reason: "new" | "clash" | "rollover";
   from_calendar_id: string | null;
@@ -266,16 +268,16 @@ async function apply(u: User, calendars: Cal[], c: Change) {
 // The thing a suggestion is about, whatever time it proposes: the part of its key before "|".
 const itemOf = (key: string) => key.split("|")[0];
 
-// Keeps the waiting suggestions in step with the latest plan: out-of-date ones go, new ones are added, and
-// items you said "Not now" to stay quiet for 6 hours. Returns, in words, only suggestions about something that
-// wasn't already waiting, so a time that shifts as the clock moves on doesn't notify you again.
-async function saveSuggestions(u: User, changes: Change[]) {
+// Keeps the waiting suggestions of these kinds in step with the latest plan: out-of-date ones go, new ones are
+// added, and items you said "Not now" to stay quiet for 6 hours. Returns, in words, only suggestions about something
+// that wasn't already waiting, so a time that shifts as the clock moves on doesn't notify you again.
+async function saveSuggestions(u: User, changes: Change[], kinds: Change["kind"][]) {
   await sql`delete from plan_suggestions where user_id = ${u.id} and (dismissed_at < now() - interval '6 hours' or (dismissed_at is null and to_start < now()))`;
   const existing = await sql<{ key: string; dismissed_at: Date | null }[]>`select key, dismissed_at from plan_suggestions where user_id = ${u.id}`;
   const quiet = new Set(existing.filter((s) => s.dismissed_at).map((s) => itemOf(s.key)));
   const waiting = new Set(existing.filter((s) => !s.dismissed_at).map((s) => itemOf(s.key)));
   const wanted = changes.filter((c) => !quiet.has(itemOf(c.key)));
-  await sql`delete from plan_suggestions where user_id = ${u.id} and dismissed_at is null and not (key = any(${wanted.map((c) => c.key)}::text[]))`;
+  await sql`delete from plan_suggestions where user_id = ${u.id} and dismissed_at is null and kind = any(${kinds}::text[]) and not (key = any(${wanted.map((c) => c.key)}::text[]))`;
   if (!wanted.length) return [];
   const added = await sql<{ key: string; title: string; to_start: Date; from_event_id: string | null }[]>`
     insert into plan_suggestions ${sql(wanted.map((c) => ({ ...c, user_id: u.id })))}
@@ -302,7 +304,34 @@ export async function approveSuggestion(u: User, id: string) {
     const [r] = await sql`select 1 from routines where id = ${s.item_id} and user_id = ${u.id}`;
     if (!r) return;
   }
+  if (s.kind === "event") {
+    // Your own event: move it only if it's still where it was and the new time is still free.
+    const { events } = await upcoming(u, new Date(Math.min(+s.from_start!, +s.to_start)), 1);
+    const e = events.find((x) => x.id === s.from_event_id && x.calendarId === s.from_calendar_id);
+    const taken = events.some((x) => x !== e && x.busy && !x.allDay && new Date(x.start) < s.to_end && new Date(x.end) > s.to_start);
+    if (!e || +new Date(e.start) !== +s.from_start! || taken) throw new InvalidInput("That event or its new time changed since this was suggested, so nothing was moved.");
+  }
   await apply(u, await listCalendars(u.id), s);
+}
+
+// The morning check (once a day, in either planning mode, since it's about your own events): today's clashes
+// become suggestions to move one of the pair. Returns the new ones in words.
+export async function morningCheck(u: User, now = new Date()) {
+  const { calendars, events } = await upcoming(u, midnightIn(ymdIn(now, u.timezone), u.timezone), 1);
+  const editable = new Set(calendars.filter((c) => c.canEdit).map((c) => c.id));
+  const fixes: Change[] = clashFixes(events, editable, now, u.timezone).map(({ event: e, to }) => ({
+    key: `event:${e.calendarId}/${e.id}|${+to.start}`,
+    kind: "event",
+    item_id: null,
+    title: e.title,
+    reason: "clash",
+    from_calendar_id: e.calendarId,
+    from_event_id: e.id,
+    from_start: new Date(e.start),
+    to_start: to.start,
+    to_end: to.end,
+  }));
+  return saveSuggestions(u, fixes, ["event"]);
 }
 
 export const dismissSuggestion = (u: User, id: string) => sql`update plan_suggestions set dismissed_at = now() where id = ${id} and user_id = ${u.id}`;

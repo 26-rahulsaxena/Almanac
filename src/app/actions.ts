@@ -27,7 +27,7 @@ export async function setPlanMode(mode: unknown) {
   if (mode !== "ask" && mode !== "auto") throw new Error("Invalid mode");
   await sql`update users set plan_mode = ${mode} where id = ${session.user.id}`;
   // Switching to Automatic hands over what was waiting: the next run carries it out, so drop the old suggestions.
-  if (mode === "auto") await sql`delete from plan_suggestions where user_id = ${session.user.id}`;
+  if (mode === "auto") await sql`delete from plan_suggestions where user_id = ${session.user.id} and kind <> 'event'`; // morning fixes still wait for you
 }
 
 export type AlertStages = { remind: boolean; snooze: number; alarm: boolean };

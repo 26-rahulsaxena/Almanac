@@ -25,7 +25,7 @@ async function book(p: Pick, start: Date) {
   if (!r.ok) throw new Error((await r.json().catch(() => null))?.error ?? "Couldn't book it.");
 }
 
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   const ref = useDialog<HTMLDivElement>(onClose);
   return (
     <>
