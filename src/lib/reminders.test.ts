@@ -44,6 +44,12 @@ describe("due reminders", () => {
     expect(dueReminders(e, [popup(30)], new Date("2026-11-04T04:00:00Z"), IST)).toEqual([]);
   });
 
+  test("no reminders anywhere (e.g. a shared timetable calendar) → Almanac reminds 10 minutes before", () => {
+    const e = { start: meeting.start, allDay: false };
+    expect(dueReminders(e, [], new Date("2026-11-04T04:20:00Z"), IST).map((d) => d.minutes)).toEqual([10]);
+    expect(dueReminders({ ...e, allDay: true, start: "2026-11-04" }, [], new Date("2026-11-03T18:30:00Z"), IST)).toEqual([]);
+  });
+
   test("email reminders are left to Google", () => {
     const e = { ...meeting, reminders: [{ method: "email", minutes: 10 }] };
     expect(dueReminders(e, [], new Date("2026-11-04T04:20:00Z"), IST)).toEqual([]);

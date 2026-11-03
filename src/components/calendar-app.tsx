@@ -7,11 +7,12 @@ import { CATEGORIES, categoryHex } from "@/lib/categories";
 import type { DeleteInput, SaveInput, Scope, SendUpdates } from "@/lib/recurrence";
 import { addDays, atHour, parseWhen, startOfDay, startOfMonth, startOfWeek } from "@/lib/time";
 import { Assistant } from "./assistant";
+import { FullScreenAlert } from "./full-screen-alert";
 import { draftFromEvent, draftFromSlot, EventPanel, type Form } from "./event-panel";
 import type { Priority } from "@/lib/priorities";
 import type { Severity } from "@/lib/priority";
 import { NotifySettings } from "./notify-settings";
-import { PrioritiesPanel, sevColor, type PriorityAction } from "./priorities-panel";
+import { PrioritiesPanel, type PriorityAction } from "./priorities-panel";
 import { SheetSync } from "./sheet-sync";
 import { ThemeToggle } from "./theme-toggle";
 import { TodoList } from "./todo-list";
@@ -78,6 +79,13 @@ function deletes(d: DeleteInput, e: Ev) {
   return d.scope === "all" || +parseWhen(e.originalStart ?? e.start, e.allDay) >= +parseWhen(d.originalStart!, d.allDay);
 }
 
+// Brings the priorities panel into view (on phones it sits below the calendar).
+function showPriorities() {
+  const el = document.getElementById("priorities");
+  el?.scrollIntoView({ behavior: "smooth", block: "start" });
+  el?.focus({ preventScroll: true });
+}
+
 // Dates depend on the viewer's clock and time zone, so the calendar only renders in the browser.
 const useMounted = () => useSyncExternalStore(() => () => {}, () => true, () => false);
 
@@ -115,19 +123,24 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
   }, [pending]);
   const [cats, setCats] = useState<Set<string>>(() => new Set());
   const [priorities, setPriorities] = useState<Priority[] | null>(null);
-  const [showPriorities, setShowPriorities] = useState(false);
   const firstPriorities = useRef(true);
   const [showAssistant, setShowAssistant] = useState(false);
   const [menu, setMenu] = useState(false);
   const menuButton = useRef<HTMLButtonElement>(null);
   const menuClose = useRef<HTMLButtonElement>(null);
   const menuWasOpen = useRef(false);
-  // Focus moves into the menu when it opens and back to the ☰ button when it closes.
+  const focusTodo = useRef(false);
+  // Focus moves into the menu when it opens (straight to the to-do box from "+ To-do") and back to ☰ when it closes.
   useEffect(() => {
-    if (menu) menuClose.current?.focus();
+    if (menu) (focusTodo.current ? document.getElementById("new-todo") : menuClose.current)?.focus();
     else if (menuWasOpen.current) menuButton.current?.focus();
     menuWasOpen.current = menu;
+    focusTodo.current = false;
   }, [menu]);
+  function newTodo() {
+    focusTodo.current = true;
+    setMenu(true);
+  }
 
   const calIds = useMemo(() => calendars.map((c) => c.id), [calendars]);
   const colorOf = useMemo(() => new Map(calendars.map((c) => [c.id, c.color])), [calendars]);
@@ -251,8 +264,8 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
     setPending((p) => p.filter((x) => x.key !== key));
   }
 
-  // Priorities: reloaded whenever the calendar is. Opens by itself once a day when something is due,
-  // or when a notification asked for it (?priorities=1, or a message from the service worker).
+  // Priorities: reloaded whenever the calendar is, and always shown beside it. A notification can ask to bring
+  // them into view (?priorities=1, or a message from the service worker), which matters on phones where they sit below.
   useEffect(() => {
     fetch("/api/priorities")
       .then((r) => (r.ok ? r.json() : null))
@@ -261,20 +274,14 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
         setPriorities(list);
         if (!firstPriorities.current) return;
         firstPriorities.current = false;
-        const today = new Date().toDateString();
-        let autoOpen = false;
-        try {
-          autoOpen = list.some((p) => p.status !== "done") && localStorage.prioritiesShown !== today;
-          if (autoOpen) localStorage.prioritiesShown = today;
-        } catch {}
-        if (autoOpen || new URLSearchParams(location.search).has("priorities")) setShowPriorities(true);
+        if (new URLSearchParams(location.search).has("priorities")) setTimeout(showPriorities, 300);
         history.replaceState(null, "", location.pathname);
       })
       .catch(() => {});
   }, [gen]);
 
   useEffect(() => {
-    const onMessage = (e: MessageEvent) => e.data === "show-priorities" && setShowPriorities(true);
+    const onMessage = (e: MessageEvent) => e.data === "show-priorities" && showPriorities();
     navigator.serviceWorker?.addEventListener("message", onMessage);
     return () => navigator.serviceWorker?.removeEventListener("message", onMessage);
   }, []);
@@ -298,7 +305,6 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
     },
     [priorityOf],
   );
-  const openPriorities = (priorities ?? []).filter((p) => p.status !== "done");
 
   // Closing the tab during the undo window still carries out the delete.
   useEffect(() => {
@@ -314,12 +320,12 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (panel || showPriorities || showAssistant || menu || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (panel || showAssistant || menu || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.target instanceof HTMLElement && e.target.closest("input, textarea, select, [contenteditable]")) return;
       if (KEYS[e.key]) changeView(KEYS[e.key]);
       else if (e.key === "t") goToday();
       else if (e.key === "n") newEvent();
-      else if (e.key === "p") setShowPriorities(true);
+      else if (e.key === "p") showPriorities();
       else if (e.key === "\\") setMenu(true);
       else if (e.key === "k") {
         e.preventDefault(); // keep the "k" out of the chat box that opens
@@ -525,7 +531,9 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
           </p>
         </motion.aside>
 
-        <main className="min-w-0">
+        {/* Calendar 70%, priorities 30% on wide screens; on narrower ones the priorities follow below. */}
+        <main className="grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(0,7fr)_minmax(0,3fr)]">
+          <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-1">
               <motion.button
@@ -539,23 +547,11 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
               </motion.button>
               <motion.button
                 type="button"
-                onClick={() => setShowPriorities(true)}
+                onClick={newTodo}
                 whileTap={{ scale: 0.95 }}
-                aria-label={`Priorities, ${openPriorities.length} open`}
-                className="mr-1 flex items-center gap-2 rounded-full border border-line px-3 py-1.5 text-sm hover:border-ink/40"
+                className="mr-1 rounded-full border border-line px-3 py-1.5 text-sm hover:border-ink/40"
               >
-                Priorities
-                {openPriorities.length > 0 && (
-                  <motion.span
-                    key={openPriorities.length}
-                    initial={{ scale: 0.4 }}
-                    animate={{ scale: 1 }}
-                    className="grid min-w-5 place-items-center rounded-full px-1.5 text-xs font-semibold text-white"
-                    style={{ background: sevColor(openPriorities[0].severity) }}
-                  >
-                    {openPriorities.length}
-                  </motion.span>
-                )}
+                + To-do
               </motion.button>
               <button type="button" onClick={goToday} className="rounded-full border border-line px-4 py-1.5 text-sm hover:border-ink/40">
                 Today
@@ -662,6 +658,8 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
               </div>
             )}
           </div>
+          </div>
+          <PrioritiesPanel items={priorities} onAction={priorityAction} />
         </main>
       </div>
 
@@ -681,9 +679,7 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {showPriorities && <PrioritiesPanel key="priorities" items={priorities} onClose={() => setShowPriorities(false)} onAction={priorityAction} />}
-      </AnimatePresence>
+      <FullScreenAlert />
 
       <Assistant open={showAssistant} onOpenChange={setShowAssistant} onChanged={() => setGen((g) => g + 1)} />
 

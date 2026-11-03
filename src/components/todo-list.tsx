@@ -74,7 +74,7 @@ export function TodoList({
       <form onSubmit={add} className="space-y-1.5">
         <label className="block">
           <span className="sr-only">New to-do</span>
-          <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} placeholder="Add a to-do…" className={field} />
+          <input id="new-todo" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} placeholder="Add a to-do…" className={field} />
         </label>
         {title.trim() && (
           <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="space-y-1.5">

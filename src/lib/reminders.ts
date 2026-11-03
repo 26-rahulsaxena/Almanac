@@ -20,6 +20,10 @@ export function midnightIn(date: string, timeZone: string) {
   return new Date(+guess - offset);
 }
 
+// When a timed event and its calendar have no notification reminders at all, Almanac still reminds this long before,
+// so nothing (e.g. classes on a shared timetable calendar) slips by. Reminders turned off on the event are respected.
+export const FALLBACK_MINUTES = 10;
+
 // Notification reminders of one event that are due now. `reminders` missing = the calendar's defaults (as in Google).
 // All-day reminders count back from midnight at the start of that day, in the user's time zone (Google does the same).
 export function dueReminders(
@@ -29,7 +33,9 @@ export function dueReminders(
   timeZone: string,
 ): Due[] {
   const start = e.allDay ? midnightIn(e.start, timeZone) : new Date(e.start);
-  const minutes = new Set((e.reminders ?? defaults).filter((r) => r.method === "popup").map((r) => r.minutes));
+  const popups = (e.reminders ?? defaults).filter((r) => r.method === "popup").map((r) => r.minutes);
+  if (!popups.length && !e.reminders && !e.allDay) popups.push(FALLBACK_MINUTES);
+  const minutes = new Set(popups);
   return [...minutes]
     .map((m) => ({ minutes: m, fireAt: new Date(+start - m * 60_000) }))
     .filter((d) => d.fireAt <= now && +d.fireAt > +now - CATCH_UP_MS);

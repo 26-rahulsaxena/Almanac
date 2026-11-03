@@ -12,18 +12,19 @@ function buttons(data) {
 
 self.addEventListener("push", (event) => {
   const data = event.data ? event.data.json() : {};
-  event.waitUntil(
-    self.registration.showNotification(data.title || "Almanac", {
-      body: data.body,
-      tag: data.id || data.kind || "almanac",
-      renotify: true,
-      requireInteraction: !!data.id, // reminders and check-ins stay on screen until you act on them
-      icon: "/icon/large",
-      badge: "/icon/small",
-      data: { id: data.id, kind: data.kind || "reminder" },
-      actions: buttons(data),
-    }),
-  );
+  // An open Almanac tab shows reminders full screen right away instead of waiting for its next check.
+  const tell = self.clients.matchAll({ type: "window" }).then((cs) => cs.forEach((c) => c.postMessage("check-alerts")));
+  const show = self.registration.showNotification(data.title || "Almanac", {
+    body: data.body,
+    tag: data.id || data.kind || "almanac",
+    renotify: true,
+    requireInteraction: !!data.id, // reminders and check-ins stay on screen until you act on them
+    icon: "/icon/large",
+    badge: "/icon/small",
+    data: { id: data.id, kind: data.kind || "reminder" },
+    actions: buttons(data),
+  });
+  event.waitUntil(Promise.all([tell, show]));
 });
 
 self.addEventListener("notificationclick", (event) => {

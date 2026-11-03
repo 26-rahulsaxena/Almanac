@@ -15,10 +15,12 @@ export async function GET(req: Request) {
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) return new Response("Unauthorized", { status: 401 });
 
   const now = new Date();
-  // shortcut: checks every user with a notification device, one after another, each minute; fine for a handful of users, batch or queue it for hundreds.
+  // Every signed-in user, with or without a notification device: due reminders are also shown full screen
+  // inside the open app, which reads them from reminder_deliveries.
+  // shortcut: checks every user one after another, each minute; fine for a handful of users, batch or queue it for hundreds.
   const users = await sql<{ id: string; timezone: string; hidden_calendars: string[] }[]>`
     select u.id, u.timezone, u.hidden_calendars from users u
-    where exists (select 1 from push_subscriptions p where p.user_id = u.id)`;
+    where exists (select 1 from google_tokens t where t.user_id = u.id)`;
 
   let sent = 0;
   for (const u of users) {
@@ -113,6 +115,7 @@ async function remindUser(userId: string, timeZone: string, hidden: string[], no
 
   let sent = 0;
   for (const e of events) {
+    if (e.attendees?.find((a) => a.self)?.responseStatus === "declined") continue;
     for (const due of dueReminders(e, defaults.get(e.calendarId) ?? [], now, timeZone)) {
       const body = describe(e, now, timeZone);
       // The unique key makes each reminder fire once, even if two minute-jobs overlap.

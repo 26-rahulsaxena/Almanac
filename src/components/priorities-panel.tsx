@@ -3,7 +3,6 @@ import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
 import type { Priority } from "@/lib/priorities";
 import { latestSafe, laterOptions, SEVERITIES, type Severity } from "@/lib/priority";
-import { useDialog } from "./use-dialog";
 
 export const SEVERITY_LABEL: Record<Severity, string> = { critical: "Critical", high: "High", medium: "Medium", low: "Low" };
 export const sevColor = (s: Severity) => `var(--sev-${s})`;
@@ -17,7 +16,6 @@ export type PriorityAction =
 
 type Props = {
   items: Priority[] | null;
-  onClose: () => void;
   onAction: (p: Priority, a: PriorityAction) => Promise<void>;
 };
 
@@ -35,10 +33,8 @@ export function SeverityChip({ severity }: { severity: Severity }) {
   );
 }
 
-// "Your priorities": deadlines in the next 5 days, most urgent first, with Doing / Later / Done.
-export function PrioritiesPanel({ items, onClose, onAction }: Props) {
-  const ref = useDialog<HTMLDivElement>(onClose);
-  const phone = window.matchMedia("(max-width: 639px)").matches;
+// "Your priorities", always beside the calendar: the next 5 days, most urgent first, with Doing / Later / Done.
+export function PrioritiesPanel({ items, onAction }: Props) {
   const [showLow, setShowLow] = useState(false);
   const open = items?.filter((p) => p.status !== "done") ?? [];
   // Low-priority items (gym, a walk…) fold away so the list stays about what matters.
@@ -47,22 +43,15 @@ export function PrioritiesPanel({ items, onClose, onAction }: Props) {
   const shown = items?.filter((p) => showLow || !quiet(p));
 
   return (
-    <>
-      <motion.div className="fixed inset-0 z-40 bg-ink/30 backdrop-blur-[3px]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} />
-      <motion.div
-        ref={ref}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="pri-title"
-        initial={phone ? { y: "100%" } : { opacity: 0, y: 40, scale: 0.97 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={phone ? { y: "100%" } : { opacity: 0, y: 24, scale: 0.98 }}
-        transition={{ type: "spring", damping: 30, stiffness: 320 }}
-        className="fixed inset-x-0 bottom-0 z-50 flex max-h-[92dvh] flex-col rounded-t-3xl border border-line bg-surface shadow-2xl sm:inset-x-auto sm:bottom-auto sm:left-1/2 sm:top-[6vh] sm:max-h-[88vh] sm:w-[40rem] sm:-translate-x-1/2 sm:rounded-3xl"
-      >
-        <div className="flex items-start justify-between gap-4 border-b border-line px-6 pb-4 pt-5">
+    <section
+      id="priorities"
+      aria-labelledby="pri-title"
+      tabIndex={-1}
+      className="flex flex-col rounded-2xl border border-line bg-surface focus:outline-none lg:sticky lg:top-[4.75rem] lg:max-h-[calc(100dvh-6rem)]"
+    >
+        <div className="border-b border-line px-4 pb-3 pt-4">
           <div>
-            <h2 id="pri-title" className="font-serif text-3xl">
+            <h2 id="pri-title" className="font-serif text-2xl">
               Your priorities
             </h2>
             <p className="mt-0.5 text-sm text-muted">
@@ -73,12 +62,9 @@ export function PrioritiesPanel({ items, onClose, onAction }: Props) {
                   : "Nothing coming up in the next 5 days."}
             </p>
           </div>
-          <button type="button" onClick={onClose} aria-label="Close" className="grid size-8 shrink-0 place-items-center rounded-full hover:bg-ink/5">
-            ✕
-          </button>
         </div>
 
-        <ol className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4 sm:px-6">
+        <ol className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3">
           <AnimatePresence initial={false}>
             {shown?.map((p, i) => (
               <motion.li
@@ -101,12 +87,11 @@ export function PrioritiesPanel({ items, onClose, onAction }: Props) {
             </li>
           )}
         </ol>
-        <p className="border-t border-line px-6 py-3 text-xs text-muted">
+        <p className="border-t border-line px-4 py-3 text-xs text-muted">
           Ranked by kind of task (deadline › work › personal › leisure) and time left. Two “Later”s raise it a level. Your choice always wins and applies to every
           event with the same name.
         </p>
-      </motion.div>
-    </>
+    </section>
   );
 }
 
@@ -144,8 +129,8 @@ function Card({ p, onAction }: { p: Priority; onAction: (a: PriorityAction) => P
 
   const btn = "rounded-full px-3 py-1.5 text-sm transition-colors disabled:opacity-50";
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-line bg-paper pl-4" style={{ boxShadow: `inset 4px 0 0 ${c}` }}>
-      <div className="p-4 pl-2">
+    <div className="relative overflow-hidden rounded-2xl border border-line bg-paper pl-3" style={{ boxShadow: `inset 4px 0 0 ${c}` }}>
+      <div className="p-3 pl-2">
         <div className="flex flex-wrap items-center gap-2">
           <SeverityChip severity={p.severity} />
           <h3 className={`min-w-0 flex-1 font-medium ${p.status === "done" ? "line-through" : ""}`}>{p.title}</h3>
