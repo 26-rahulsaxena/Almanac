@@ -1,4 +1,5 @@
 import { gcal, ReauthError } from "./google";
+import type { Master } from "./recurrence";
 
 export type Cal = { id: string; name: string; color: string; primary: boolean; canEdit: boolean };
 // start/end are "YYYY-MM-DD" for all-day events, otherwise ISO date-times with offset (as Google sends them).
@@ -10,8 +11,11 @@ export type Ev = {
   end: string;
   allDay: boolean;
   busy: boolean; // false when Google marks the event "Show as: Free" (e.g. holidays)
-  recurring: boolean;
+  recurringEventId?: string; // set on each occurrence of a repeating event
+  originalStart?: string;
+  colorId?: string;
   location?: string;
+  description?: string;
 };
 
 type GCal = { id: string; summary: string; summaryOverride?: string; backgroundColor: string; primary?: boolean; accessRole: string };
@@ -19,11 +23,14 @@ type GTime = { date?: string; dateTime?: string };
 type GEvent = {
   id: string;
   summary?: string;
+  description?: string;
   start: GTime;
   end: GTime;
   recurringEventId?: string;
+  originalStartTime?: GTime;
   location?: string;
   transparency?: string;
+  colorId?: string;
 };
 
 export async function listCalendars(userId: string): Promise<Cal[]> {
@@ -52,7 +59,7 @@ export async function listEvents(userId: string, calendarIds: string[], from: st
     orderBy: "startTime",
     // shortcut: no paging, so >2500 events per calendar in one range get cut off; add nextPageToken looping if ranges grow beyond ~2 months.
     maxResults: query ? "50" : "2500",
-    fields: "items(id,summary,start,end,recurringEventId,location,transparency)",
+    fields: "items(id,summary,description,start,end,recurringEventId,originalStartTime,location,transparency,colorId)",
   });
   if (query) q.set("q", query);
   const lists = await Promise.all(
@@ -68,8 +75,11 @@ export async function listEvents(userId: string, calendarIds: string[], from: st
             end: e.end.dateTime ?? e.end.date!,
             allDay: !e.start.dateTime,
             busy: e.transparency !== "transparent",
-            recurring: !!e.recurringEventId,
+            recurringEventId: e.recurringEventId,
+            originalStart: e.originalStartTime?.dateTime ?? e.originalStartTime?.date,
+            colorId: e.colorId,
             location: e.location,
+            description: e.description,
           }),
         );
       } catch (err) {
@@ -80,4 +90,9 @@ export async function listEvents(userId: string, calendarIds: string[], from: st
     }),
   );
   return lists.flat();
+}
+
+// The series ("master") event behind a repeating event: its first start/end and repeat rules.
+export function getMaster(userId: string, calendarId: string, id: string) {
+  return gcal<Master>(userId, `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(id)}?fields=start,end,recurrence`);
 }

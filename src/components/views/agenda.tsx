@@ -5,10 +5,10 @@ import { addDays, formatTime, overlapsDay, startOfDay } from "@/lib/time";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
-type Props = { days: Date[]; events: Ev[]; colorOf: Map<string, string>; now: Date; showFree?: boolean };
+type Props = { days: Date[]; events: Ev[]; color: (e: Ev) => string; now: Date; onOpen: (e: Ev) => void; showFree?: boolean };
 
 // A day-by-day list. Also used for search results (showFree off, only days with matches).
-export function Agenda({ days, events, colorOf, now, showFree = true }: Props) {
+export function Agenda({ days, events, color, now, onOpen, showFree = true }: Props) {
   const today = startOfDay(now);
   return (
     <ol className="space-y-6">
@@ -39,17 +39,19 @@ export function Agenda({ days, events, colorOf, now, showFree = true }: Props) {
                     transition={{ duration: 0.3, ease }}
                     className="overflow-hidden"
                   >
-                    <div
-                      className="my-1 flex items-start gap-4 py-1.5 pl-3"
-                      style={{ borderLeft: `3px ${e.busy ? "solid" : "dashed"} ${colorOf.get(e.calendarId)}` }}
+                    <button
+                      type="button"
+                      onClick={() => onOpen(e)}
+                      className="my-1 flex w-full items-start gap-4 rounded-r-lg py-1.5 pl-3 text-left hover:bg-ink/[0.04]"
+                      style={{ borderLeft: `3px ${e.busy ? "solid" : "dashed"} ${color(e)}` }}
                     >
                       <span className="w-28 shrink-0 pt-0.5 font-mono text-xs text-muted">{timeLabel(e, day)}</span>
                       <span className="min-w-0">
                         <span className="font-medium">{e.title}</span>
-                        {e.recurring && <span className="ml-2 text-xs text-muted" aria-label="repeats">↻</span>}
+                        {e.recurringEventId && <span className="ml-2 text-xs text-muted" aria-label="repeats">↻</span>}
                         {e.location && <span className="block truncate text-sm text-muted">{e.location}</span>}
                       </span>
-                    </div>
+                    </button>
                   </motion.li>
                 ))}
               </AnimatePresence>

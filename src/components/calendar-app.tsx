@@ -1,9 +1,12 @@
 "use client";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { setHiddenCalendars, signInWithGoogle, signOutNow } from "@/app/actions";
 import type { Cal, Ev } from "@/lib/calendar";
-import { addDays, parseWhen, startOfDay, startOfMonth, startOfWeek } from "@/lib/time";
+import { CATEGORIES, categoryHex } from "@/lib/categories";
+import type { DeleteInput, SaveInput, Scope } from "@/lib/recurrence";
+import { addDays, atHour, parseWhen, startOfDay, startOfMonth, startOfWeek } from "@/lib/time";
+import { draftFromEvent, draftFromSlot, EventPanel, type Form } from "./event-panel";
 import { ThemeToggle } from "./theme-toggle";
 import { Agenda } from "./views/agenda";
 import { MonthGrid } from "./views/month-grid";
@@ -51,6 +54,23 @@ function useNow() {
   return now;
 }
 
+const UNDO_MS = 6000;
+
+async function send(method: "POST" | "DELETE", body: object, keepalive = false) {
+  const r = await fetch("/api/events", { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), keepalive });
+  if (r.ok) return;
+  const error = (await r.json().catch(() => null))?.error;
+  throw new Error(error === "reauth" ? "Google needs you to sign in again: sign out, then sign back in." : (error ?? "Something went wrong. Try again."));
+}
+
+// Whether a delete covers this event: one occurrence, the rest of a series, or the whole series.
+function deletes(d: DeleteInput, e: Ev) {
+  if (e.calendarId !== d.calendarId) return false;
+  if (!d.recurringEventId || d.scope === "this") return e.id === d.id;
+  if (e.recurringEventId !== d.recurringEventId) return false;
+  return d.scope === "all" || +parseWhen(e.originalStart ?? e.start, e.allDay) >= +parseWhen(d.originalStart!, d.allDay);
+}
+
 // Dates depend on the viewer's clock and time zone, so the calendar only renders in the browser.
 const useMounted = () => useSyncExternalStore(() => () => {}, () => true, () => false);
 
@@ -79,9 +99,19 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<{ q: string; events: Ev[] } | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const [panel, setPanel] = useState<{ form: Form; event?: Ev } | null>(null);
+  // Deletes wait out the undo window before reaching Google, so Undo never has to recreate anything.
+  const [pending, setPending] = useState<{ key: number; input: DeleteInput; title: string; timer: number }[]>([]);
+  const pendingRef = useRef(pending);
+  useEffect(() => {
+    pendingRef.current = pending;
+  }, [pending]);
+  const [cats, setCats] = useState<Set<string>>(() => new Set());
 
   const calIds = useMemo(() => calendars.map((c) => c.id), [calendars]);
   const colorOf = useMemo(() => new Map(calendars.map((c) => [c.id, c.color])), [calendars]);
+  const color = useCallback((e: Ev) => categoryHex(e.colorId) ?? colorOf.get(e.calendarId) ?? "var(--muted)", [colorOf]);
+  const writable = calendars.find((c) => c.primary && c.canEdit) ?? calendars.find((c) => c.canEdit);
   const { from, to, days } = useMemo(() => rangeOf(view, anchor), [view, anchor]);
   const key = `${+from}-${+to}`;
   const entry = cache[key];
@@ -135,12 +165,81 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
     setAnchor(d);
   }
 
+  function mutate(fn: (events: Ev[]) => Ev[]) {
+    setCache((c) => Object.fromEntries(Object.entries(c).map(([k, v]) => [k, { ...v, events: fn(v.events) }])));
+  }
+
+  function book(start: Date, end: Date) {
+    if (writable) setPanel({ form: draftFromSlot(start, end, writable.id) });
+  }
+
+  // New event: the next half hour today, or 9 am on the day being viewed.
+  function newEvent() {
+    const half = 30 * 60_000;
+    const start = +startOfDay(anchor) === +startOfDay(new Date()) ? new Date(Math.ceil(Date.now() / half) * half) : atHour(anchor, 9);
+    book(start, new Date(+start + 2 * half));
+  }
+
+  async function saveEvent(input: SaveInput) {
+    await send("POST", input);
+    const changed = {
+      title: input.title || "(No title)",
+      start: input.start,
+      end: input.end,
+      allDay: input.allDay,
+      colorId: input.colorId ?? undefined,
+      location: input.location,
+      description: input.description,
+    };
+    // Move the edited block right away so it glides into place; the refetch brings Google's final version (and new events).
+    if (input.id && (!input.recurringEventId || input.scope === "this")) {
+      mutate((evs) => evs.map((e) => (e.id === input.id && e.calendarId === input.calendarId ? { ...e, ...changed } : e)));
+    }
+    setPanel(null);
+    setGen((g) => g + 1);
+  }
+
+  function scheduleDelete(e: Ev, scope?: Scope) {
+    const input: DeleteInput = { calendarId: e.calendarId, id: e.id, recurringEventId: e.recurringEventId, originalStart: e.originalStart, scope, allDay: e.allDay };
+    const key = Date.now();
+    const timer = window.setTimeout(async () => {
+      try {
+        await send("DELETE", input);
+        mutate((evs) => evs.filter((x) => !deletes(input, x)));
+        setGen((g) => g + 1);
+      } catch (err) {
+        setError(`Couldn't delete “${e.title}”. ${(err as Error).message}`);
+      }
+      setPending((p) => p.filter((x) => x.key !== key));
+    }, UNDO_MS);
+    setPending((p) => [...p, { key, input, title: e.title, timer }]);
+    setPanel(null);
+  }
+
+  function undo(key: number) {
+    clearTimeout(pending.find((p) => p.key === key)?.timer);
+    setPending((p) => p.filter((x) => x.key !== key));
+  }
+
+  // Closing the tab during the undo window still carries out the delete.
+  useEffect(() => {
+    const flush = () => {
+      for (const p of pendingRef.current) {
+        clearTimeout(p.timer);
+        send("DELETE", p.input, true).catch(() => {});
+      }
+    };
+    window.addEventListener("pagehide", flush);
+    return () => window.removeEventListener("pagehide", flush);
+  }, []);
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (panel || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.target instanceof HTMLElement && e.target.closest("input, textarea, select, [contenteditable]")) return;
       if (KEYS[e.key]) changeView(KEYS[e.key]);
       else if (e.key === "t") goToday();
+      else if (e.key === "n") newEvent();
       else if (e.key === "ArrowLeft") go(-1);
       else if (e.key === "ArrowRight") go(1);
       else if (e.key === "/") {
@@ -160,14 +259,27 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
     setHiddenCalendars([...next]).catch(() => setError("Couldn't save which calendars are shown."));
   }
 
+  function toggleCat(id: string) {
+    const next = new Set(cats);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setCats(next);
+  }
+
+  const shown = useCallback(
+    (e: Ev) =>
+      !hidden.has(e.calendarId) && (cats.size === 0 || cats.has(e.colorId ?? "none")) && !pending.some((p) => deletes(p.input, e)),
+    [hidden, cats, pending],
+  );
   const visible = useMemo(
     () =>
       (entry?.events ?? [])
-        .filter((e) => !hidden.has(e.calendarId))
+        .filter(shown)
         .sort((a, b) => +parseWhen(a.start, a.allDay) - +parseWhen(b.start, b.allDay) || Number(b.allDay) - Number(a.allDay)),
-    [entry, hidden],
+    [entry, shown],
   );
-  const found = results?.q === q ? results.events.filter((e) => !hidden.has(e.calendarId)) : null;
+  const found = results?.q === q ? results.events.filter(shown) : null;
+  const openEvent = (e: Ev) => setPanel({ form: draftFromEvent(e), event: e });
   const foundDays = useMemo(() => {
     const seen = new Map<number, Date>();
     for (const e of found ?? []) {
@@ -221,14 +333,56 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
               );
             })}
           </ul>
+
+          <h2 className="mt-6 font-mono text-xs uppercase tracking-[0.2em] text-muted">Categories</h2>
+          <div role="group" aria-label="Filter by category" className="mt-3 flex flex-wrap gap-2">
+            {[{ id: "none", name: "No category", hex: "" }, ...CATEGORIES].map((c) => {
+              const on = cats.has(c.id);
+              return (
+                <motion.button
+                  key={c.id}
+                  type="button"
+                  aria-pressed={on}
+                  aria-label={`Only show ${c.name}`}
+                  title={c.name}
+                  onClick={() => toggleCat(c.id)}
+                  whileTap={{ scale: 0.85 }}
+                  className={`size-6 rounded-full transition ${on ? "scale-110 ring-2 ring-ink ring-offset-2 ring-offset-paper" : cats.size ? "opacity-30" : ""} ${c.hex ? "" : "border-2 border-dashed border-muted"}`}
+                  style={{ background: c.hex || "transparent" }}
+                />
+              );
+            })}
+          </div>
+          <p className="mt-2 text-xs text-muted">
+            {cats.size ? (
+              <>
+                Only {[...cats].map((id) => CATEGORIES.find((c) => c.id === id)?.name ?? "no category").join(", ")}.{" "}
+                <button type="button" onClick={() => setCats(new Set())} className="text-ink underline">
+                  Show all
+                </button>
+              </>
+            ) : (
+              "Pick colours to filter."
+            )}
+          </p>
+
           <p className="mt-6 hidden text-xs leading-relaxed text-muted lg:block">
-            Keys: <kbd>D</kbd> <kbd>W</kbd> <kbd>M</kbd> <kbd>A</kbd> views · <kbd>T</kbd> today · <kbd>←</kbd> <kbd>→</kbd> move · <kbd>/</kbd> search
+            Keys: <kbd>N</kbd> new · <kbd>D</kbd> <kbd>W</kbd> <kbd>M</kbd> <kbd>A</kbd> views · <kbd>T</kbd> today · <kbd>←</kbd> <kbd>→</kbd> move · <kbd>/</kbd> search
           </p>
         </aside>
 
         <main className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-1">
+              <motion.button
+                type="button"
+                onClick={newEvent}
+                disabled={!writable}
+                whileTap={{ scale: 0.95 }}
+                className="mr-1 rounded-full bg-ink px-4 py-1.5 text-sm font-medium text-paper disabled:opacity-40"
+              >
+                + New
+              </motion.button>
               <button type="button" onClick={goToday} className="rounded-full border border-line px-4 py-1.5 text-sm hover:border-ink/40">
                 Today
               </button>
@@ -299,7 +453,7 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
                 <p className="mb-4 text-sm text-muted">
                   {found ? `${found.length} result${found.length === 1 ? "" : "s"} for “${q}” in the past and next year` : `Searching for “${q}”…`}
                 </p>
-                {found && <Agenda days={foundDays} events={found} colorOf={colorOf} now={now} showFree={false} />}
+                {found && <Agenda days={foundDays} events={found} color={color} now={now} onOpen={openEvent} showFree={false} />}
               </section>
             ) : (
               <div className="overflow-hidden">
@@ -314,11 +468,19 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
                     transition={{ duration: 0.35, ease }}
                   >
                     {view === "month" ? (
-                      <MonthGrid days={days} month={anchor.getMonth()} events={visible} colorOf={colorOf} now={now} onPickDay={openDay} />
+                      <MonthGrid days={days} month={anchor.getMonth()} events={visible} color={color} now={now} onPickDay={openDay} />
                     ) : view === "agenda" ? (
-                      <Agenda days={days} events={visible} colorOf={colorOf} now={now} />
+                      <Agenda days={days} events={visible} color={color} now={now} onOpen={openEvent} />
                     ) : (
-                      <TimeGrid days={days} events={visible} colorOf={colorOf} now={now} onPickDay={openDay} />
+                      <TimeGrid
+                        days={days}
+                        events={visible}
+                        color={color}
+                        now={now}
+                        onPickDay={openDay}
+                        onOpen={openEvent}
+                        onBook={writable ? book : undefined}
+                      />
                     )}
                   </motion.div>
                 </AnimatePresence>
@@ -326,6 +488,47 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
             )}
           </div>
         </main>
+      </div>
+
+      <AnimatePresence>
+        {panel && (
+          <EventPanel
+            key="panel"
+            initial={panel.form}
+            event={panel.event}
+            calendars={calendars}
+            onClose={() => setPanel(null)}
+            onSave={saveEvent}
+            onDelete={(scope) => scheduleDelete(panel.event!, scope)}
+          />
+        )}
+      </AnimatePresence>
+
+      <div role="status" aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-4 z-30 flex flex-col items-center gap-2 px-4">
+        <AnimatePresence>
+          {pending.map((p) => (
+            <motion.div
+              key={p.key}
+              layout
+              initial={{ y: 40, opacity: 0, scale: 0.95 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ y: 20, opacity: 0, scale: 0.95 }}
+              transition={{ type: "spring", damping: 26, stiffness: 380 }}
+              className="pointer-events-auto relative flex w-full max-w-sm items-center gap-3 overflow-hidden rounded-2xl bg-ink px-4 py-3 text-sm text-paper shadow-xl"
+            >
+              <span className="min-w-0 flex-1 truncate">Deleted “{p.title}”</span>
+              <button type="button" onClick={() => undo(p.key)} className="rounded-full bg-paper/15 px-3 py-1 font-medium hover:bg-paper/25">
+                Undo
+              </button>
+              <motion.span
+                className="absolute inset-x-0 bottom-0 h-0.5 origin-left bg-accent"
+                initial={{ scaleX: 1 }}
+                animate={{ scaleX: 0 }}
+                transition={{ duration: UNDO_MS / 1000, ease: "linear" }}
+              />
+            </motion.div>
+          ))}
+        </AnimatePresence>
       </div>
     </div>
   );

@@ -1,11 +1,11 @@
-"use client";
+﻿"use client";
 import { motion } from "motion/react";
 import type { Ev } from "@/lib/calendar";
 import { atHour, busyIntervals, formatTime, FREE_FROM_HOUR, FREE_TO_HOUR, overlapsDay, parseWhen, startOfDay } from "@/lib/time";
 
-type Props = { days: Date[]; month: number; events: Ev[]; colorOf: Map<string, string>; now: Date; onPickDay: (d: Date) => void };
+type Props = { days: Date[]; month: number; events: Ev[]; color: (e: Ev) => string; now: Date; onPickDay: (d: Date) => void };
 
-export function MonthGrid({ days, month, events, colorOf, now, onPickDay }: Props) {
+export function MonthGrid({ days, month, events, color, now, onPickDay }: Props) {
   const today = +startOfDay(now);
   return (
     <div className="overflow-hidden rounded-2xl border border-line bg-surface">
@@ -39,7 +39,7 @@ export function MonthGrid({ days, month, events, colorOf, now, onPickDay }: Prop
               <span className={`grid size-7 place-items-center rounded-full font-mono text-xs ${+d === today ? "bg-accent text-paper" : ""}`}>
                 {d.getDate()}
               </span>
-              {/* Busy bar: 8 am → 10 pm left to right; dark segments are busy time. */}
+              {/* Busy bar: 8 am to 10 pm left to right; dark segments are busy time. */}
               <span className="relative h-1 w-full rounded-full bg-ink/5" aria-hidden>
                 {busy.map((b) => (
                   <span
@@ -52,7 +52,7 @@ export function MonthGrid({ days, month, events, colorOf, now, onPickDay }: Prop
               <span className="hidden min-w-0 flex-col gap-0.5 sm:flex">
                 {dayEvents.slice(0, 3).map((e) => (
                   <span key={`${e.calendarId}:${e.id}`} className="flex min-w-0 items-center gap-1 text-[11px] leading-tight">
-                    <span className="size-1.5 shrink-0 rounded-full" style={{ background: colorOf.get(e.calendarId) }} />
+                    <span className="size-1.5 shrink-0 rounded-full" style={{ background: color(e) }} />
                     {!e.allDay && <span className="shrink-0 font-mono text-muted">{formatTime(parseWhen(e.start, false)).replace(" ", "")}</span>}
                     <span className="truncate">{e.title}</span>
                   </span>
@@ -61,7 +61,7 @@ export function MonthGrid({ days, month, events, colorOf, now, onPickDay }: Prop
               </span>
               <span className="flex flex-wrap gap-0.5 sm:hidden" aria-hidden>
                 {dayEvents.slice(0, 4).map((e) => (
-                  <span key={`${e.calendarId}:${e.id}`} className="size-1.5 rounded-full" style={{ background: colorOf.get(e.calendarId) }} />
+                  <span key={`${e.calendarId}:${e.id}`} className="size-1.5 rounded-full" style={{ background: color(e) }} />
                 ))}
               </span>
             </motion.button>
