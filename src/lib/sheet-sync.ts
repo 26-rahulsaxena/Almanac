@@ -1,10 +1,12 @@
 // Mirrors one Google Sheet into the user's main calendar: each row becomes one event, linked by a private tag
-// (sheet id + row number) stored on the event in Google itself. Read-only on the sheet. New and changed rows are
-// written straight away; events whose row is gone are only reported, and deleted when the user confirms.
+// (sheet id + row number) stored on the event in Google itself. Almanac only reads the sheet (it writes only to a
+// sheet it creates for you, once). New and changed rows are written straight away; events whose row is gone are
+// only reported, and deleted when the user confirms.
 
 import { listCalendars } from "./calendar";
 import { sql } from "./db";
 import { gcal, google, GoogleError } from "./google";
+import { ymdIn } from "./plan";
 import type { User } from "./planner";
 import { MAX_ROWS, parseSheet, type Problem, type SheetRow } from "./sheet";
 import { InvalidInput } from "./validate";
@@ -32,29 +34,50 @@ export function sheetIdFrom(s: string) {
 // Turns Google's refusals into steps the user can take.
 function explain(err: unknown): never {
   if (err instanceof GoogleError) {
-    if (/SERVICE_DISABLED|has not been used|is disabled/.test(err.body))
-      throw new InvalidInput("Turn on the Google Sheets API for this app in Google Cloud, wait a minute, then sync again.");
+    const api = /sheets\.googleapis/.test(err.body) ? "Google Sheets API" : "Google Drive API";
+    if (/SERVICE_DISABLED|has not been used|is disabled/.test(err.body)) throw new InvalidInput(`Turn on the ${api} for this app in Google Cloud, wait a minute, then try again.`);
     if (/SCOPE_INSUFFICIENT|insufficient authentication scopes/i.test(err.body))
-      throw new InvalidInput("Almanac isn't allowed to read Sheets yet. Sign out, sign back in, and tick the Sheets permission.");
-    if (err.status === 404) throw new InvalidInput("That sheet doesn't exist. Check the link.");
-    if (err.status === 403) throw new InvalidInput("This Google account can't open that sheet. Use a sheet it owns, or share the sheet with it.");
+      throw new InvalidInput("Almanac isn't allowed to open your chosen sheets yet. Sign out, sign back in, and allow the Google Drive file permission.");
+    if (err.status === 404 || err.status === 403) throw new InvalidInput("Almanac can't open that sheet any more. Choose it again with “Choose a sheet”.");
   }
   throw err;
 }
 
-async function readSheet(userId: string, sheetId: string) {
-  const base = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}`;
-  const meta = await google<{ properties: { title: string }; sheets: { properties: { title: string } }[] }>(
-    userId,
-    `${base}?fields=properties.title,sheets.properties.title`,
-  ).catch(explain);
-  const tab = meta.sheets[0].properties.title; // the first tab
-  const range = encodeURIComponent(`'${tab.replace(/'/g, "''")}'!A1:Z${MAX_ROWS + 2}`); // header + rows + one to notice overflow
+const SHEETS = "https://sheets.googleapis.com/v4/spreadsheets";
+
+// The sheet's name and last-modified time (cheap; used to skip syncing when nothing changed).
+const sheetInfo = (userId: string, sheetId: string) =>
+  google<{ name: string; modifiedTime: string }>(userId, `https://www.googleapis.com/drive/v3/files/${sheetId}?fields=name,modifiedTime`).catch(explain);
+
+// The first tab's cells, header + rows + one more to notice overflow.
+async function readRows(userId: string, sheetId: string) {
   const { values } = await google<{ values?: (string | number | boolean)[][] }>(
     userId,
-    `${base}/values/${range}?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`,
+    `${SHEETS}/${sheetId}/values/A1:Z${MAX_ROWS + 2}?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`,
   ).catch(explain);
-  return { title: meta.properties.title, values: values ?? [] };
+  return values ?? [];
+}
+
+// A new sheet in the user's Drive, already in the template layout with two example rows.
+export async function createSheet({ id: userId, timezone }: User) {
+  const { spreadsheetId } = await google<{ spreadsheetId: string }>(userId, SHEETS, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ properties: { title: "Almanac events" } }),
+  }).catch(explain);
+  const today = ymdIn(new Date(), timezone);
+  await google(userId, `${SHEETS}/${spreadsheetId}/values/A1:F3?valueInputOption=USER_ENTERED`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      values: [
+        ["Title", "Date", "Start", "End", "Location", "Notes"],
+        ["Example: study session (edit or delete me)", today, "21:00", "22:00", "", "Leave Start empty for an all-day event"],
+        ["Example: all-day reminder (edit or delete me)", today, "", "", "", ""],
+      ],
+    }),
+  }).catch(explain);
+  return spreadsheetId;
 }
 
 async function targetCalendar(userId: string) {
@@ -98,10 +121,16 @@ function eventFor(r: SheetRow, sheetId: string) {
 }
 
 // Reads the sheet and brings the calendar in line with it. Never deletes: rows that disappeared come back as orphans.
+// With onlyIfChanged (the minute job), it stops after one cheap check when the sheet hasn't been edited since.
 // shortcut: one Google call per new or changed row (fine for a few hundred rows); use batch requests for big sheets.
-export async function syncSheet(u: User, sheetId: string): Promise<SyncResult> {
-  const { title, values } = await readSheet(u.id, sheetId);
-  const { rows, problems } = parseSheet(values, u.timezone);
+export async function syncSheet(u: User, sheetId: string, onlyIfChanged = false): Promise<SyncResult | null> {
+  const info = await sheetInfo(u.id, sheetId);
+  if (onlyIfChanged) {
+    const [s] = await sql<{ sheet_version: string | null }[]>`select sheet_version from users where id = ${u.id}`;
+    if (s?.sheet_version === info.modifiedTime) return null;
+  }
+  const title = info.name;
+  const { rows, problems } = parseSheet(await readRows(u.id, sheetId), u.timezone);
   const calendarId = await targetCalendar(u.id);
   const existing = await linkedEvents(u.id, calendarId, sheetId);
 
@@ -143,7 +172,7 @@ export async function syncSheet(u: User, sheetId: string): Promise<SyncResult> {
     title: e.summary ?? "(No title)",
     start: e.start.dateTime ?? e.start.date ?? "",
   }));
-  await sql`update users set sheet_synced_at = now() where id = ${u.id}`;
+  await sql`update users set sheet_synced_at = now(), sheet_name = ${title}, sheet_version = ${info.modifiedTime} where id = ${u.id}`;
   return { title, created, updated, unchanged: rows.length - created - updated, problems, orphans };
 }
 

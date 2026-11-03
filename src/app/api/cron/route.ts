@@ -45,14 +45,15 @@ export async function GET(req: Request) {
     }
   }
 
-  // Google Sheet sync every 15 minutes. Claiming the slot first keeps two overlapping runs from syncing twice.
+  // Google Sheet: checked every minute, synced only when it was edited since last time. Claiming the slot first
+  // keeps two overlapping runs from syncing twice.
   const sheets = await sql<{ id: string; timezone: string; hidden_calendars: string[]; sheet_id: string }[]>`
     update users set sheet_synced_at = now()
-    where sheet_id is not null and (sheet_synced_at is null or sheet_synced_at < now() - interval '15 minutes')
+    where sheet_id is not null and (sheet_synced_at is null or sheet_synced_at < now() - interval '50 seconds')
     returning id, timezone, hidden_calendars, sheet_id`;
   for (const s of sheets) {
     try {
-      await syncSheet(s, s.sheet_id);
+      await syncSheet(s, s.sheet_id, true);
     } catch (err) {
       console.error(`Sheet sync for user ${s.id} failed:`, err);
     }

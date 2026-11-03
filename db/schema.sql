@@ -99,7 +99,9 @@ create index if not exists todos_user on todos(user_id);
 -- Google Sheet sync: which sheet feeds the calendar, and when it was last read. Events made from it are
 -- marked inside Google Calendar itself (a private tag with the sheet id and row), so nothing else is stored.
 alter table users add column if not exists sheet_id text;
-alter table users add column if not exists sheet_synced_at timestamptz;
+alter table users add column if not exists sheet_synced_at timestamptz; -- last checked
+alter table users add column if not exists sheet_name text;
+alter table users add column if not exists sheet_version text; -- the sheet's last-modified time at the last sync
 
 -- Row Level Security with no policies blocks Supabase's public API from these tables.
 -- The app connects as the database owner, which is unaffected.

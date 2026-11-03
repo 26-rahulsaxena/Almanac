@@ -3,9 +3,10 @@ import Google from "next-auth/providers/google";
 import { sql } from "@/lib/db";
 import { encrypt } from "@/lib/crypto";
 
-// Minimum scopes: sign-in, list calendars, read/write events, and read (never change) Google Sheets for the
-// sheet sync. Free/busy is computed from the events we already read, so the separate free/busy scope isn't needed.
-export const SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets.readonly";
+// Minimum scopes: sign-in, list calendars, read/write events, and for the sheet sync only the files you pick
+// in Google's file picker or that Almanac creates (drive.file), never the rest of your Drive.
+// Free/busy is computed from the events we already read, so the separate free/busy scope isn't needed.
+export const SHEETS_SCOPE = "https://www.googleapis.com/auth/drive.file";
 const scope = [
   "openid",
   "email",

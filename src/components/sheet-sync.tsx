@@ -3,13 +3,91 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 import type { SyncResult } from "@/lib/sheet-sync";
 
-type Status = { sheetId: string | null; syncedAt: string | null; canRead: boolean };
+type Picker = { key: string; appId: string; clientId: string; email: string };
+type Status = { sheetId: string | null; name: string | null; syncedAt: string | null; canRead: boolean; picker: Picker | null };
 
 async function call(method: "GET" | "POST" | "DELETE", body?: object) {
   const r = await fetch("/api/sheet", { method, headers: { "Content-Type": "application/json" }, body: body && JSON.stringify(body) });
   const data = await r.json().catch(() => null);
   if (!r.ok) throw new Error(data?.error === "reauth" ? "Google needs you to sign in again." : (data?.error ?? "Something went wrong."));
   return data;
+}
+
+// Just the parts of Google's picker and sign-in libraries used here.
+type GoogleLibs = {
+  gapi: { load: (lib: string, cb: () => void) => void };
+  google: {
+    accounts: {
+      oauth2: {
+        initTokenClient: (o: {
+          client_id: string;
+          scope: string;
+          login_hint: string;
+          callback: (r: { access_token?: string; error?: string }) => void;
+          error_callback: (e: { type: string }) => void;
+        }) => { requestAccessToken: (o: { prompt: string }) => void };
+      };
+    };
+    picker: {
+      PickerBuilder: new () => PickerBuilder;
+      DocsView: new (id: string) => { setMode: (m: string) => unknown };
+      ViewId: { SPREADSHEETS: string };
+      DocsViewMode: { LIST: string };
+      Action: { PICKED: string; CANCEL: string };
+    };
+  };
+};
+type PickerBuilder = {
+  addView: (v: unknown) => PickerBuilder;
+  setOAuthToken: (t: string) => PickerBuilder;
+  setDeveloperKey: (k: string) => PickerBuilder;
+  setAppId: (id: string) => PickerBuilder;
+  setTitle: (t: string) => PickerBuilder;
+  setCallback: (cb: (d: { action: string; docs?: { id: string }[] }) => void) => PickerBuilder;
+  build: () => { setVisible: (v: boolean) => void };
+};
+
+const loadScript = (src: string) =>
+  new Promise<void>((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) return resolve();
+    const s = Object.assign(document.createElement("script"), { src, async: true, onload: () => resolve(), onerror: reject });
+    document.head.append(s);
+  });
+
+// Opens Google's own file picker. It runs on a separate short-lived token that can only open files you pick,
+// never Almanac's saved Google login. Resolves to the chosen sheet's id, or null if you cancel.
+async function pickSheet(cfg: Picker): Promise<string | null> {
+  await Promise.all([loadScript("https://apis.google.com/js/api.js"), loadScript("https://accounts.google.com/gsi/client")]);
+  // Re-checked once loaded: Google's scripts define these globals.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { gapi, google } = window as any as GoogleLibs;
+  await new Promise<void>((r) => gapi.load("picker", r));
+  const token = await new Promise<string>((resolve, reject) =>
+    google.accounts.oauth2
+      .initTokenClient({
+        client_id: cfg.clientId,
+        scope: "https://www.googleapis.com/auth/drive.file",
+        login_hint: cfg.email,
+        callback: (r) => (r.access_token ? resolve(r.access_token) : reject(new Error(r.error))),
+        error_callback: (e) => reject(new Error(e.type)),
+      })
+      .requestAccessToken({ prompt: "" }),
+  );
+  const p = google.picker;
+  return new Promise((resolve) =>
+    new p.PickerBuilder()
+      .addView(new p.DocsView(p.ViewId.SPREADSHEETS).setMode(p.DocsViewMode.LIST))
+      .setOAuthToken(token)
+      .setDeveloperKey(cfg.key)
+      .setAppId(cfg.appId)
+      .setTitle("Choose the sheet for your calendar")
+      .setCallback((d) => {
+        if (d.action === p.Action.PICKED) resolve(d.docs?.[0]?.id ?? null);
+        else if (d.action === p.Action.CANCEL) resolve(null);
+      })
+      .build()
+      .setVisible(true),
+  );
 }
 
 const ago = (iso: string, now: Date) => {
@@ -21,17 +99,12 @@ const when = (s: string) =>
     ? new Date(`${s}T00:00`).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })
     : new Date(s).toLocaleString("en-IN", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
 
-// Connects one Google Sheet whose rows become calendar events (synced every 15 minutes, or now on request).
+// Connects one Google Sheet whose rows become calendar events. Checked every minute; synced when it changes.
 export function SheetSync({ now, onCalendarChange }: { now: Date; onCalendarChange: () => void }) {
   const [status, setStatus] = useState<Status | null>(null);
-  const [link, setLink] = useState("");
   const [result, setResult] = useState<SyncResult | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    call("GET").then(setStatus, (e: Error) => setError(e.message));
-  }, []);
 
   async function run(label: string, body: object) {
     setBusy(label);
@@ -48,68 +121,82 @@ export function SheetSync({ now, onCalendarChange }: { now: Date; onCalendarChan
     }
   }
 
+  // On opening the app: a full sync, so problems and removed rows show up here.
+  useEffect(() => {
+    call("GET").then((s: Status) => {
+      setStatus(s);
+      if (s.sheetId && s.canRead) run("sync", { action: "sync" });
+    }, (e: Error) => setError(e.message));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on mount
+  }, []);
+
+  async function choose() {
+    setError(null);
+    try {
+      const id = await pickSheet(status!.picker!);
+      if (id) await run("connect", { action: "connect", id });
+    } catch {
+      setError("Couldn't open Google's file picker. Allow pop-ups for this site and try again.");
+    }
+  }
+
   async function disconnect() {
-    setStatus(await call("DELETE").then(() => call("GET")));
+    await call("DELETE");
+    setStatus(await call("GET"));
     setResult(null);
   }
 
   if (!status) return <p className="mt-3 text-xs text-muted">Loading…</p>;
   const button = "rounded-full px-3 py-1.5 text-sm disabled:opacity-50";
+  const canChoose = status.canRead && !!status.picker;
 
   return (
     <div className="mt-3 space-y-2 text-sm">
       {!status.canRead && (
         <p className="rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-xs">
-          Almanac needs permission to read Google Sheets. Sign out, sign back in, and allow “See your Google Sheets spreadsheets”.
+          To connect a sheet, sign out, sign back in, and allow Almanac to “see and edit only the Google Drive files you use with this app”.
+        </p>
+      )}
+      {status.canRead && !status.picker && (
+        <p className="rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-xs">
+          Google&apos;s file picker isn&apos;t set up yet: add GOOGLE_PICKER_KEY and GOOGLE_PROJECT_NUMBER to .env.local.
         </p>
       )}
 
-      {!status.sheetId ? (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            run("connect", { action: "connect", url: link });
-          }}
-          className="space-y-1.5"
-        >
-          <label className="block">
-            <span className="sr-only">Google Sheet link</span>
-            <input
-              value={link}
-              onChange={(e) => setLink(e.target.value)}
-              placeholder="Paste a Google Sheet link…"
-              className="w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
-            />
-          </label>
-          <div className="flex flex-wrap items-center gap-2">
-            <button type="submit" disabled={!link.trim() || !!busy} className={`${button} bg-ink font-medium text-paper`}>
-              {busy ? "Connecting…" : "Connect"}
-            </button>
-            <a href="/almanac-sheet-template.csv" download className="text-xs text-muted underline underline-offset-2 hover:text-ink">
-              Template (.csv)
-            </a>
-          </div>
-          <p className="text-xs leading-relaxed text-muted">
-            One row per event: Title, Date, Start, End, Location, Notes. Leave Start empty for all-day. New and changed rows reach your calendar every 15 minutes.
-          </p>
-        </form>
-      ) : (
+      {status.sheetId ? (
         <>
           <p className="flex items-center gap-2">
-            <span className="size-2 rounded-full bg-[var(--cat-2)]" aria-hidden />
+            <span className="size-2 shrink-0 rounded-full bg-[var(--cat-2)]" aria-hidden />
             <a href={`https://docs.google.com/spreadsheets/d/${status.sheetId}`} target="_blank" rel="noreferrer" className="truncate underline underline-offset-2">
-              {result?.title ?? "Your sheet"}
+              {status.name ?? "Your sheet"}
             </a>
           </p>
-          <p className="text-xs text-muted">{status.syncedAt ? `Synced ${ago(status.syncedAt, now)} · every 15 min` : "Not synced yet"}</p>
+          <p className="text-xs text-muted">{status.syncedAt ? `Checked ${ago(status.syncedAt, now)} · every minute` : "Not synced yet"}</p>
           <div className="flex flex-wrap gap-1">
             <button type="button" onClick={() => run("sync", { action: "sync" })} disabled={!!busy} className={`${button} border border-line hover:border-ink/40`}>
               {busy === "sync" ? "Syncing…" : "Sync now"}
+            </button>
+            <button type="button" onClick={choose} disabled={!!busy || !canChoose} className={`${button} text-muted hover:text-ink`}>
+              Change sheet
             </button>
             <button type="button" onClick={disconnect} disabled={!!busy} className={`${button} text-muted hover:text-ink`} title="Stop syncing (events already made stay)">
               Disconnect
             </button>
           </div>
+        </>
+      ) : (
+        <>
+          <div className="flex flex-wrap gap-1.5">
+            <button type="button" onClick={choose} disabled={!!busy || !canChoose} className={`${button} bg-ink font-medium text-paper`}>
+              {busy === "connect" ? "Connecting…" : "Choose a sheet"}
+            </button>
+            <button type="button" onClick={() => run("create", { action: "create" })} disabled={!!busy || !status.canRead} className={`${button} border border-line hover:border-ink/40`}>
+              {busy === "create" ? "Creating…" : "Create a new one"}
+            </button>
+          </div>
+          <p className="text-xs leading-relaxed text-muted">
+            One row per event: Title, Date, Start, End, Location, Notes (leave Start empty for all-day). Almanac can open only the sheet you choose or create here.
+          </p>
         </>
       )}
 
