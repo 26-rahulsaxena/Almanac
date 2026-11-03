@@ -21,6 +21,7 @@ export type Ev = {
   meetLink?: string;
   isOrganizer: boolean; // only the organizer can change guests
   reminders?: Reminder[]; // missing = the calendar's default reminders
+  plan?: string; // set on blocks the auto-planner booked: "todo:<id>" or "routine:<id>"
 };
 
 type GCal = {
@@ -48,6 +49,7 @@ type GEvent = {
   hangoutLink?: string;
   organizer?: { self?: boolean };
   reminders?: { useDefault?: boolean; overrides?: Reminder[] };
+  extendedProperties?: { private?: Record<string, string> };
 };
 
 export async function listCalendars(userId: string): Promise<Cal[]> {
@@ -79,7 +81,7 @@ export async function listEvents(userId: string, calendarIds: string[], from: st
     maxResults: query ? "50" : "2500",
     fields:
       "items(id,summary,description,start,end,recurringEventId,originalStartTime,location,transparency,colorId," +
-      "attendees(email,displayName,responseStatus,self,organizer),hangoutLink,organizer(self),reminders)",
+      "attendees(email,displayName,responseStatus,self,organizer),hangoutLink,organizer(self),reminders,extendedProperties(private))",
   });
   if (query) q.set("q", query);
   const lists = await Promise.all(
@@ -105,6 +107,7 @@ export async function listEvents(userId: string, calendarIds: string[], from: st
             meetLink: e.hangoutLink,
             isOrganizer: e.organizer?.self ?? true,
             reminders: e.reminders?.useDefault === false ? (e.reminders.overrides ?? []) : undefined,
+            plan: e.extendedProperties?.private?.almanacPlan || undefined,
           }),
         );
       } catch (err) {

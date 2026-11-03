@@ -15,6 +15,7 @@ import { AlertStageSettings, NotifySettings } from "./notify-settings";
 import { PrioritiesPanel, type PriorityAction } from "./priorities-panel";
 import { SheetSync } from "./sheet-sync";
 import { ThemeToggle } from "./theme-toggle";
+import { TodoDialog } from "./todo-dialog";
 import { TodoList } from "./todo-list";
 import { Agenda } from "./views/agenda";
 import { MonthGrid } from "./views/month-grid";
@@ -131,18 +132,13 @@ export function CalendarApp({ name, calendars, hidden: initialHidden, stages }: 
   const menuButton = useRef<HTMLButtonElement>(null);
   const menuClose = useRef<HTMLButtonElement>(null);
   const menuWasOpen = useRef(false);
-  const focusTodo = useRef(false);
-  // Focus moves into the menu when it opens (straight to the to-do box from "+ To-do") and back to ☰ when it closes.
+  const [todos, setTodos] = useState(false); // the "+ To-do" pop-up
+  // Focus moves into the menu when it opens and back to ☰ when it closes.
   useEffect(() => {
-    if (menu) (focusTodo.current ? document.getElementById("new-todo") : menuClose.current)?.focus();
+    if (menu) menuClose.current?.focus();
     else if (menuWasOpen.current) menuButton.current?.focus();
     menuWasOpen.current = menu;
-    focusTodo.current = false;
   }, [menu]);
-  function newTodo() {
-    focusTodo.current = true;
-    setMenu(true);
-  }
 
   const calIds = useMemo(() => calendars.map((c) => c.id), [calendars]);
   const colorOf = useMemo(() => new Map(calendars.map((c) => [c.id, c.color])), [calendars]);
@@ -305,6 +301,7 @@ export function CalendarApp({ name, calendars, hidden: initialHidden, stages }: 
   // A to-do dragged from the menu onto the calendar gets that time booked for it.
   function dragTodo(t: { id: string; title: string; minutes: number }, x: number, y: number) {
     setMenu(false);
+    setTodos(false);
     setQuery("");
     if (view !== "day" && view !== "week") changeView("week");
     setTodoDrag({ ...t, x, y });
@@ -607,7 +604,7 @@ export function CalendarApp({ name, calendars, hidden: initialHidden, stages }: 
               </motion.button>
               <motion.button
                 type="button"
-                onClick={newTodo}
+                onClick={() => setTodos(true)}
                 whileTap={{ scale: 0.95 }}
                 className="mr-1 rounded-full border border-line px-3 py-1.5 text-sm hover:border-ink/40"
               >
@@ -739,6 +736,23 @@ export function CalendarApp({ name, calendars, hidden: initialHidden, stages }: 
             onClose={() => setPanel(null)}
             onSave={saveEvent}
             onDelete={(scope, send) => scheduleDelete(panel.event!, scope, send)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {todos && (
+          <TodoDialog
+            key="todos"
+            version={gen}
+            now={now}
+            onCalendarChange={() => setGen((g) => g + 1)}
+            onOpenDay={(d) => {
+              openDay(startOfDay(d));
+              setTodos(false);
+            }}
+            onDragStart={dragTodo}
+            onClose={() => setTodos(false)}
           />
         )}
       </AnimatePresence>

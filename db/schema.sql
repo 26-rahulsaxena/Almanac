@@ -106,6 +106,24 @@ create table if not exists todos (
 );
 create index if not exists todos_user on todos(user_id);
 
+-- Auto-planner. auto = Almanac finds and keeps a time for this to-do; group_id ties together the parts of a task
+-- that was split into sessions (kept on different days).
+alter table todos add column if not exists auto boolean not null default false;
+alter table todos add column if not exists group_id uuid;
+-- Focus time and habits ("Gym, 3 times a week, evenings"). Their blocks live only in Google Calendar, tagged
+-- almanacPlan=routine:<id>, so no event data is stored here.
+create table if not exists routines (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id) on delete cascade,
+  title text not null,
+  minutes int not null check (minutes between 15 and 480),
+  per_week int not null check (per_week between 1 and 7),
+  time_of_day text not null default 'any' check (time_of_day in ('morning', 'afternoon', 'evening', 'any')),
+  created_at timestamptz not null default now()
+);
+create index if not exists routines_user on routines(user_id);
+alter table users add column if not exists planned_at timestamptz; -- last auto-plan run
+
 -- Google Sheet sync: which sheet feeds the calendar, and when it was last read. Events made from it are
 -- marked inside Google Calendar itself (a private tag with the sheet id and row), so nothing else is stored.
 alter table users add column if not exists sheet_id text;
@@ -122,3 +140,4 @@ alter table reminder_deliveries enable row level security;
 alter table deadline_states enable row level security;
 alter table severity_rules enable row level security;
 alter table todos enable row level security;
+alter table routines enable row level security;

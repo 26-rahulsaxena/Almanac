@@ -1,15 +1,17 @@
 import { healthCheck, sql } from "@/lib/db";
 import { listCalendars, listEvents, type Ev } from "@/lib/calendar";
+import { replan } from "@/lib/planner";
 import { checkinText, loadPriorities } from "@/lib/priorities";
 import { sendPush } from "@/lib/push";
 import { syncSheet } from "@/lib/sheet-sync";
 import { dueReminders, LOOKAHEAD_MS } from "@/lib/reminders";
 
 const DIGEST_HOUR = 8;
+const ROLLOVER_HOUR = 21; // from 9 pm, to-dos whose time has passed unfinished move on
 
 // GET /api/cron — called every minute by the scheduler (Supabase pg_cron in production) with the shared secret.
 // Sends due reminders and deadline check-ins, re-sends snoozed reminders, sends the 8 am priorities summary,
-// syncs Google Sheets, and deletes old records.
+// syncs Google Sheets, runs the auto-planner, and deletes old records.
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) return new Response("Unauthorized", { status: 401 });
@@ -73,9 +75,38 @@ export async function GET(req: Request) {
     }
   }
 
+  const planned = await autoPlanUsers();
+
   await sql`delete from reminder_deliveries where fire_at < now() - interval '2 days'`;
   await sql`delete from deadline_states where due_at < now() - interval '7 days'`;
-  return Response.json({ users: users.length, sent, snoozed: snoozed.length, checkins, digests, sheets: sheets.length });
+  return Response.json({ users: users.length, sent, snoozed: snoozed.length, checkins, digests, sheets: sheets.length, planned });
+}
+
+// Auto-planner, every 15 minutes per user: moves Almanac's blocks out of the way of new events, and from 9 pm
+// (your time) also moves to-dos whose block has ended unfinished to tomorrow or later. Only for people who use it.
+async function autoPlanUsers() {
+  const due = await sql<{ id: string; timezone: string; hidden_calendars: string[]; rollover: boolean }[]>`
+    update users u set planned_at = now()
+    where (u.planned_at is null or u.planned_at < now() - interval '15 minutes')
+      and (exists (select 1 from routines r where r.user_id = u.id)
+           or exists (select 1 from todos t where t.user_id = u.id and not t.done and (t.auto or t.event_id is not null)))
+    returning u.id, u.timezone, u.hidden_calendars, extract(hour from now() at time zone u.timezone) >= ${ROLLOVER_HOUR} as rollover`;
+  let changed = 0;
+  for (const u of due) {
+    try {
+      const r = await replan(u, { rollover: u.rollover });
+      if (!r || !r.moved.length) continue;
+      changed++;
+      await sendPush(u.id, {
+        kind: "digest",
+        title: "Almanac moved things in your plan",
+        body: r.moved.join(" · "),
+      });
+    } catch (err) {
+      console.error(`Auto-plan for user ${u.id} failed:`, err);
+    }
+  }
+  return changed;
 }
 
 // Check-ins you asked for ("Later", "Doing it now", "Stuck"). Unanswered ones repeat every 30 minutes until
