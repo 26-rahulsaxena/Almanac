@@ -86,7 +86,8 @@ const demo = [
 ];
 const free = [[8, 9], [10.5, 12], [13, 15], [16.5, 18], [19, 20]];
 const y = (h: number) => (h - START) * HOUR;
-const label = (h: number) => `${h % 12 || 12} ${h < 12 ? "am" : "pm"}`;
+const label = (h: number) =>
+  `${Math.floor(h) % 12 || 12}${h % 1 ? `:${String((h % 1) * 60).padStart(2, "0")}` : ""} ${h < 12 ? "am" : "pm"}`;
 
 function DayRibbon() {
   const [now, setNow] = useState<number | null>(null);
