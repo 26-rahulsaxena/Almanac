@@ -1,6 +1,12 @@
 // Date helpers that run in the browser, so "local" means the viewer's own time zone.
 
 type Timed = { start: string; end: string; allDay: boolean };
+type Busy = Timed & { busy: boolean };
+export type Interval = { start: Date; end: Date };
+
+// shortcut: "free" means 8 am–10 pm for everyone; make these per-user settings when someone keeps different hours.
+export const FREE_FROM_HOUR = 8;
+export const FREE_TO_HOUR = 22;
 
 // All-day dates ("2026-11-03") mean local midnight, not UTC midnight.
 export function parseWhen(s: string, allDay: boolean) {
@@ -21,8 +27,100 @@ export function startOfDay(d: Date) {
   return r;
 }
 
+// Weeks start on Monday.
+export function startOfWeek(d: Date) {
+  const r = startOfDay(d);
+  return addDays(r, -((r.getDay() + 6) % 7));
+}
+
+export function startOfMonth(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+
+export function atHour(day: Date, hour: number) {
+  const r = startOfDay(day);
+  r.setHours(hour);
+  return r;
+}
+
+export const formatTime = (d: Date) => d.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
+
 // True if the event covers any part of that local day (handles multi-day and past-midnight events).
 export function overlapsDay(e: Timed, day: Date) {
   const dayStart = startOfDay(day);
   return parseWhen(e.start, e.allDay) < addDays(dayStart, 1) && parseWhen(e.end, e.allDay) > dayStart;
+}
+
+// Busy time within [from, to), with overlapping events merged. Events marked "free" in Google don't count.
+export function busyIntervals(events: Busy[], from: Date, to: Date): Interval[] {
+  const spans = events
+    .filter((e) => e.busy)
+    .map((e) => {
+      const s = parseWhen(e.start, e.allDay);
+      const en = parseWhen(e.end, e.allDay);
+      return { start: s > from ? s : from, end: en < to ? en : to };
+    })
+    .filter((s) => s.start < s.end)
+    .sort((a, b) => +a.start - +b.start);
+
+  const merged: Interval[] = [];
+  for (const s of spans) {
+    const last = merged.at(-1);
+    if (last && s.start <= last.end) {
+      if (s.end > last.end) last.end = s.end;
+    } else merged.push({ ...s });
+  }
+  return merged;
+}
+
+// Gaps of at least minMinutes between busy blocks within [from, to).
+export function freeSlots(events: Busy[], from: Date, to: Date, minMinutes = 15): Interval[] {
+  const min = minMinutes * 60_000;
+  const slots: Interval[] = [];
+  let cursor = from;
+  for (const b of busyIntervals(events, from, to)) {
+    if (+b.start - +cursor >= min) slots.push({ start: cursor, end: b.start });
+    if (b.end > cursor) cursor = b.end;
+  }
+  if (+to - +cursor >= min) slots.push({ start: cursor, end: to });
+  return slots;
+}
+
+// The part of a day that can still be booked: free hours, starting no earlier than now (rounded up to 15 min).
+export function bookableWindow(day: Date, now: Date): Interval | null {
+  const from = atHour(day, FREE_FROM_HOUR);
+  const to = atHour(day, FREE_TO_HOUR);
+  const q = 15 * 60_000;
+  const nowUp = new Date(Math.ceil(+now / q) * q);
+  const start = nowUp > from ? nowUp : from;
+  return start < to ? { start, end: to } : null;
+}
+
+// Side-by-side placement for overlapping timed events: a column index and how many columns its overlap group needs.
+export function layoutColumns<T extends Timed>(events: T[]): { event: T; col: number; cols: number }[] {
+  const ms = (e: T) => [+parseWhen(e.start, e.allDay), +parseWhen(e.end, e.allDay)];
+  const sorted = [...events].sort((a, b) => ms(a)[0] - ms(b)[0] || ms(b)[1] - ms(a)[1]);
+  const out: { event: T; col: number; cols: number }[] = [];
+  let group: { event: T; col: number; cols: number }[] = [];
+  let colEnds: number[] = [];
+  let groupEnd = -Infinity;
+
+  const flush = () => {
+    for (const g of group) g.cols = colEnds.length;
+    out.push(...group);
+    group = [];
+    colEnds = [];
+  };
+
+  for (const e of sorted) {
+    const [s, en] = ms(e);
+    if (group.length && s >= groupEnd) flush();
+    let col = colEnds.findIndex((end) => end <= s);
+    if (col === -1) col = colEnds.push(en) - 1;
+    else colEnds[col] = en;
+    group.push({ event: e, col, cols: 0 });
+    groupEnd = group.length === 1 ? en : Math.max(groupEnd, en);
+  }
+  flush();
+  return out;
 }

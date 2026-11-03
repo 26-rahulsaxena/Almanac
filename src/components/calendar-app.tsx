@@ -1,30 +1,156 @@
 "use client";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { setHiddenCalendars, signInWithGoogle, signOutNow } from "@/app/actions";
 import type { Cal, Ev } from "@/lib/calendar";
-import { addDays, overlapsDay, parseWhen, startOfDay } from "@/lib/time";
+import { addDays, parseWhen, startOfDay, startOfMonth, startOfWeek } from "@/lib/time";
 import { ThemeToggle } from "./theme-toggle";
+import { Agenda } from "./views/agenda";
+import { MonthGrid } from "./views/month-grid";
+import { TimeGrid } from "./views/time-grid";
 
 const ease = [0.22, 1, 0.36, 1] as const;
-const DAYS = 14;
+type View = "day" | "week" | "month" | "agenda";
+const VIEWS: View[] = ["day", "week", "month", "agenda"];
+const LENGTH: Record<View, number> = { day: 1, week: 7, month: 42, agenda: 14 };
+const KEYS: Record<string, View> = { d: "day", w: "week", m: "month", a: "agenda" };
+
+function rangeOf(view: View, anchor: Date) {
+  const start = view === "week" ? startOfWeek(anchor) : view === "month" ? startOfWeek(startOfMonth(anchor)) : startOfDay(anchor);
+  const days = Array.from({ length: LENGTH[view] }, (_, i) => addDays(start, i));
+  return { from: start, to: addDays(start, LENGTH[view]), days };
+}
+
+function shift(view: View, anchor: Date, dir: number) {
+  if (view === "month") return new Date(anchor.getFullYear(), anchor.getMonth() + dir, 1);
+  return addDays(anchor, dir * LENGTH[view]);
+}
+
+function titleOf(view: View, anchor: Date, days: Date[]) {
+  const f = (d: Date, o: Intl.DateTimeFormatOptions) => d.toLocaleDateString("en-IN", o);
+  if (view === "day") return f(anchor, { weekday: "long", day: "numeric", month: "long" });
+  if (view === "month") return f(anchor, { month: "long", year: "numeric" });
+  return `${f(days[0], { day: "numeric", month: "short" })} – ${f(days.at(-1)!, { day: "numeric", month: "short", year: "numeric" })}`;
+}
+
+async function fetchEvents(params: Record<string, string>, calIds: string[], signal?: AbortSignal) {
+  const q = new URLSearchParams(params);
+  for (const id of calIds) q.append("cal", id);
+  const r = await fetch(`/api/events?${q}`, { signal });
+  const body = await r.json();
+  if (!r.ok) throw new Error(body.error ?? "Couldn't load events");
+  return body as Ev[];
+}
+
+function useNow() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
+}
+
+// Dates depend on the viewer's clock and time zone, so the calendar only renders in the browser.
+const useMounted = () => useSyncExternalStore(() => () => {}, () => true, () => false);
+
+const slide = {
+  enter: (dir: number) => ({ opacity: 0, x: dir * 48, scale: dir ? 1 : 0.985 }),
+  center: { opacity: 1, x: 0, scale: 1 },
+  exit: (dir: number) => ({ opacity: 0, x: dir * -48, scale: dir ? 1 : 0.985 }),
+};
 
 export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: string; calendars: Cal[]; hidden: string[] }) {
+  const mounted = useMounted();
+  const now = useNow();
   const [hidden, setHidden] = useState(() => new Set(initialHidden));
-  const [events, setEvents] = useState<Ev[] | null>(null);
-  const [error, setError] = useState<"reauth" | string | null>(null);
-  const [today] = useState(() => startOfDay(new Date()));
+  const [view, setView] = useState<View>(() => {
+    try {
+      if (VIEWS.includes(localStorage.view)) return localStorage.view;
+    } catch {}
+    return typeof window !== "undefined" && window.innerWidth < 640 ? "day" : "week";
+  });
+  const [anchor, setAnchor] = useState(() => startOfDay(new Date()));
+  const [dir, setDir] = useState(0);
+  // Loaded ranges, kept while you browse. gen bumps when you come back to the tab, to refetch in the background.
+  const [cache, setCache] = useState<Record<string, { events: Ev[]; gen: number }>>({});
+  const [gen, setGen] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<{ q: string; events: Ev[] } | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  const calIds = useMemo(() => calendars.map((c) => c.id), [calendars]);
+  const colorOf = useMemo(() => new Map(calendars.map((c) => [c.id, c.color])), [calendars]);
+  const { from, to, days } = useMemo(() => rangeOf(view, anchor), [view, anchor]);
+  const key = `${+from}-${+to}`;
+  const entry = cache[key];
 
   useEffect(() => {
-    const q = new URLSearchParams({ from: today.toISOString(), to: addDays(today, DAYS).toISOString() });
-    fetch(`/api/events?${q}`)
-      .then(async (r) => {
-        const body = await r.json();
-        if (!r.ok) throw new Error(body.error ?? "Couldn't load events");
-        setEvents(body);
-      })
-      .catch((e: Error) => setError(e.message));
-  }, [today]);
+    if (!mounted || entry?.gen === gen) return;
+    const ctl = new AbortController();
+    fetchEvents({ from: from.toISOString(), to: to.toISOString() }, calIds, ctl.signal)
+      .then((events) => setCache((c) => ({ ...c, [key]: { events, gen } })))
+      .catch((e: Error) => e.name !== "AbortError" && setError(e.message));
+    return () => ctl.abort();
+  }, [mounted, entry, gen, key, from, to, calIds]);
+
+  useEffect(() => {
+    const onVisible = () => document.visibilityState === "visible" && setGen((g) => g + 1);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
+
+  const q = query.trim();
+  const searching = q.length >= 2;
+  useEffect(() => {
+    if (!searching) return;
+    const t = setTimeout(() => {
+      const today = startOfDay(new Date());
+      fetchEvents({ from: addDays(today, -365).toISOString(), to: addDays(today, 365).toISOString(), q }, calIds)
+        .then((events) => setResults({ q, events }))
+        .catch((e: Error) => setError(e.message));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [q, searching, calIds]);
+
+  function changeView(v: View) {
+    setDir(0);
+    setView(v);
+    try {
+      localStorage.view = v;
+    } catch {}
+  }
+  function go(d: number) {
+    setDir(d);
+    setAnchor((a) => shift(view, a, d));
+  }
+  function goToday() {
+    setDir(0);
+    setAnchor(startOfDay(new Date()));
+  }
+  function openDay(d: Date) {
+    setDir(0);
+    setView("day");
+    setAnchor(d);
+  }
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.target instanceof HTMLElement && e.target.closest("input, textarea, select, [contenteditable]")) return;
+      if (KEYS[e.key]) changeView(KEYS[e.key]);
+      else if (e.key === "t") goToday();
+      else if (e.key === "ArrowLeft") go(-1);
+      else if (e.key === "ArrowRight") go(1);
+      else if (e.key === "/") {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
 
   function toggle(id: string) {
     const next = new Set(hidden);
@@ -34,21 +160,27 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
     setHiddenCalendars([...next]).catch(() => setError("Couldn't save which calendars are shown."));
   }
 
-  const colorOf = useMemo(() => new Map(calendars.map((c) => [c.id, c.color])), [calendars]);
-  const days = useMemo(() => {
-    const visible = (events ?? [])
-      .filter((e) => !hidden.has(e.calendarId))
-      .sort((a, b) => +parseWhen(a.start, a.allDay) - +parseWhen(b.start, b.allDay) || Number(b.allDay) - Number(a.allDay));
-    return Array.from({ length: DAYS }, (_, i) => {
-      const day = addDays(today, i);
-      return { day, events: visible.filter((e) => overlapsDay(e, day)) };
-    });
-  }, [events, hidden, today]);
+  const visible = useMemo(
+    () =>
+      (entry?.events ?? [])
+        .filter((e) => !hidden.has(e.calendarId))
+        .sort((a, b) => +parseWhen(a.start, a.allDay) - +parseWhen(b.start, b.allDay) || Number(b.allDay) - Number(a.allDay)),
+    [entry, hidden],
+  );
+  const found = results?.q === q ? results.events.filter((e) => !hidden.has(e.calendarId)) : null;
+  const foundDays = useMemo(() => {
+    const seen = new Map<number, Date>();
+    for (const e of found ?? []) {
+      const d = startOfDay(parseWhen(e.start, e.allDay));
+      seen.set(+d, d);
+    }
+    return [...seen.values()].sort((a, b) => +a - +b);
+  }, [found]);
 
   return (
     <div className="flex flex-1 flex-col">
-      <header className="sticky top-0 z-10 border-b border-line bg-paper/85 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-8">
+      <header className="sticky top-0 z-20 border-b border-line bg-paper/85 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-8">
           <span className="font-serif text-2xl">Almanac</span>
           <div className="flex items-center gap-2">
             <span className="hidden text-sm text-muted sm:inline">{name}</span>
@@ -62,19 +194,14 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
         </div>
       </header>
 
-      <div className="mx-auto grid w-full max-w-6xl flex-1 gap-8 px-4 py-6 sm:px-8 lg:grid-cols-[15rem_1fr]">
+      <div className="mx-auto grid w-full max-w-7xl flex-1 gap-6 px-4 py-5 sm:px-8 lg:grid-cols-[14rem_1fr]">
         <aside aria-label="Calendars">
           <h2 className="font-mono text-xs uppercase tracking-[0.2em] text-muted">Calendars</h2>
           <ul className="mt-3 flex flex-wrap gap-2 lg:flex-col lg:gap-0.5">
             {calendars.map((c, i) => {
               const on = !hidden.has(c.id);
               return (
-                <motion.li
-                  key={c.id}
-                  initial={{ opacity: 0, x: -8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.04, ease }}
-                >
+                <motion.li key={c.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04, ease }}>
                   <button
                     type="button"
                     aria-pressed={on}
@@ -94,10 +221,57 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
               );
             })}
           </ul>
+          <p className="mt-6 hidden text-xs leading-relaxed text-muted lg:block">
+            Keys: <kbd>D</kbd> <kbd>W</kbd> <kbd>M</kbd> <kbd>A</kbd> views · <kbd>T</kbd> today · <kbd>←</kbd> <kbd>→</kbd> move · <kbd>/</kbd> search
+          </p>
         </aside>
 
-        <main>
-          <h1 className="font-serif text-4xl sm:text-5xl">Next two weeks</h1>
+        <main className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1">
+              <button type="button" onClick={goToday} className="rounded-full border border-line px-4 py-1.5 text-sm hover:border-ink/40">
+                Today
+              </button>
+              <NavButton label="Previous" onClick={() => go(-1)} d="M15 18l-6-6 6-6" />
+              <NavButton label="Next" onClick={() => go(1)} d="M9 6l6 6-6 6" />
+            </div>
+            <h1 className="order-last w-full font-serif text-3xl sm:order-none sm:mr-auto sm:w-auto sm:text-4xl" aria-live="polite">
+              {mounted ? titleOf(view, anchor, days) : " "}
+            </h1>
+            <label className="ml-auto sm:ml-0">
+              <span className="sr-only">Search events</span>
+              <input
+                ref={searchRef}
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Escape" && (setQuery(""), e.currentTarget.blur())}
+                placeholder="Search   /"
+                className="w-36 rounded-full border border-line bg-surface px-4 py-1.5 text-sm placeholder:text-muted focus:w-56 focus:outline-none focus:ring-2 focus:ring-accent/50 sm:w-44 motion-safe:transition-[width]"
+              />
+            </label>
+            <div className="relative flex rounded-full border border-line bg-surface p-0.5" role="group" aria-label="View">
+              {VIEWS.map((v) => {
+                const on = mounted && view === v; // the saved view is only known in the browser
+                return (
+                  <button
+                    key={v}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => changeView(v)}
+                    title={`${v} (${v[0].toUpperCase()})`}
+                    className="relative rounded-full px-3 py-1 text-sm capitalize"
+                  >
+                    {on && (
+                      <motion.span layoutId="view-pill" className="absolute inset-0 rounded-full bg-ink" transition={{ type: "spring", bounce: 0.2, duration: 0.4 }} />
+                    )}
+                    <span className={`relative ${on ? "text-paper" : ""}`}>{v}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {error === "reauth" ? (
             <Notice text="Google needs you to sign in again before it shares your calendar.">
               <form action={signInWithGoogle}>
@@ -107,106 +281,78 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
               </form>
             </Notice>
           ) : (
-            error && <Notice text={error} />
+            error && <Notice text={error} onClose={() => setError(null)} />
           )}
 
-          {!events && !error ? (
-            <Skeleton />
-          ) : (
-            <ol className="mt-6 space-y-6">
-              {days.map(({ day, events }) => (
-                <li key={day.toISOString()}>
-                  <h2 className="flex items-baseline gap-3 border-b border-line pb-1.5">
-                    <span className="font-serif text-2xl">{dayLabel(day, today)}</span>
-                    <span className="font-mono text-xs text-muted">
-                      {day.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}
-                    </span>
-                  </h2>
-                  <ul className="mt-2">
-                    <AnimatePresence initial={false}>
-                      {events.length === 0 && (
-                        <motion.li
-                          key="free"
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          exit={{ opacity: 0 }}
-                          className="py-1.5 text-sm text-muted"
-                        >
-                          Free all day
-                        </motion.li>
-                      )}
-                      {events.map((e) => (
-                        <motion.li
-                          key={`${e.calendarId}:${e.id}`}
-                          layout
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: "auto" }}
-                          exit={{ opacity: 0, height: 0 }}
-                          transition={{ duration: 0.3, ease }}
-                          className="overflow-hidden"
-                        >
-                          <div className="my-1 flex items-start gap-4 rounded-lg py-1.5 pl-3" style={{ borderLeft: `3px solid ${colorOf.get(e.calendarId)}` }}>
-                            <span className="w-28 shrink-0 pt-0.5 font-mono text-xs text-muted">{timeLabel(e, day)}</span>
-                            <span className="min-w-0">
-                              <span className="font-medium">{e.title}</span>
-                              {e.recurring && <span className="ml-2 text-xs text-muted" title="Repeats">↻</span>}
-                              {e.location && <span className="block truncate text-sm text-muted">{e.location}</span>}
-                            </span>
-                          </div>
-                        </motion.li>
-                      ))}
-                    </AnimatePresence>
-                  </ul>
-                </li>
-              ))}
-            </ol>
-          )}
+          <div className="relative mt-4">
+            {mounted && !searching && !entry && (
+              <motion.div
+                className="absolute inset-x-4 -top-2 z-10 h-0.5 origin-left rounded-full bg-accent"
+                initial={{ scaleX: 0 }}
+                animate={{ scaleX: 0.85 }}
+                transition={{ duration: 2.5, ease: "easeOut" }}
+                aria-label="Loading events"
+              />
+            )}
+            {!mounted ? null : searching ? (
+              <section aria-live="polite">
+                <p className="mb-4 text-sm text-muted">
+                  {found ? `${found.length} result${found.length === 1 ? "" : "s"} for “${q}” in the past and next year` : `Searching for “${q}”…`}
+                </p>
+                {found && <Agenda days={foundDays} events={found} colorOf={colorOf} now={now} showFree={false} />}
+              </section>
+            ) : (
+              <div className="overflow-hidden">
+                <AnimatePresence mode="popLayout" custom={dir} initial={false}>
+                  <motion.div
+                    key={`${view}:${key}`}
+                    custom={dir}
+                    variants={slide}
+                    initial="enter"
+                    animate="center"
+                    exit="exit"
+                    transition={{ duration: 0.35, ease }}
+                  >
+                    {view === "month" ? (
+                      <MonthGrid days={days} month={anchor.getMonth()} events={visible} colorOf={colorOf} now={now} onPickDay={openDay} />
+                    ) : view === "agenda" ? (
+                      <Agenda days={days} events={visible} colorOf={colorOf} now={now} />
+                    ) : (
+                      <TimeGrid days={days} events={visible} colorOf={colorOf} now={now} onPickDay={openDay} />
+                    )}
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+            )}
+          </div>
         </main>
       </div>
     </div>
   );
 }
 
-function dayLabel(day: Date, today: Date) {
-  const diff = Math.round((+day - +today) / 86_400_000);
-  if (diff === 0) return "Today";
-  if (diff === 1) return "Tomorrow";
-  return day.toLocaleDateString("en-IN", { weekday: "long" });
-}
-
-const hm = (d: Date) => d.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
-
-function timeLabel(e: Ev, day: Date) {
-  if (e.allDay) return "All day";
-  const start = new Date(e.start);
-  const end = new Date(e.end);
-  const startsToday = start >= day;
-  const endsToday = end <= addDays(day, 1);
-  if (!startsToday && !endsToday) return "All day";
-  if (!startsToday) return `until ${hm(end)}`;
-  return endsToday ? `${hm(start)} – ${hm(end)}` : `${hm(start)} →`;
-}
-
-function Notice({ text, children }: { text: string; children?: React.ReactNode }) {
+function NavButton({ label, onClick, d }: { label: string; onClick: () => void; d: string }) {
   return (
-    <div role="alert" className="mt-6 max-w-lg rounded-xl border border-accent/40 bg-accent/10 px-4 py-3 text-sm">
-      {text}
-      {children}
-    </div>
+    <button type="button" onClick={onClick} aria-label={label} className="grid size-8 place-items-center rounded-full hover:bg-ink/5">
+      <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+        <path d={d} />
+      </svg>
+    </button>
   );
 }
 
-function Skeleton() {
+function Notice({ text, children, onClose }: { text: string; children?: React.ReactNode; onClose?: () => void }) {
   return (
-    <div className="mt-6 space-y-3" aria-label="Loading events">
-      {[0, 1, 2, 3].map((i) => (
-        <motion.div
-          key={i}
-          className="h-10 rounded-lg bg-ink/5"
-          animate={{ opacity: [0.4, 1, 0.4] }}
-          transition={{ duration: 1.4, repeat: Infinity, delay: i * 0.15 }}
-        />
-      ))}
+    <div role="alert" className="mt-4 flex max-w-lg items-start justify-between gap-3 rounded-xl border border-accent/40 bg-accent/10 px-4 py-3 text-sm">
+      <div>
+        {text}
+        {children}
+      </div>
+      {onClose && (
+        <button type="button" onClick={onClose} aria-label="Dismiss" className="text-muted hover:text-ink">
+          ✕
+        </button>
+      )}
     </div>
   );
 }
