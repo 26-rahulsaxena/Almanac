@@ -1,7 +1,11 @@
 // Which reminders are due, worked out on the server for any user time zone.
 
 export type Reminder = { method: string; minutes: number }; // method "popup" = notification, "email" = Google emails it
-export type Due = { minutes: number; fireAt: Date };
+export type Due = { minutes: number; fireAt: Date; alarm: boolean };
+// The user's alert settings: stage 1 = pop-up at each reminder time, stage 3 = full-screen alarm when a timed event
+// starts. (Stage 2, the repeat after the snooze time, is handled by the minute job.)
+export type Stages = { remind: boolean; alarm: boolean };
+export const SNOOZE_CHOICES = [2, 5, 10, 15, 30]; // minutes
 
 // A minute job that runs late (or skips a beat) still sends reminders due in this window.
 export const CATCH_UP_MS = 10 * 60_000;
@@ -31,13 +35,16 @@ export function dueReminders(
   defaults: Reminder[],
   now: Date,
   timeZone: string,
+  stages: Stages = { remind: true, alarm: true },
 ): Due[] {
   const start = e.allDay ? midnightIn(e.start, timeZone) : new Date(e.start);
   const popups = (e.reminders ?? defaults).filter((r) => r.method === "popup").map((r) => r.minutes);
   if (!popups.length && !e.reminders && !e.allDay) popups.push(FALLBACK_MINUTES);
-  const minutes = new Set(popups);
-  return [...minutes]
-    .map((m) => ({ minutes: m, fireAt: new Date(+start - m * 60_000) }))
+  const due = new Map<number, boolean>(stages.remind ? popups.map((m) => [m, false]) : []);
+  // The start alarm takes the place of a pop-up "at the start" reminder. Events with reminders turned off get none.
+  if (stages.alarm && !e.allDay && e.reminders?.length !== 0) due.set(0, true);
+  return [...due]
+    .map(([m, alarm]) => ({ minutes: m, fireAt: new Date(+start - m * 60_000), alarm }))
     .filter((d) => d.fireAt <= now && +d.fireAt > +now - CATCH_UP_MS);
 }
 

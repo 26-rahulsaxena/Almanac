@@ -19,25 +19,35 @@ export async function GET(req: Request) {
   // Every signed-in user, with or without a notification device: due reminders are also shown full screen
   // inside the open app, which reads them from reminder_deliveries.
   // shortcut: checks every user one after another, each minute; fine for a handful of users, batch or queue it for hundreds.
-  const users = await sql<{ id: string; timezone: string; hidden_calendars: string[] }[]>`
-    select u.id, u.timezone, u.hidden_calendars from users u
+  const users = await sql<{ id: string; timezone: string; hidden_calendars: string[]; remind_popup: boolean; snooze_minutes: number; alarm_at_start: boolean }[]>`
+    select u.id, u.timezone, u.hidden_calendars, u.remind_popup, u.snooze_minutes, u.alarm_at_start from users u
     where exists (select 1 from google_tokens t where t.user_id = u.id)`;
 
   let sent = 0;
   for (const u of users) {
     try {
-      sent += await remindUser(u.id, u.timezone, u.hidden_calendars, now);
+      sent += await remindUser(u, now);
     } catch (err) {
       console.error(`Reminders for user ${u.id} failed:`, err); // e.g. Google login expired; others still get theirs
     }
   }
 
-  const snoozed = await sql<{ id: string; user_id: string; title: string; body: string }[]>`
-    update reminder_deliveries set status = 'sent', snooze_until = null, sent_at = now(),
-      body = 'Snoozed · ' || regexp_replace(body, '^(In [^·]+|Now|Snoozed) · ', '') -- "In 9 min" would be stale by now
-    where status = 'snoozed' and snooze_until <= now()
-    returning id, user_id, title, body`;
-  for (const d of snoozed) await sendPush(d.user_id, { id: d.id, title: d.title, body: d.body });
+  // Stage 2: a reminder left unanswered comes back once after the snooze time, as if Snooze was pressed. Not once
+  // the event has started: the start alarm takes over then.
+  await sql`
+    update reminder_deliveries r set status = 'snoozed', snooze_until = now(), repeated = true
+    from users u
+    where u.id = r.user_id and r.status = 'sent' and not r.alarm and not r.repeated
+      -- 30 s slack: runs are a minute apart and land on the same second the reminder was sent, so it would miss by a hair
+      and r.sent_at <= now() - make_interval(mins => u.snooze_minutes) + interval '30 seconds'
+      and r.fire_at + make_interval(mins => r.minutes) > now()`;
+  const snoozed = await sql<{ id: string; user_id: string; title: string; body: string; snooze_minutes: number }[]>`
+    update reminder_deliveries r set status = 'sent', snooze_until = null, sent_at = now(),
+      body = 'Again · ' || regexp_replace(r.body, '^(In [^·]+|Now|Snoozed|Again) · ', '') -- "In 9 min" would be stale by now
+    from users u
+    where u.id = r.user_id and r.status = 'snoozed' and r.snooze_until <= now()
+    returning r.id, r.user_id, r.title, r.body, u.snooze_minutes`;
+  for (const d of snoozed) await sendPush(d.user_id, { id: d.id, title: d.title, body: d.body, snooze: d.snooze_minutes });
 
   const checkins = await sendCheckins();
   let digests = 0;
@@ -101,24 +111,33 @@ async function morningDigest(userId: string, timeZone: string, hidden: string[],
   return 1;
 }
 
-async function remindUser(userId: string, timeZone: string, hidden: string[], now: Date) {
-  const calendars = (await listCalendars(userId)).filter((c) => !hidden.includes(c.id));
+type Settings = { id: string; timezone: string; hidden_calendars: string[]; remind_popup: boolean; snooze_minutes: number; alarm_at_start: boolean };
+
+async function remindUser(u: Settings, now: Date) {
+  const userId = u.id;
+  const timeZone = u.timezone;
+  const calendars = (await listCalendars(userId)).filter((c) => !u.hidden_calendars.includes(c.id));
   const defaults = new Map(calendars.map((c) => [c.id, c.defaultReminders]));
   const events = await listEvents(userId, calendars.map((c) => c.id), now.toISOString(), new Date(+now + LOOKAHEAD_MS).toISOString());
+  const stages = { remind: u.remind_popup, alarm: u.alarm_at_start };
 
   let sent = 0;
   for (const e of events) {
     if (e.attendees?.find((a) => a.self)?.responseStatus === "declined") continue;
-    for (const due of dueReminders(e, defaults.get(e.calendarId) ?? [], now, timeZone)) {
+    for (const due of dueReminders(e, defaults.get(e.calendarId) ?? [], now, timeZone, stages)) {
       const body = describe(e, now, timeZone);
       // The unique key makes each reminder fire once, even if two minute-jobs overlap.
       const [row] = await sql<{ id: string }[]>`
-        insert into reminder_deliveries (user_id, calendar_id, event_id, minutes, fire_at, title, body)
-        values (${userId}, ${e.calendarId}, ${e.id}, ${due.minutes}, ${due.fireAt}, ${e.title}, ${body})
+        insert into reminder_deliveries (user_id, calendar_id, event_id, minutes, fire_at, title, body, alarm)
+        values (${userId}, ${e.calendarId}, ${e.id}, ${due.minutes}, ${due.fireAt}, ${e.title}, ${body}, ${due.alarm})
         on conflict do nothing
         returning id`;
       if (row) {
-        await sendPush(userId, { id: row.id, title: e.title, body });
+        // The start alarm stands alone: earlier pop-ups for this event, still showing or snoozed, are closed.
+        if (due.alarm) await sql`
+          update reminder_deliveries set status = 'done', snooze_until = null
+          where user_id = ${userId} and calendar_id = ${e.calendarId} and event_id = ${e.id} and not alarm and status <> 'done'`;
+        await sendPush(userId, { id: row.id, title: e.title, body, snooze: u.snooze_minutes });
         sent++;
       }
     }

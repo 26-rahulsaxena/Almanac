@@ -5,7 +5,8 @@ import type { Alert } from "@/app/api/alerts/route";
 import { useDialog } from "./use-dialog";
 
 const CHECK_MS = 30_000;
-// Step 1 is a pop-up card with a soft chime; unanswered after this long, step 2 takes the whole screen with an alarm.
+// Check-ins start as a pop-up with a soft chime; unanswered after this long, they take the whole screen with an alarm.
+// Reminders follow the user's stages instead: pop-ups at the reminder and snooze times, full screen at the start.
 const ESCALATE_MS = 60_000;
 const CHIME_EVERY_MS = 8_000;
 const ALARM_EVERY_MS = 1_500;
@@ -32,8 +33,8 @@ type Answer = { label: string; action: string; primary?: boolean };
 function answersFor(a: Alert): Answer[] {
   if (a.kind === "reminder")
     return [
-      { label: "Done, I'm on it", action: "done", primary: true },
-      { label: "Snooze 5 min", action: "snooze" },
+      { label: a.alarm ? "I'm on it" : "Got it", action: "done", primary: true },
+      { label: `Snooze ${a.snooze ?? 5} min`, action: "snooze" },
     ];
   if (a.ask === "start")
     return [
@@ -47,10 +48,10 @@ function answersFor(a: Alert): Answer[] {
   ];
 }
 
-// Reminders and check-ins inside the open app, in two steps: a pop-up with a chime, then (if unanswered for a
-// minute) the whole screen with an alarm. Snoozed reminders and "more time" check-ins come back and go through
-// both steps again. Works even where notifications are blocked. Sound plays in a background tab too, but
-// browsers only allow it after you've clicked or typed on the page once.
+// Reminders and check-ins inside the open app: a pop-up with a chime, or the whole screen with an alarm (an event
+// starting now, or a check-in unanswered for a minute). Snoozed and repeated ones come back the same way. Works even
+// where notifications are blocked. Sound plays in a background tab too, but browsers only allow it after you've
+// clicked or typed on the page once.
 export function FullScreenAlert({ onChanged }: { onChanged: () => void }) {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [now, setNow] = useState(() => Date.now());
@@ -86,8 +87,10 @@ export function FullScreenAlert({ onChanged }: { onChanged: () => void }) {
   }, []);
 
   const current = alerts[0];
-  const currentId = current?.id; // each check returns a fresh list; keep going on the same alert, don't restart
-  const full = !!current && now - +new Date(current.sentAt) >= ESCALATE_MS;
+  // Each check returns a fresh list; keep going on the same alert, but start over when it comes back (new sentAt).
+  const currentId = current && `${current.id}@${current.sentAt}`;
+  const escalates = current?.kind === "checkin";
+  const full = !!current && (!!current.alarm || (escalates && now - +new Date(current.sentAt) >= ESCALATE_MS));
 
   // A clock for the escalation, ticking only while something is waiting.
   useEffect(() => {
@@ -96,13 +99,14 @@ export function FullScreenAlert({ onChanged }: { onChanged: () => void }) {
     return () => clearInterval(timer);
   }, [currentId]);
 
-  // Sound: chime while it's a pop-up, alarm once it's full screen.
+  // Sound: chime for a minute while it's a pop-up, alarm once it's full screen.
   useEffect(() => {
     if (!currentId) return;
     const play = () => audio.current?.state === "running" && (full ? alarm : chime)(audio.current);
     play();
     const started = Date.now();
-    const timer = setInterval(() => (Date.now() - started < ALARM_FOR_MS ? play() : clearInterval(timer)), full ? ALARM_EVERY_MS : CHIME_EVERY_MS);
+    const soundFor = full ? ALARM_FOR_MS : ESCALATE_MS;
+    const timer = setInterval(() => (Date.now() - started < soundFor ? play() : clearInterval(timer)), full ? ALARM_EVERY_MS : CHIME_EVERY_MS);
     return () => clearInterval(timer);
   }, [currentId, full, soundOn]);
 
@@ -131,24 +135,26 @@ export function FullScreenAlert({ onChanged }: { onChanged: () => void }) {
   }
 
   const left = alerts.length - 1;
-  const secondsLeft = current ? Math.max(0, Math.ceil((+new Date(current.sentAt) + ESCALATE_MS - now) / 1000)) : 0;
+  const secondsLeft = current && escalates ? Math.max(0, Math.ceil((+new Date(current.sentAt) + ESCALATE_MS - now) / 1000)) : null;
   return (
     <AnimatePresence>
       {current &&
         (full ? (
-          <FullScreen key={`full-${current.id}`} alert={current} left={left} onAnswer={answer} />
+          <FullScreen key={`full-${currentId}`} alert={current} left={left} onAnswer={answer} />
         ) : (
-          <PopUp key={`pop-${current.id}`} alert={current} left={left} secondsLeft={secondsLeft} soundOn={soundOn} onAnswer={answer} />
+          <PopUp key={`pop-${currentId}`} alert={current} left={left} secondsLeft={secondsLeft} soundOn={soundOn} onAnswer={answer} />
         ))}
     </AnimatePresence>
   );
 }
 
 type ViewProps = { alert: Alert; left: number; onAnswer: (action: string) => void };
-const label = (a: Alert, left: number) => `${a.kind === "reminder" ? "Reminder" : "Check-in"}${left > 0 ? ` · ${left} more after this` : ""}`;
+const label = (a: Alert, left: number) =>
+  `${a.alarm ? "Starting now" : a.kind === "reminder" ? "Reminder" : "Check-in"}${left > 0 ? ` · ${left} more after this` : ""}`;
 
-// Step 1: a card in the corner. Doesn't take focus, so typing elsewhere isn't interrupted.
-function PopUp({ alert, left, secondsLeft, soundOn, onAnswer }: ViewProps & { secondsLeft: number; soundOn: boolean }) {
+// A card in the corner. Doesn't take focus, so typing elsewhere isn't interrupted.
+// secondsLeft: countdown to full screen, for check-ins only.
+function PopUp({ alert, left, secondsLeft, soundOn, onAnswer }: ViewProps & { secondsLeft: number | null; soundOn: boolean }) {
   return (
     <motion.div
       role="alert"
@@ -158,13 +164,15 @@ function PopUp({ alert, left, secondsLeft, soundOn, onAnswer }: ViewProps & { se
       transition={{ type: "spring", damping: 22, stiffness: 300 }}
       className="fixed right-4 top-4 z-[65] w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-accent/50 bg-surface p-4 shadow-2xl"
     >
-      <motion.span
-        aria-hidden
-        className="absolute inset-x-0 top-0 h-1 origin-left bg-accent"
-        initial={{ scaleX: 1 }}
-        animate={{ scaleX: 0 }}
-        transition={{ duration: secondsLeft, ease: "linear" }}
-      />
+      {secondsLeft !== null && (
+        <motion.span
+          aria-hidden
+          className="absolute inset-x-0 top-0 h-1 origin-left bg-accent"
+          initial={{ scaleX: 1 }}
+          animate={{ scaleX: 0 }}
+          transition={{ duration: secondsLeft, ease: "linear" }}
+        />
+      )}
       <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-accent">{label(alert, left)}</p>
       <p className="mt-1.5 break-words font-serif text-2xl leading-snug">{alert.title}</p>
       <p className="mt-1 text-sm text-muted">{alert.body}</p>
@@ -180,14 +188,17 @@ function PopUp({ alert, left, secondsLeft, soundOn, onAnswer }: ViewProps & { se
           </button>
         ))}
       </div>
-      <p className="mt-2 text-xs text-muted">
-        Goes full screen in {secondsLeft}s if not answered.{!soundOn && " Click anywhere on the page once to allow sound."}
-      </p>
+      {(secondsLeft !== null || !soundOn) && (
+        <p className="mt-2 text-xs text-muted">
+          {secondsLeft !== null && `Goes full screen in ${secondsLeft}s if not answered.`}
+          {!soundOn && " Click anywhere on the page once to allow sound."}
+        </p>
+      )}
     </motion.div>
   );
 }
 
-// Step 2: the whole screen, with focus, until it's answered. Esc = ask again later, never silently dismissed.
+// The whole screen, with focus, until it's answered. Esc = ask again later, never silently dismissed.
 function FullScreen({ alert, left, onAnswer }: ViewProps) {
   const answers = answersFor(alert);
   const ref = useDialog<HTMLDivElement>(() => onAnswer("snooze"));

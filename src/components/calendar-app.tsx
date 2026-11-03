@@ -1,7 +1,7 @@
 "use client";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { setHiddenCalendars, signInWithGoogle, signOutNow } from "@/app/actions";
+import { setHiddenCalendars, signInWithGoogle, signOutNow, type AlertStages } from "@/app/actions";
 import type { Cal, Ev } from "@/lib/calendar";
 import { CATEGORIES, categoryHex } from "@/lib/categories";
 import type { DeleteInput, SaveInput, Scope, SendUpdates } from "@/lib/recurrence";
@@ -11,7 +11,7 @@ import { FullScreenAlert } from "./full-screen-alert";
 import { draftFromEvent, draftFromSlot, draftMoved, EventPanel, type Form } from "./event-panel";
 import type { Priority } from "@/lib/priorities";
 import type { Severity } from "@/lib/priority";
-import { NotifySettings } from "./notify-settings";
+import { AlertStageSettings, NotifySettings } from "./notify-settings";
 import { PrioritiesPanel, type PriorityAction } from "./priorities-panel";
 import { SheetSync } from "./sheet-sync";
 import { ThemeToggle } from "./theme-toggle";
@@ -95,7 +95,7 @@ const slide = {
   exit: (dir: number) => ({ opacity: 0, x: dir * -48, scale: dir ? 1 : 0.985 }),
 };
 
-export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: string; calendars: Cal[]; hidden: string[] }) {
+export function CalendarApp({ name, calendars, hidden: initialHidden, stages }: { name: string; calendars: Cal[]; hidden: string[]; stages: AlertStages }) {
   const mounted = useMounted();
   const now = useNow();
   const [hidden, setHidden] = useState(() => new Set(initialHidden));
@@ -584,6 +584,7 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
 
           <h2 className="mt-6 font-mono text-xs uppercase tracking-[0.2em] text-muted">Notifications</h2>
           <NotifySettings />
+          <AlertStageSettings initial={stages} />
 
           <p className="mt-6 text-xs leading-relaxed text-muted">
             Keys: <kbd>\</kbd> menu · <kbd>N</kbd> new · <kbd>K</kbd> assistant · <kbd>P</kbd> priorities · <kbd>D</kbd> <kbd>W</kbd> <kbd>M</kbd> <kbd>A</kbd> views · <kbd>T</kbd> today · <kbd>←</kbd> <kbd>→</kbd> move · <kbd>/</kbd> search

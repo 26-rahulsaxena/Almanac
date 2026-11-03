@@ -17,7 +17,7 @@ describe("midnight in a time zone", () => {
 describe("due reminders", () => {
   test("fires at exactly 10 minutes before (09:50 IST)", () => {
     expect(dueReminders(meeting, [], new Date("2026-11-04T04:20:00Z"), IST)).toEqual([
-      { minutes: 10, fireAt: new Date("2026-11-04T04:20:00Z") },
+      { minutes: 10, fireAt: new Date("2026-11-04T04:20:00Z"), alarm: false },
     ]);
   });
 
@@ -27,7 +27,7 @@ describe("due reminders", () => {
 
   test("a late minute job still catches it, but not forever", () => {
     expect(dueReminders(meeting, [], new Date("2026-11-04T04:25:00Z"), IST)).toHaveLength(1);
-    expect(dueReminders(meeting, [], new Date("2026-11-04T04:31:00Z"), IST)).toEqual([]);
+    expect(dueReminders(meeting, [], new Date("2026-11-04T04:31:00Z"), IST, { remind: true, alarm: false })).toEqual([]);
   });
 
   test("several reminders on one event fire separately", () => {
@@ -58,7 +58,34 @@ describe("due reminders", () => {
   test("all-day: 'the day before at 9 am' fires at 09:00 IST the previous day", () => {
     const e = { start: "2026-11-08", allDay: true, reminders: [popup(900)] };
     const nineAmIst = new Date("2026-11-07T03:30:00Z");
-    expect(dueReminders(e, [], nineAmIst, IST)).toEqual([{ minutes: 900, fireAt: nineAmIst }]);
+    expect(dueReminders(e, [], nineAmIst, IST)).toEqual([{ minutes: 900, fireAt: nineAmIst, alarm: false }]);
+  });
+});
+
+describe("alert stages", () => {
+  const startsAt = new Date("2026-11-04T04:30:00Z"); // 10:00 IST
+
+  test("stage 3: a full-screen alarm when a timed event starts", () => {
+    expect(dueReminders(meeting, [], startsAt, IST)).toEqual([{ minutes: 0, fireAt: startsAt, alarm: true }]);
+  });
+
+  test("the alarm replaces a pop-up 'at the start' reminder instead of firing twice", () => {
+    const e = { ...meeting, reminders: [popup(0)] };
+    expect(dueReminders(e, [], startsAt, IST)).toEqual([{ minutes: 0, fireAt: startsAt, alarm: true }]);
+  });
+
+  test("no alarm for all-day events or events with reminders turned off", () => {
+    expect(dueReminders({ ...meeting, reminders: [] }, [], startsAt, IST)).toEqual([]);
+    expect(dueReminders({ start: "2026-11-04", allDay: true }, [], new Date("2026-11-03T18:30:00Z"), IST)).toEqual([]);
+  });
+
+  test("each stage can be switched off", () => {
+    const tenToTen = new Date("2026-11-04T04:20:00Z");
+    expect(dueReminders(meeting, [], tenToTen, IST, { remind: false, alarm: true })).toEqual([]);
+    expect(dueReminders(meeting, [], startsAt, IST, { remind: true, alarm: false })).toEqual([]);
+    expect(dueReminders({ ...meeting, reminders: [popup(0)] }, [], startsAt, IST, { remind: true, alarm: false })).toEqual([
+      { minutes: 0, fireAt: startsAt, alarm: false },
+    ]);
   });
 });
 

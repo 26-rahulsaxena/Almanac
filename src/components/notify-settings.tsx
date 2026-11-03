@@ -1,5 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
+import { setAlertStages, type AlertStages } from "@/app/actions";
+import { SNOOZE_CHOICES } from "@/lib/reminders";
 
 type State = "loading" | "unsupported" | "ios-install" | "denied" | "off" | "on";
 
@@ -87,5 +89,60 @@ export function NotifySettings() {
       {state === "unsupported" && <p className="text-muted">This browser can&apos;t receive notifications.</p>}
       {msg && <p className="text-xs text-muted">{msg}</p>}
     </div>
+  );
+}
+
+// The three alert stages for every event, saved to the account (they apply on every device).
+export function AlertStageSettings({ initial }: { initial: AlertStages }) {
+  const [s, setS] = useState(initial);
+  const [error, setError] = useState(false);
+
+  function change(next: AlertStages) {
+    const before = s;
+    setS(next);
+    setError(false);
+    setAlertStages(next).catch(() => {
+      setS(before);
+      setError(true);
+    });
+  }
+
+  return (
+    <fieldset className="mt-4 space-y-2.5 text-sm">
+      <legend className="mb-2 font-medium">Alerts for each event</legend>
+      <label className="flex items-start gap-2">
+        <input type="checkbox" className="mt-1 accent-[var(--accent)]" checked={s.remind} onChange={(e) => change({ ...s, remind: e.target.checked })} />
+        <span>
+          <b className="font-medium">1. At the reminder time</b>
+          <span className="block text-xs text-muted">A pop-up with a soft chime, at each reminder set on the event.</span>
+        </span>
+      </label>
+      <div className="flex items-start gap-2 pl-5">
+        <span>
+          <b className="font-medium">2. Again after </b>
+          <select
+            aria-label="Snooze length in minutes"
+            value={s.snooze}
+            onChange={(e) => change({ ...s, snooze: +e.target.value })}
+            className="rounded-md border border-line bg-paper px-1 py-0.5"
+          >
+            {SNOOZE_CHOICES.map((m) => (
+              <option key={m} value={m}>
+                {m} min
+              </option>
+            ))}
+          </select>
+          <span className="block text-xs text-muted">If you snooze it or don&apos;t answer it. Not after the event has started.</span>
+        </span>
+      </div>
+      <label className="flex items-start gap-2">
+        <input type="checkbox" className="mt-1 accent-[var(--accent)]" checked={s.alarm} onChange={(e) => change({ ...s, alarm: e.target.checked })} />
+        <span>
+          <b className="font-medium">3. When it starts</b>
+          <span className="block text-xs text-muted">Full screen with an alarm, until you answer it. Not for all-day events.</span>
+        </span>
+      </label>
+      {error && <p className="text-xs text-accent">Couldn&apos;t save. Try again.</p>}
+    </fieldset>
   );
 }

@@ -6,7 +6,7 @@ self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim(
 function buttons(data) {
   if (data.kind === "checkin" && data.ask === "start") return [{ action: "doing", title: "Doing it now" }, { action: "open", title: "Open" }];
   if (data.kind === "checkin") return [{ action: "done", title: "Yes, done" }, { action: "more", title: "Need 30 more min" }];
-  if (data.id) return [{ action: "snooze", title: "Snooze 5 min" }, { action: "done", title: "Done" }];
+  if (data.id) return [{ action: "snooze", title: `Snooze ${data.snooze || 5} min` }, { action: "done", title: "Done" }];
   return [];
 }
 

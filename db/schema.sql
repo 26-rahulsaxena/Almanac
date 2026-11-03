@@ -51,6 +51,13 @@ create table if not exists reminder_deliveries (
   unique (user_id, calendar_id, event_id, minutes, fire_at)
 );
 create index if not exists reminder_deliveries_snoozed on reminder_deliveries(snooze_until) where status = 'snoozed';
+-- Alert stages: 1) pop-up at each reminder time, 2) again after the snooze time if not answered,
+-- 3) full-screen alarm when the event starts. Each can be set in the menu.
+alter table users add column if not exists remind_popup boolean not null default true;
+alter table users add column if not exists snooze_minutes int not null default 5 check (snooze_minutes between 1 and 120);
+alter table users add column if not exists alarm_at_start boolean not null default true;
+alter table reminder_deliveries add column if not exists alarm boolean not null default false; -- stage 3
+alter table reminder_deliveries add column if not exists repeated boolean not null default false; -- stage 2 already sent
 
 -- Priorities: your choices and check-in progress per deadline. Title and due time are kept so
 -- check-in notifications can name the task; rows are deleted a week after the deadline.
