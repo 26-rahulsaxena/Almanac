@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+/* Dark mode follows the .dark class on <html> (set by the theme toggle or the OS setting). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Design direction "Almanac": warm paper, ink, and one vermilion thread for "now" and alerts.
+   Spacing uses Tailwind's 4px scale; never add one-off pixel values. */
+:root {
+  --paper: #f4f1ea;
+  --surface: #fbfaf6;
+  --ink: #1d1b18;
+  --muted: #6b665d;
+  --line: #e2ddd2;
+  --accent: #c93a17;
+  /* Calendar / category colours, tuned to read on both paper and ink. */
+  --cat-1: #3b6ea8;
+  --cat-2: #3f8a5c;
+  --cat-3: #b0742a;
+  --cat-4: #8a4fa0;
+  --cat-5: #c2456b;
+  --cat-6: #4f8a8b;
+}
+
+.dark {
+  --paper: #141311;
+  --surface: #1c1b18;
+  --ink: #ece8df;
+  --muted: #9b958a;
+  --line: #2d2b27;
+  --accent: #ff6a45;
+  --cat-1: #7aa7dc;
+  --cat-2: #7cc495;
+  --cat-3: #e0a65c;
+  --cat-4: #c08ad6;
+  --cat-5: #ee86a6;
+  --cat-6: #84c2c3;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-serif: var(--font-instrument-serif);
+}
+
+html {
+  color-scheme: light;
+}
+html.dark {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  transition: background-color 0.3s, color 0.3s;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
