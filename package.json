@@ -11,6 +11,7 @@
     "cron:local": "node scripts/cron-local.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.4.0",
     "motion": "^14.9.0",
     "next": "16.4.4",
     "next-auth": "^5.0.0-beta.32",

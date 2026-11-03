@@ -4,7 +4,8 @@ type Timed = { start: string; end: string; allDay: boolean };
 type Busy = Timed & { busy: boolean };
 export type Interval = { start: Date; end: Date };
 
-// shortcut: "free" means 8 am–10 pm for everyone; make these per-user settings when someone keeps different hours.
+// Waking hours, used only to count and suggest free time (booking works at any hour).
+// shortcut: 8 am–10 pm for everyone; make these per-user settings when someone keeps different hours.
 export const FREE_FROM_HOUR = 8;
 export const FREE_TO_HOUR = 22;
 
@@ -95,10 +96,10 @@ export function freeSlots(events: Busy[], from: Date, to: Date, minMinutes = 15)
   return slots;
 }
 
-// The part of a day that can still be booked: free hours, starting no earlier than now (rounded up to 15 min).
+// The part of a day that can still be booked: any hour, starting no earlier than now (rounded up to 15 min).
 export function bookableWindow(day: Date, now: Date): Interval | null {
-  const from = atHour(day, FREE_FROM_HOUR);
-  const to = atHour(day, FREE_TO_HOUR);
+  const from = startOfDay(day);
+  const to = addDays(from, 1);
   const q = 15 * 60_000;
   const nowUp = new Date(Math.ceil(+now / q) * q);
   const start = nowUp > from ? nowUp : from;

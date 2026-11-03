@@ -72,12 +72,14 @@ export async function POST(req: Request) {
       }
       case "done":
         await sql`update deadline_states set status = 'done', next_check_at = null ${where}`;
+        await sql`update todos set done = true where user_id = ${u.id} and calendar_id = ${calendarId} and event_id = ${eventId}`;
         break;
       case "stuck":
         await sql`update deadline_states set status = 'stuck', next_check_at = now() + interval '1 hour' ${where}`;
         break;
       case "open":
         await sql`update deadline_states set status = 'open', next_check_at = null ${where}`;
+        await sql`update todos set done = false where user_id = ${u.id} and calendar_id = ${calendarId} and event_id = ${eventId}`;
         break;
     }
     return Response.json(await loadPriorities(u.id, u.timezone, u.hidden_calendars));

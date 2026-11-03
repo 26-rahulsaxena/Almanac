@@ -100,11 +100,12 @@ describe("bookable window", () => {
   test("today starts at now, rounded up to 15 minutes", () => {
     expect(bookableWindow(nov(3), nov(3, 13, 7))!.start).toEqual(nov(3, 13, 15));
   });
-  test("a future day starts at 8 am", () => {
-    expect(bookableWindow(nov(4), nov(3, 13, 7))).toEqual({ start: nov(4, 8), end: nov(4, 22) });
+  test("a future day is bookable round the clock, midnight to midnight", () => {
+    expect(bookableWindow(nov(4), nov(3, 13, 7))).toEqual({ start: nov(4), end: nov(5) });
   });
-  test("nothing left after 10 pm", () => {
-    expect(bookableWindow(nov(3), nov(3, 22, 30))).toBeNull();
+  test("late at night the rest of today is still bookable", () => {
+    expect(bookableWindow(nov(3), nov(3, 22, 30))).toEqual({ start: nov(3, 22, 30), end: nov(4) });
+    expect(bookableWindow(nov(3), nov(3, 23, 59))).toBeNull(); // rounds up to midnight: nothing left today
   });
 });
 

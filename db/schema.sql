@@ -80,6 +80,22 @@ create table if not exists severity_rules (
   primary key (user_id, title_key)
 );
 
+-- To-do list. A to-do can be given a block of time on the calendar (calendar_id/event_id), which then
+-- shows up in Priorities like any other event.
+create table if not exists todos (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id) on delete cascade,
+  title text not null,
+  due_at timestamptz,
+  minutes int not null default 60 check (minutes between 5 and 720), -- how long it takes, used when booking time
+  done boolean not null default false,
+  calendar_id text,
+  event_id text,
+  scheduled_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create index if not exists todos_user on todos(user_id);
+
 -- Row Level Security with no policies blocks Supabase's public API from these tables.
 -- The app connects as the database owner, which is unaffected.
 alter table users enable row level security;
@@ -88,3 +104,4 @@ alter table push_subscriptions enable row level security;
 alter table reminder_deliveries enable row level security;
 alter table deadline_states enable row level security;
 alter table severity_rules enable row level security;
+alter table todos enable row level security;

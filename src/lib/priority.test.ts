@@ -23,6 +23,10 @@ describe("kind of task", () => {
     expect(classify(item("Lunch meeting with client")).category).toBe("work");
     expect(classify(item("Gym with friends")).category).toBe("leisure");
   });
+  test("the title wins over words in the notes; notes help when the title says nothing", () => {
+    expect(classify(item("Gym workout", { description: "Bring the test results" })).category).toBe("leisure");
+    expect(classify(item("Sunday", { description: "Exam revision" })).category).toBe("deadline");
+  });
   test("no telling words: guests make it a meeting, a Family calendar makes it personal", () => {
     expect(classify(item("Catch-up with Priya", { guests: 2 })).category).toBe("work");
     expect(classify(item("Sunday plans", { calendarName: "Family" })).category).toBe("personal");

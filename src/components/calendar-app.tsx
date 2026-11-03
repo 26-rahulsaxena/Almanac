@@ -6,12 +6,14 @@ import type { Cal, Ev } from "@/lib/calendar";
 import { CATEGORIES, categoryHex } from "@/lib/categories";
 import type { DeleteInput, SaveInput, Scope, SendUpdates } from "@/lib/recurrence";
 import { addDays, atHour, parseWhen, startOfDay, startOfMonth, startOfWeek } from "@/lib/time";
+import { Assistant } from "./assistant";
 import { draftFromEvent, draftFromSlot, EventPanel, type Form } from "./event-panel";
 import type { Priority } from "@/lib/priorities";
 import type { Severity } from "@/lib/priority";
 import { NotifySettings } from "./notify-settings";
 import { PrioritiesPanel, sevColor, type PriorityAction } from "./priorities-panel";
 import { ThemeToggle } from "./theme-toggle";
+import { TodoList } from "./todo-list";
 import { Agenda } from "./views/agenda";
 import { MonthGrid } from "./views/month-grid";
 import { TimeGrid } from "./views/time-grid";
@@ -114,6 +116,7 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
   const [priorities, setPriorities] = useState<Priority[] | null>(null);
   const [showPriorities, setShowPriorities] = useState(false);
   const firstPriorities = useRef(true);
+  const [showAssistant, setShowAssistant] = useState(false);
 
   const calIds = useMemo(() => calendars.map((c) => c.id), [calendars]);
   const colorOf = useMemo(() => new Map(calendars.map((c) => [c.id, c.color])), [calendars]);
@@ -300,12 +303,16 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (panel || showPriorities || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (panel || showPriorities || showAssistant || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.target instanceof HTMLElement && e.target.closest("input, textarea, select, [contenteditable]")) return;
       if (KEYS[e.key]) changeView(KEYS[e.key]);
       else if (e.key === "t") goToday();
       else if (e.key === "n") newEvent();
       else if (e.key === "p") setShowPriorities(true);
+      else if (e.key === "k") {
+        e.preventDefault(); // keep the "k" out of the chat box that opens
+        setShowAssistant(true);
+      }
       else if (e.key === "ArrowLeft") go(-1);
       else if (e.key === "ArrowRight") go(1);
       else if (e.key === "/") {
@@ -400,6 +407,9 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
             })}
           </ul>
 
+          <h2 className="mt-6 font-mono text-xs uppercase tracking-[0.2em] text-muted">To-do</h2>
+          <TodoList version={gen} now={now}onCalendarChange={() => setGen((g) => g + 1)} onOpenDay={(d) => openDay(startOfDay(d))} />
+
           <h2 className="mt-6 font-mono text-xs uppercase tracking-[0.2em] text-muted">Categories</h2>
           <div role="group" aria-label="Filter by category" className="mt-3 flex flex-wrap gap-2">
             {[{ id: "none", name: "No category", hex: "" }, ...CATEGORIES].map((c) => {
@@ -436,7 +446,7 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
           <NotifySettings />
 
           <p className="mt-6 hidden text-xs leading-relaxed text-muted lg:block">
-            Keys: <kbd>N</kbd> new · <kbd>D</kbd> <kbd>W</kbd> <kbd>M</kbd> <kbd>A</kbd> views · <kbd>T</kbd> today · <kbd>←</kbd> <kbd>→</kbd> move · <kbd>/</kbd> search
+            Keys: <kbd>N</kbd> new · <kbd>K</kbd> assistant · <kbd>P</kbd> priorities ·<kbd>D</kbd> <kbd>W</kbd> <kbd>M</kbd> <kbd>A</kbd> views · <kbd>T</kbd> today · <kbd>←</kbd> <kbd>→</kbd> move · <kbd>/</kbd> search
           </p>
         </aside>
 
@@ -599,6 +609,8 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
       <AnimatePresence>
         {showPriorities && <PrioritiesPanel key="priorities" items={priorities} onClose={() => setShowPriorities(false)} onAction={priorityAction} />}
       </AnimatePresence>
+
+      <Assistant open={showAssistant} onOpenChange={setShowAssistant} onChanged={() => setGen((g) => g + 1)} />
 
       <div role="status" aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-4 z-30 flex flex-col items-center gap-2 px-4">
         <AnimatePresence>

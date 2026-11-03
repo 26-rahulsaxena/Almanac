@@ -37,10 +37,12 @@ const SMALL_WORDS = /\b(practice|optional|reading|draft|mock)\b/i;
 export type Item = { calendarId: string; calendarName?: string; title: string; description?: string; busy?: boolean; guests?: number };
 
 export function classify(e: Item): { category: Category; word?: string; importance: number } {
-  const text = `${e.title} ${e.description ?? ""}`;
-  for (const [category, words, importance] of KINDS) {
-    const m = text.match(words);
-    if (m) return { category, word: m[0].toLowerCase(), importance };
+  // The title decides; the notes only count when the title has no telling words.
+  for (const text of [e.title, e.description ?? ""]) {
+    for (const [category, words, importance] of KINDS) {
+      const m = text.match(words);
+      if (m) return { category, word: m[0].toLowerCase(), importance };
+    }
   }
   // No telling words: a personal calendar means personal; other people invited means a work-style meeting.
   if (/family|personal|birthday/i.test(e.calendarName ?? "")) return { category: "personal", importance: 1 };
