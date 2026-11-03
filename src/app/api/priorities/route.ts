@@ -2,7 +2,7 @@ import { auth } from "@/auth";
 import { sql } from "@/lib/db";
 import { ReauthError } from "@/lib/google";
 import { ensureState, loadPriorities } from "@/lib/priorities";
-import { SAFETY_MS, SEVERITIES } from "@/lib/priority";
+import { SAFETY_MS, SEVERITIES, titleKey } from "@/lib/priority";
 
 const ACTIONS = ["severity", "deadline", "doing", "later", "done", "stuck", "open"];
 
@@ -27,8 +27,9 @@ export async function GET() {
   }
 }
 
-// POST /api/priorities {calendarId, eventId, action, ...} → change one deadline, returns the updated list.
-//   severity {severity | null}   deadline {deadline: true | false | null}   doing {minutes}
+// POST /api/priorities {calendarId, eventId, action, ...} → change one item, returns the updated list.
+//   severity {severity | null}: remembered for every event with the same name (null = back to the suggestion)
+//   deadline {deadline: true | false | null}: show in / hide from Priorities      doing {minutes}
 //   later {until: ISO}           done, stuck, open (undo)
 export async function POST(req: Request) {
   const u = await me();
@@ -43,16 +44,23 @@ export async function POST(req: Request) {
     const row = await ensureState(u.id, u.timezone, calendarId, eventId);
     const where = sql`where id = ${row.id}`;
     switch (action) {
-      case "severity":
+      case "severity": {
         if (b.severity !== null && !SEVERITIES.includes(b.severity)) return fail("Invalid severity");
-        await sql`update deadline_states set severity_override = ${b.severity} ${where}`;
+        const key = titleKey(row.title);
+        if (b.severity === null) await sql`delete from severity_rules where user_id = ${u.id} and title_key = ${key}`;
+        else {
+          await sql`
+            insert into severity_rules (user_id, title_key, severity) values (${u.id}, ${key}, ${b.severity})
+            on conflict (user_id, title_key) do update set severity = excluded.severity`;
+        }
         break;
+      }
       case "deadline":
         if (![true, false, null].includes(b.deadline)) return fail("Invalid choice");
         await sql`update deadline_states set is_deadline = ${b.deadline} ${where}`;
         break;
       case "doing":
-        if (!Number.isInteger(b.minutes) || b.minutes < 15 || b.minutes > 480) return fail("Pick between 15 minutes and 8 hours");
+        if (!Number.isInteger(b.minutes) || b.minutes < 5 || b.minutes > 480) return fail("Pick between 5 minutes and 8 hours");
         await sql`update deadline_states set status = 'doing', next_check_at = now() + make_interval(mins => ${b.minutes}) ${where}`;
         break;
       case "later": {

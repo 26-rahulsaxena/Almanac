@@ -61,8 +61,7 @@ create table if not exists deadline_states (
   event_id text not null,
   title text not null,
   due_at timestamptz not null,
-  is_deadline boolean, -- null = decide automatically
-  severity_override text check (severity_override in ('low', 'medium', 'high', 'critical')),
+  is_deadline boolean, -- shown in Priorities? null = decide automatically
   status text not null default 'open' check (status in ('open', 'doing', 'later', 'stuck', 'done')),
   next_check_at timestamptz,
   later_count int not null default 0,
@@ -71,6 +70,15 @@ create table if not exists deadline_states (
 );
 create index if not exists deadline_states_due_check on deadline_states(next_check_at) where next_check_at is not null;
 alter table users add column if not exists last_digest_on date;
+alter table deadline_states drop column if exists severity_override;
+
+-- Your severity choices, remembered per event name ("gym" → low), so repeating events keep them.
+create table if not exists severity_rules (
+  user_id uuid not null references users(id) on delete cascade,
+  title_key text not null,
+  severity text not null check (severity in ('low', 'medium', 'high', 'critical')),
+  primary key (user_id, title_key)
+);
 
 -- Row Level Security with no policies blocks Supabase's public API from these tables.
 -- The app connects as the database owner, which is unaffected.
@@ -79,3 +87,4 @@ alter table google_tokens enable row level security;
 alter table push_subscriptions enable row level security;
 alter table reminder_deliveries enable row level security;
 alter table deadline_states enable row level security;
+alter table severity_rules enable row level security;

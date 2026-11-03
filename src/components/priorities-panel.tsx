@@ -39,7 +39,12 @@ export function SeverityChip({ severity }: { severity: Severity }) {
 export function PrioritiesPanel({ items, onClose, onAction }: Props) {
   const ref = useDialog<HTMLDivElement>(onClose);
   const phone = window.matchMedia("(max-width: 639px)").matches;
+  const [showLow, setShowLow] = useState(false);
   const open = items?.filter((p) => p.status !== "done") ?? [];
+  // Low-priority items (gym, a walk…) fold away so the list stays about what matters.
+  const quiet = (p: Priority) => p.severity === "low" && p.status === "open";
+  const lowCount = items?.filter(quiet).length ?? 0;
+  const shown = items?.filter((p) => showLow || !quiet(p));
 
   return (
     <>
@@ -64,8 +69,8 @@ export function PrioritiesPanel({ items, onClose, onAction }: Props) {
               {items === null
                 ? "Reading your calendar…"
                 : open.length
-                  ? `${open.length} deadline${open.length === 1 ? "" : "s"} in the next 5 days, most urgent first`
-                  : "Nothing due in the next 5 days."}
+                  ? `${open.length} thing${open.length === 1 ? "" : "s"} in the next 5 days, most important first`
+                  : "Nothing coming up in the next 5 days."}
             </p>
           </div>
           <button type="button" onClick={onClose} aria-label="Close" className="grid size-8 shrink-0 place-items-center rounded-full hover:bg-ink/5">
@@ -75,7 +80,7 @@ export function PrioritiesPanel({ items, onClose, onAction }: Props) {
 
         <ol className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4 sm:px-6">
           <AnimatePresence initial={false}>
-            {items?.map((p, i) => (
+            {shown?.map((p, i) => (
               <motion.li
                 key={p.key}
                 layout
@@ -88,9 +93,17 @@ export function PrioritiesPanel({ items, onClose, onAction }: Props) {
               </motion.li>
             ))}
           </AnimatePresence>
+          {lowCount > 0 && (
+            <li>
+              <button type="button" onClick={() => setShowLow(!showLow)} aria-expanded={showLow} className="w-full rounded-2xl border border-dashed border-line py-2.5 text-sm text-muted hover:text-ink">
+                {showLow ? "Hide low-priority items" : `Show ${lowCount} low-priority item${lowCount === 1 ? "" : "s"}`}
+              </button>
+            </li>
+          )}
         </ol>
         <p className="border-t border-line px-6 py-3 text-xs text-muted">
-          Severity is suggested from time left and words like “exam” or “submission”. Two “Later”s raise it a level. Your choice always wins.
+          Ranked by kind of task (deadline › work › personal › leisure) and time left. Two “Later”s raise it a level. Your choice always wins and applies to every
+          event with the same name.
         </p>
       </motion.div>
     </>
@@ -138,7 +151,8 @@ function Card({ p, onAction }: { p: Priority; onAction: (a: PriorityAction) => P
           <h3 className={`min-w-0 flex-1 font-medium ${p.status === "done" ? "line-through" : ""}`}>{p.title}</h3>
         </div>
         <p className="mt-1 text-sm text-muted">
-          Due {p.allDay ? `${new Date(p.due).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })} · all day` : when(p.due)} · {p.reason}
+          {p.category === "deadline" ? "Due" : "Starts"}{" "}
+          {p.allDay ? `${new Date(p.due).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })} · all day` : when(p.due)} · {p.reason}
         </p>
         {status && (
           <p className="mt-1 text-sm font-medium" style={{ color: p.status === "stuck" ? "var(--sev-critical)" : undefined }}>
@@ -172,7 +186,7 @@ function Card({ p, onAction }: { p: Priority; onAction: (a: PriorityAction) => P
                   </button>
                 );
               })}
-              {p.override && (
+              {p.chosen && (
                 <button type="button" disabled={busy} onClick={() => act({ action: "severity", severity: null })} className="px-1 text-xs text-muted underline">
                   Use suggestion
                 </button>
@@ -196,7 +210,7 @@ function Card({ p, onAction }: { p: Priority; onAction: (a: PriorityAction) => P
                 </button>
               )}
               <button type="button" disabled={busy} onClick={() => act({ action: "deadline", deadline: false })} className={`${btn} text-muted hover:text-ink`}>
-                Not a deadline
+                Hide
               </button>
             </div>
 
@@ -216,6 +230,9 @@ function Card({ p, onAction }: { p: Priority; onAction: (a: PriorityAction) => P
                         <p>How long will it take? I&apos;ll check back then.</p>
                         <div className="mt-2 flex flex-wrap gap-1.5">
                           {[
+                            [5, "5 min"],
+                            [10, "10 min"],
+                            [15, "15 min"],
                             [30, "30 min"],
                             [60, "1 hour"],
                             [120, "2 hours"],

@@ -1,46 +1,88 @@
-// Deadline triage: which events are deadlines, how severe they are, and when "Later" is still safe.
-// Pure rules (no AI): time left plus what the title says. Runs on the server and in the browser.
+// Task triage: what kind of task each event is, how severe it is now, and when "Later" is still safe.
+// Pure rules (no AI): the kind of task (from its words, guests and calendar) plus time left.
+// Runs on the server and in the browser.
 
 export type Severity = "low" | "medium" | "high" | "critical";
 export const SEVERITIES: Severity[] = ["low", "medium", "high", "critical"];
 export type Status = "open" | "doing" | "later" | "stuck" | "done";
+export type Category = "deadline" | "work" | "personal" | "leisure" | "other";
 
 export const WINDOW_DAYS = 5;
 // "Later" must leave at least this long before the deadline.
 export const SAFETY_MS = 2 * 60 * 60_000;
 
 const HOUR = 60 * 60_000;
-const DEADLINE_WORDS = /\b(due|deadline|submit|submission|exam|exams|test|quiz|assignment|project|presentation|viva|report|interview|final|finals)\b/i;
-const BIG_WORDS = /\b(exam|exams|final|finals|submission|viva|interview|presentation)\b/i;
+export const CATEGORY_LABEL: Record<Category, string> = {
+  deadline: "Deadline",
+  work: "Work",
+  personal: "Personal",
+  leisure: "Leisure",
+  other: "Event",
+};
+
+// Checked in this order, first match wins: "lunch meeting" is work, "gym with friends" is leisure.
+// The number is how important that kind of task is: 3 deadline … 0 leisure.
+const KINDS: [Category, RegExp, number][] = [
+  ["deadline", /\b(exam|exams|final|finals|submission|submit|viva|interview|deadline|due)\b/i, 3],
+  [
+    "work",
+    /\b(meeting|meetings|prep|prepare|preparation|office|work|client|clients|team|project|report|presentation|assignment|class|lecture|review|call|standup|sync|deck|proposal|test|quiz|study|revision|doctor|hospital|appointment|bank|bill|payment|visa|flight|train)\b/i,
+    2,
+  ],
+  ["leisure", /\b(gym|workout|yoga|run|running|walk|movie|movies|game|games|netflix|nap|swim|swimming|cricket|football|badminton)\b/i, 0],
+  ["personal", /\b(lunch|dinner|breakfast|coffee|party|birthday|family|friend|friends|date|hangout|shopping)\b/i, 1],
+];
 const SMALL_WORDS = /\b(practice|optional|reading|draft|mock)\b/i;
 
-export type Item = { calendarId: string; title: string; description?: string; busy?: boolean };
+export type Item = { calendarId: string; calendarName?: string; title: string; description?: string; busy?: boolean; guests?: number };
 
-// Manual choice wins; otherwise deadline words in the title or notes. Holiday calendars never count.
-export function isDeadline(e: Item, manual: boolean | null) {
+export function classify(e: Item): { category: Category; word?: string; importance: number } {
+  const text = `${e.title} ${e.description ?? ""}`;
+  for (const [category, words, importance] of KINDS) {
+    const m = text.match(words);
+    if (m) return { category, word: m[0].toLowerCase(), importance };
+  }
+  // No telling words: a personal calendar means personal; other people invited means a work-style meeting.
+  if (/family|personal|birthday/i.test(e.calendarName ?? "")) return { category: "personal", importance: 1 };
+  if (e.guests) return { category: "work", word: "meeting", importance: 2 };
+  return { category: "other", importance: 1 };
+}
+
+// Which events belong in Priorities: your choice wins; otherwise anything that blocks your time, plus
+// deadline/work items even when marked "free" (all-day "Assignment due" events usually are). Never holidays.
+export function isTracked(e: Item, manual: boolean | null) {
   if (manual !== null) return manual;
   if (e.calendarId.includes("#holiday@")) return false;
-  return DEADLINE_WORDS.test(`${e.title} ${e.description ?? ""}`);
+  return !!e.busy || ["deadline", "work"].includes(classify(e).category);
 }
 
 const up = (s: Severity, steps: number) => SEVERITIES[Math.min(SEVERITIES.length - 1, Math.max(0, SEVERITIES.indexOf(s) + steps))];
 
-// Suggested severity and a one-line reason, e.g. "Due in 18 h · exam".
-export function suggest(e: Item, due: Date, now: Date): { severity: Severity; reason: string } {
-  const text = `${e.title} ${e.description ?? ""}`;
-  const big = text.match(BIG_WORDS)?.[0].toLowerCase();
+// Suggested severity: how important the kind of task is, lowered the further away it is
+// (full within 24 h, one level less within 3 days, two less beyond). Reason e.g. "Work · prep · in 5 h".
+export function suggest(e: Item, due: Date, now: Date): { severity: Severity; reason: string; category: Category } {
+  const { category, word, importance } = classify(e);
   const hours = (+due - +now) / HOUR;
-  let severity: Severity = hours <= 24 ? "critical" : hours <= 48 ? "high" : hours <= 120 ? "medium" : "low";
-  if (big && hours > 24) severity = up(severity, 1);
-  if (SMALL_WORDS.test(text)) severity = up(severity, -1);
+  const distance = hours <= 24 ? 0 : hours <= 72 ? 1 : 2;
+  const small = SMALL_WORDS.test(`${e.title} ${e.description ?? ""}`) ? 1 : 0;
+  const severity = SEVERITIES[Math.min(3, Math.max(0, importance - distance - small))];
   const left = hours < 1 ? "under an hour" : hours < 48 ? `${Math.round(hours)} h` : `${Math.round(hours / 24)} days`;
-  return { severity, reason: [`Due in ${left}`, big].filter(Boolean).join(" · ") };
+  const reason = [CATEGORY_LABEL[category], word, `in ${left}`].filter(Boolean).join(" · ");
+  return { severity, reason, category };
 }
 
 // Your choice wins. Otherwise the suggestion, one level higher for every two "Later"s.
-export function effective(suggested: Severity, override: Severity | null, laterCount: number) {
-  return override ?? up(suggested, Math.floor(laterCount / 2));
+export function effective(suggested: Severity, chosen: Severity | null, laterCount: number) {
+  return chosen ?? up(suggested, Math.floor(laterCount / 2));
 }
+
+// Choices are remembered per event name, so "Gym" set to Low once stays Low for every session.
+export const titleKey = (title: string) =>
+  title
+    .toLowerCase()
+    .replace(/[^\p{L}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
 // Most urgent first: open before done, then severity, then whichever is due sooner.
 export function byPriority<T extends { severity: Severity; status: Status; due: string }>(a: T, b: T) {

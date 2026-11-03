@@ -64,7 +64,7 @@ async function sendCheckins() {
       id: d.id,
       ask: d.status === "later" ? "start" : "finished",
       title: d.status === "later" ? `Time to start “${d.title}”` : `Finished “${d.title}”?`,
-      body: `Due ${when}${d.status === "stuck" ? " · still stuck? Open Almanac to replan" : ""}`,
+      body: `${when}${d.status === "stuck" ? " · still stuck? Open Almanac to replan" : ""}`,
     });
   }
   return due.length;
@@ -85,7 +85,7 @@ async function morningDigest(userId: string, timeZone: string, hidden: string[],
   const top = open[0];
   await sendPush(userId, {
     kind: "digest",
-    title: `${open.length} deadline${open.length === 1 ? "" : "s"} in the next 5 days${critical ? ` · ${critical} critical` : ""}`,
+    title: `${open.length} thing${open.length === 1 ? "" : "s"} on your plate in the next 5 days${critical ? ` · ${critical} critical` : ""}`,
     body: `First: ${top.title} (${top.reason.toLowerCase()})`,
   });
   return 1;

@@ -1,54 +1,87 @@
 process.env.TZ = "Asia/Kolkata";
 import { describe, expect, test } from "vitest";
-import { byPriority, effective, isDeadline, laterOptions, latestSafe, suggest } from "./priority";
+import { byPriority, classify, effective, isTracked, laterOptions, latestSafe, suggest, titleKey } from "./priority";
 
 const now = new Date(2026, 10, 3, 14, 0); // Tue 3 Nov, 2 pm IST
 const inHours = (h: number) => new Date(+now + h * 3_600_000);
-const item = (title: string, description = "") => ({ calendarId: "me@gmail.com", title, description });
+const item = (title: string, extra: { description?: string; busy?: boolean; guests?: number; calendarName?: string } = {}) => ({
+  calendarId: "me@gmail.com",
+  title,
+  busy: true,
+  ...extra,
+});
+const sev = (title: string, h: number, extra = {}) => suggest(item(title, extra), inHours(h), now).severity;
 
-describe("what counts as a deadline", () => {
-  test("deadline words in the title or notes", () => {
-    expect(isDeadline(item("Marketing assignment due"), null)).toBe(true);
-    expect(isDeadline(item("Team sync", "Submit slides before this"), null)).toBe(true);
-    expect(isDeadline(item("Lunch with Aanya"), null)).toBe(false);
+describe("kind of task", () => {
+  test("deadline, work, personal, leisure from the words", () => {
+    expect(classify(item("Finance exam")).category).toBe("deadline");
+    expect(classify(item("Prepare for client meeting")).category).toBe("work");
+    expect(classify(item("Dinner with Aanya")).category).toBe("personal");
+    expect(classify(item("Gym")).category).toBe("leisure");
   });
-  test("holidays never count, even with deadline-ish words", () => {
-    expect(isDeadline({ calendarId: "en.indian#holiday@group.v.calendar.google.com", title: "Test holiday" }, null)).toBe(false);
+  test("mixed titles: work beats personal, leisure beats personal", () => {
+    expect(classify(item("Lunch meeting with client")).category).toBe("work");
+    expect(classify(item("Gym with friends")).category).toBe("leisure");
   });
-  test("your manual choice wins both ways", () => {
-    expect(isDeadline(item("Lunch with Aanya"), true)).toBe(true);
-    expect(isDeadline(item("Marketing assignment due"), false)).toBe(false);
+  test("no telling words: guests make it a meeting, a Family calendar makes it personal", () => {
+    expect(classify(item("Catch-up with Priya", { guests: 2 })).category).toBe("work");
+    expect(classify(item("Sunday plans", { calendarName: "Family" })).category).toBe("personal");
+    expect(classify(item("Something")).category).toBe("other");
   });
 });
 
-describe("suggested severity", () => {
-  test("by time left", () => {
-    expect(suggest(item("Assignment due"), inHours(18), now)).toEqual({ severity: "critical", reason: "Due in 18 h" });
-    expect(suggest(item("Assignment due"), inHours(40), now).severity).toBe("high");
-    expect(suggest(item("Assignment due"), inHours(100), now).severity).toBe("medium");
-    expect(suggest(item("Assignment due"), inHours(130), now).severity).toBe("low");
+describe("suggested severity: kind of task first, then time left", () => {
+  test("same time, different kinds: gym < dinner < meeting prep < exam", () => {
+    expect(sev("Gym", 5)).toBe("low");
+    expect(sev("Dinner with Aanya", 5)).toBe("medium");
+    expect(sev("Prepare for client meeting", 5)).toBe("high");
+    expect(sev("Finance exam", 5)).toBe("critical");
   });
-  test("big items go one level up and say why", () => {
-    expect(suggest(item("Finance exam"), inHours(40), now)).toEqual({ severity: "critical", reason: "Due in 40 h · exam" });
-    expect(suggest(item("Final submission"), inHours(100), now).severity).toBe("high");
+  test("further away drops a level (within 3 days) or two (beyond)", () => {
+    expect(sev("Finance exam", 18)).toBe("critical");
+    expect(sev("Finance exam", 60)).toBe("high");
+    expect(sev("Finance exam", 100)).toBe("medium");
+    expect(sev("Office report review", 60)).toBe("medium");
+    expect(sev("Office report review", 100)).toBe("low");
   });
   test("small items go one level down", () => {
-    expect(suggest(item("Practice quiz"), inHours(40), now).severity).toBe("medium");
+    expect(sev("Practice quiz", 5)).toBe("medium");
   });
-  test("long waits read in days", () => {
-    expect(suggest(item("Report due"), inHours(100), now).reason).toBe("Due in 4 days");
+  test("reason says the kind, the word and the time", () => {
+    expect(suggest(item("Finance exam"), inHours(18), now).reason).toBe("Deadline · exam · in 18 h");
+    expect(suggest(item("Gym"), inHours(5), now).reason).toBe("Leisure · gym · in 5 h");
+    expect(suggest(item("Office report review"), inHours(100), now).reason).toBe("Work · office · in 4 days");
   });
 });
 
-describe("effective severity", () => {
-  test("every two Laters raise it one level, capped at critical", () => {
+describe("what appears in Priorities", () => {
+  test("anything that blocks your time", () => {
+    expect(isTracked(item("Gym"), null)).toBe(true);
+  });
+  test("free-time events only if they're deadlines or work (all-day 'Assignment due')", () => {
+    expect(isTracked(item("Assignment due", { busy: false }), null)).toBe(true);
+    expect(isTracked(item("Mom's birthday", { busy: false }), null)).toBe(false);
+  });
+  test("holidays never; your choice wins both ways", () => {
+    expect(isTracked({ calendarId: "en.indian#holiday@group.v.calendar.google.com", title: "Diwali", busy: true }, null)).toBe(false);
+    expect(isTracked(item("Mom's birthday", { busy: false }), true)).toBe(true);
+    expect(isTracked(item("Finance exam"), false)).toBe(false);
+  });
+});
+
+describe("your choice", () => {
+  test("every two Laters raise the suggestion one level, capped at critical", () => {
     expect(effective("medium", null, 1)).toBe("medium");
     expect(effective("medium", null, 2)).toBe("high");
-    expect(effective("medium", null, 4)).toBe("critical");
     expect(effective("high", null, 9)).toBe("critical");
   });
   test("your choice always wins", () => {
     expect(effective("critical", "low", 4)).toBe("low");
+  });
+  test("remembered by name, ignoring case, numbers and symbols", () => {
+    expect(titleKey("Gym 💪")).toBe("gym");
+    expect(titleKey("GYM - Day 3")).toBe("gym day");
+    expect(titleKey("Gym")).toBe(titleKey("gym!"));
   });
 });
 
@@ -67,7 +100,6 @@ describe("Later only offers safe times", () => {
     expect(laterOptions(now, inHours(72)).map((o) => o.label)).toEqual(["In 1 hour", "In 3 hours", "Tonight 8 pm", "Tomorrow 9 am"]);
   });
   test("nothing past 2 hours before the deadline", () => {
-    // Due 7 pm today → last safe start 5 pm → only "In 1 hour" (3 pm) and "In 3 hours" (5 pm).
     expect(laterOptions(now, inHours(5)).map((o) => o.label)).toEqual(["In 1 hour", "In 3 hours"]);
     expect(latestSafe(inHours(5))).toEqual(inHours(3));
   });

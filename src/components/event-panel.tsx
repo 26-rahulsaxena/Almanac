@@ -273,17 +273,17 @@ export function EventPanel({ initial, event, calendars, priority, onDeadline, on
                 {priority ? (
                   <>
                     <span className="flex items-center gap-2">
-                      <SeverityChip severity={priority.severity} /> Tracked deadline{priority.manual ? "" : " (spotted automatically)"}
+                      <SeverityChip severity={priority.severity} /> In Priorities · {priority.reason.split(" · ")[0]}
                     </span>
                     <button type="button" onClick={() => onDeadline(false).catch((e) => setError(e.message))} className="shrink-0 text-muted underline hover:text-ink">
-                      Not a deadline
+                      Hide from Priorities
                     </button>
                   </>
                 ) : (
                   <>
-                    <span className="text-muted">Not tracked as a deadline</span>
+                    <span className="text-muted">Not in Priorities</span>
                     <button type="button" onClick={() => onDeadline(true).catch((e) => setError(e.message))} className="shrink-0 underline">
-                      Track as deadline
+                      Add to Priorities
                     </button>
                   </>
                 )}
