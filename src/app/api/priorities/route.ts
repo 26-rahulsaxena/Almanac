@@ -82,6 +82,8 @@ export async function POST(req: Request) {
         await sql`update todos set done = false where user_id = ${u.id} and calendar_id = ${calendarId} and event_id = ${eventId}`;
         break;
     }
+    // Any answer here also settles a check-in that was waiting.
+    if (action !== "severity") await sql`update deadline_states set checkin_sent_at = null ${where}`;
     return Response.json(await loadPriorities(u.id, u.timezone, u.hidden_calendars));
   } catch (err) {
     if (err instanceof ReauthError) return fail("reauth", 401);

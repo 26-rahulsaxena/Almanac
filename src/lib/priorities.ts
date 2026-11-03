@@ -31,6 +31,16 @@ type State = {
   later_count: number;
 };
 
+// The words of a check-in, shared by the notification and the in-app alert.
+export function checkinText(title: string, status: string, due: Date, timeZone: string) {
+  const when = due.toLocaleString("en-IN", { timeZone, weekday: "short", hour: "numeric", minute: "2-digit" });
+  return {
+    ask: (status === "later" ? "start" : "finished") as "start" | "finished",
+    title: status === "later" ? `Time to start “${title}”` : `Finished “${title}”?`,
+    body: `Due ${when}${status === "stuck" ? " · still stuck? Open Almanac to replan" : ""}`,
+  };
+}
+
 // All-day items count from the start of that day in the user's time zone, to be safe.
 export const dueAt = (e: Pick<Ev, "start" | "allDay">, timeZone: string) => (e.allDay ? midnightIn(e.start, timeZone) : new Date(e.start));
 

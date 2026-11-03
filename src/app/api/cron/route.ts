@@ -1,6 +1,6 @@
 import { sql } from "@/lib/db";
 import { listCalendars, listEvents, type Ev } from "@/lib/calendar";
-import { loadPriorities } from "@/lib/priorities";
+import { checkinText, loadPriorities } from "@/lib/priorities";
 import { sendPush } from "@/lib/push";
 import { syncSheet } from "@/lib/sheet-sync";
 import { dueReminders, LOOKAHEAD_MS } from "@/lib/reminders";
@@ -32,7 +32,8 @@ export async function GET(req: Request) {
   }
 
   const snoozed = await sql<{ id: string; user_id: string; title: string; body: string }[]>`
-    update reminder_deliveries set status = 'sent', snooze_until = null, sent_at = now()
+    update reminder_deliveries set status = 'sent', snooze_until = null, sent_at = now(),
+      body = 'Snoozed · ' || regexp_replace(body, '^(In [^·]+|Now|Snoozed) · ', '') -- "In 9 min" would be stale by now
     where status = 'snoozed' and snooze_until <= now()
     returning id, user_id, title, body`;
   for (const d of snoozed) await sendPush(d.user_id, { id: d.id, title: d.title, body: d.body });
@@ -70,20 +71,11 @@ export async function GET(req: Request) {
 // you answer or the deadline passes.
 async function sendCheckins() {
   const due = await sql<{ id: string; user_id: string; title: string; due_at: Date; status: string; timezone: string }[]>`
-    update deadline_states d set next_check_at = now() + interval '30 minutes'
+    update deadline_states d set next_check_at = now() + interval '30 minutes', checkin_sent_at = now()
     from users u
     where u.id = d.user_id and d.next_check_at <= now() and d.status in ('doing', 'later', 'stuck') and d.due_at > now()
     returning d.id, d.user_id, d.title, d.due_at, d.status, u.timezone`;
-  for (const d of due) {
-    const when = d.due_at.toLocaleString("en-IN", { timeZone: d.timezone, weekday: "short", hour: "numeric", minute: "2-digit" });
-    await sendPush(d.user_id, {
-      kind: "checkin",
-      id: d.id,
-      ask: d.status === "later" ? "start" : "finished",
-      title: d.status === "later" ? `Time to start “${d.title}”` : `Finished “${d.title}”?`,
-      body: `${when}${d.status === "stuck" ? " · still stuck? Open Almanac to replan" : ""}`,
-    });
-  }
+  for (const d of due) await sendPush(d.user_id, { kind: "checkin", id: d.id, ...checkinText(d.title, d.status, d.due_at, d.timezone) });
   return due.length;
 }
 

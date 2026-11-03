@@ -679,7 +679,7 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
         )}
       </AnimatePresence>
 
-      <FullScreenAlert />
+      <FullScreenAlert onChanged={() => setGen((g) => g + 1)} />
 
       <Assistant open={showAssistant} onOpenChange={setShowAssistant} onChanged={() => setGen((g) => g + 1)} />
 

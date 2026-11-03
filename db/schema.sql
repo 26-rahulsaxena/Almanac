@@ -71,6 +71,9 @@ create table if not exists deadline_states (
 create index if not exists deadline_states_due_check on deadline_states(next_check_at) where next_check_at is not null;
 alter table users add column if not exists last_digest_on date;
 alter table deadline_states drop column if exists severity_override;
+-- When the last check-in ("Finished X?", "Time to start X") was sent; cleared once answered. The open app
+-- shows unanswered ones as alerts.
+alter table deadline_states add column if not exists checkin_sent_at timestamptz;
 
 -- Your severity choices, remembered per event name ("gym" → low), so repeating events keep them.
 create table if not exists severity_rules (
