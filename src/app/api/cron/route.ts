@@ -82,8 +82,9 @@ export async function GET(req: Request) {
   return Response.json({ users: users.length, sent, snoozed: snoozed.length, checkins, digests, sheets: sheets.length, planned });
 }
 
-// Auto-planner, every 15 minutes per user: moves Almanac's blocks out of the way of new events, and from 9 pm
-// (your time) also moves to-dos whose block has ended unfinished to tomorrow or later. Only for people who use it.
+// Auto-planner, every 15 minutes per user: Almanac's blocks out of the way of new events, and from 9 pm (your time)
+// to-dos whose block has ended unfinished on to tomorrow or later. In Ask-first mode these are suggestions (with a
+// notification when there's something new to approve); in Automatic mode they're done, and you're told after.
 async function autoPlanUsers() {
   const due = await sql<{ id: string; timezone: string; hidden_calendars: string[]; rollover: boolean }[]>`
     update users u set planned_at = now()
@@ -95,13 +96,14 @@ async function autoPlanUsers() {
   for (const u of due) {
     try {
       const r = await replan(u, { rollover: u.rollover });
-      if (!r || !r.moved.length) continue;
-      changed++;
-      await sendPush(u.id, {
-        kind: "digest",
-        title: "Almanac moved things in your plan",
-        body: r.moved.join(" · "),
-      });
+      if (!r) continue;
+      if (r.suggested.length) {
+        changed++;
+        await sendPush(u.id, { kind: "digest", title: `Almanac suggests ${r.suggested.length} change${r.suggested.length === 1 ? "" : "s"}. Approve?`, body: r.suggested.join(" · ") });
+      } else if (r.moved.length) {
+        changed++;
+        await sendPush(u.id, { kind: "digest", title: "Almanac moved things in your plan", body: r.moved.join(" · ") });
+      }
     } catch (err) {
       console.error(`Auto-plan for user ${u.id} failed:`, err);
     }

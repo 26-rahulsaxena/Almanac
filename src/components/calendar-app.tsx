@@ -15,6 +15,7 @@ import { AlertStageSettings, NotifySettings } from "./notify-settings";
 import { PrioritiesPanel, type PriorityAction } from "./priorities-panel";
 import { SheetSync } from "./sheet-sync";
 import { ThemeToggle } from "./theme-toggle";
+import { PlanModeSetting, Suggestions, type PlanMode } from "./suggestions";
 import { TodoDialog } from "./todo-dialog";
 import { TodoList } from "./todo-list";
 import { Agenda } from "./views/agenda";
@@ -96,7 +97,19 @@ const slide = {
   exit: (dir: number) => ({ opacity: 0, x: dir * -48, scale: dir ? 1 : 0.985 }),
 };
 
-export function CalendarApp({ name, calendars, hidden: initialHidden, stages }: { name: string; calendars: Cal[]; hidden: string[]; stages: AlertStages }) {
+export function CalendarApp({
+  name,
+  calendars,
+  hidden: initialHidden,
+  stages,
+  planMode,
+}: {
+  name: string;
+  calendars: Cal[];
+  hidden: string[];
+  stages: AlertStages;
+  planMode: PlanMode;
+}) {
   const mounted = useMounted();
   const now = useNow();
   const [hidden, setHidden] = useState(() => new Set(initialHidden));
@@ -544,6 +557,9 @@ export function CalendarApp({ name, calendars, hidden: initialHidden, stages }: 
             onDragStart={dragTodo}
           />
 
+          <h2 className="mt-6 font-mono text-xs uppercase tracking-[0.2em] text-muted">Planning mode</h2>
+          <PlanModeSetting initial={planMode} onChange={() => setGen((g) => g + 1)} />
+
           <h2 className="mt-6 font-mono text-xs uppercase tracking-[0.2em] text-muted">Google Sheet</h2>
           <SheetSync now={now} onCalendarChange={() => setGen((g) => g + 1)} />
 
@@ -720,7 +736,10 @@ export function CalendarApp({ name, calendars, hidden: initialHidden, stages }: 
             )}
           </div>
           </div>
-          <PrioritiesPanel items={priorities} onAction={priorityAction} />
+          <div className="min-w-0 space-y-4">
+            <Suggestions version={gen} onCalendarChange={() => setGen((g) => g + 1)} />
+            <PrioritiesPanel items={priorities} onAction={priorityAction} />
+          </div>
         </main>
       </div>
 

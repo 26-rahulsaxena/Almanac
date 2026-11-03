@@ -70,8 +70,8 @@ function Details({ d, set, splittable }: { d: Draft; set: (d: Draft) => void; sp
       <label className="flex items-start gap-2 text-xs">
         <input type="checkbox" checked={d.auto} onChange={(e) => set({ ...d, auto: e.target.checked })} className="mt-0.5 accent-[var(--accent)]" />
         <span>
-          Book time for it automatically
-          <span className="block text-muted">Almanac finds free time before it&apos;s due, and moves it if something else comes up.</span>
+          Let Almanac plan a time for it
+          <span className="block text-muted">It finds free time before it&apos;s due and keeps it clear when plans change. In Ask-first mode you approve each change.</span>
         </span>
       </label>
     </>
@@ -165,7 +165,7 @@ export function TodoList({
           <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="space-y-1.5">
             <Details d={draft} set={setDraft} splittable />
             <button type="submit" disabled={busy === "new"} className="rounded-full bg-ink px-3 py-1.5 font-medium text-paper disabled:opacity-50">
-              {busy === "new" ? (draft.auto ? "Adding and finding time…" : "Adding…") : "Add"}
+              {busy === "new" ? (draft.auto ? "Adding and planning…" : "Adding…") : "Add"}
             </button>
           </motion.div>
         )}
@@ -250,7 +250,7 @@ export function TodoList({
                           On calendar {when(t.scheduled_at)}
                         </button>
                       ) : t.auto ? (
-                        <p className="mt-0.5 text-xs text-muted">No free time found yet; Almanac tries again every 15 min.</p>
+                        <p className="mt-0.5 text-xs text-muted">Not booked yet: approve the time under “Almanac suggests” (or it books itself in Automatic mode).</p>
                       ) : (
                         <button type="button" disabled={busy === t.id} onClick={() => change(t.id, "PATCH", { id: t.id, schedule: true }, true)} className={`mt-1 ${small}`}>
                           {busy === t.id ? "Finding time…" : "Find time"}

@@ -113,7 +113,7 @@ export function Routines({ onCalendarChange }: { onCalendarChange: () => void })
           <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="space-y-1.5">
             <Fields d={draft} set={setDraft} />
             <button type="submit" disabled={busy === "new"} className="rounded-full bg-ink px-3 py-1.5 font-medium text-paper disabled:opacity-50">
-              {busy === "new" ? "Adding and booking…" : "Add"}
+              {busy === "new" ? "Adding and planning…" : "Add"}
             </button>
           </motion.div>
         )}

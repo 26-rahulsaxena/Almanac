@@ -87,9 +87,15 @@ describe("habits and focus time", () => {
     expect(plan.placements.map((p) => day(p.to.start))).toEqual(["2026-11-09"]);
   });
 
-  test("a session a meeting now overlaps moves to another evening slot", () => {
+  test("a session a meeting now overlaps moves to a later time the same evening", () => {
     const block = span("2026-11-05T17:00", "2026-11-05T18:00");
     const plan = autoPlan([span("2026-11-05T16:30", "2026-11-05T18:30")], [], [{ ...gym, perWeek: 1, blocks: [block] }], now, IST);
+    expect(plan.placements[0]).toEqual({ kind: "routine", id: "gym", from: block, to: span("2026-11-05T18:30", "2026-11-05T19:30") });
+  });
+
+  test("…and to another evening only if that day has no room", () => {
+    const block = span("2026-11-05T17:00", "2026-11-05T18:00");
+    const plan = autoPlan([span("2026-11-05T16:30", "2026-11-05T22:00")], [], [{ ...gym, perWeek: 1, blocks: [block] }], now, IST);
     expect(plan.placements[0]).toEqual({ kind: "routine", id: "gym", from: block, to: span("2026-11-04T17:00", "2026-11-04T18:00") });
   });
 

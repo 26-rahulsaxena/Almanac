@@ -112,12 +112,12 @@ export async function scheduleTodo(u: User, todoId: string, start?: Date) {
   return slot;
 }
 
-export type Replan = { booked: string[]; moved: string[]; unplaced: string[] };
+export type Replan = { booked: string[]; moved: string[]; unplaced: string[]; suggested: string[] };
 
-// Runs the auto-planner for one user and carries it out in Google: books time for automatic to-dos and habits,
-// and moves Almanac's own blocks that something else now overlaps. rollover: also move unfinished to-dos whose
-// time has passed to tomorrow or later (done once a night). Returns what changed, in words; null if another
-// run for this user is already going.
+// Runs the auto-planner for one user: time for automatic to-dos and habits, and Almanac's own blocks that
+// something else now overlaps moved out of the way. rollover: also unfinished to-dos whose time has passed, to
+// tomorrow or later. In "ask" mode (the default) these only become suggestions you approve; in "auto" mode they're
+// carried out in Google. Returns what changed or was suggested, in words; null if a run for this user is going.
 export async function replan(u: User, opts: { rollover?: boolean } = {}): Promise<Replan | null> {
   // One run per user at a time (the minute job and a click can overlap); the lock ends with the transaction.
   return sql.begin(async (tx) => {
@@ -189,37 +189,123 @@ async function planNow(u: User, rollover: boolean): Promise<Replan> {
   }));
 
   const plan = autoPlan(busy, planTodos, planRoutines, now, tz);
-  const when = (d: Date) => d.toLocaleString("en-IN", { timeZone: tz, weekday: "short", hour: "numeric", minute: "2-digit" });
   const titleOf = (kind: "todo" | "routine", id: string) => (kind === "todo" ? todos.find((t) => t.id === id) : routines.find((r) => r.id === id))?.title ?? "";
-  const out: Replan = { booked: [], moved: [], unplaced: [] };
-  for (const p of plan.placements) {
-    const title = titleOf(p.kind, p.id);
+  const changes: Change[] = plan.placements.map((p) => {
+    const e = p.from ? blockOf.get(p.from) : undefined;
+    // What it's about (a to-do's booking, one day's session of a habit, or one block to move), then the time.
+    const item = `${p.kind}:${p.id}:${e?.id ?? (p.kind === "routine" ? `new:${ymdIn(p.to.start, tz)}` : "new")}`;
+    return {
+      key: `${item}|${+p.to.start}`,
+      kind: p.kind,
+      item_id: p.id,
+      title: titleOf(p.kind, p.id),
+      reason: !e ? "new" : planTodos.find((t) => t.id === p.id)?.move ? "rollover" : "clash",
+      from_calendar_id: e?.calendarId ?? null,
+      from_event_id: e?.id ?? null,
+      from_start: p.from?.start ?? null,
+      to_start: p.to.start,
+      to_end: p.to.end,
+    };
+  });
+  const out: Replan = { booked: [], moved: [], unplaced: plan.unplaced.map((p) => titleOf(p.kind, p.id)), suggested: [] };
+
+  // Ask-first mode: nothing changes; the plan becomes suggestions for you to approve.
+  const [{ plan_mode }] = await sql<{ plan_mode: "ask" | "auto" }[]>`select plan_mode from users where id = ${u.id}`;
+  if (plan_mode === "ask") {
+    out.suggested = await saveSuggestions(u, changes);
+    return out;
+  }
+  for (const c of changes) {
     try {
-      const e = p.from && blockOf.get(p.from);
-      if (e) {
-        await moveBlock(u, e.calendarId, e.id, p.to);
-        if (p.kind === "todo") await sql`update todos set scheduled_at = ${p.to.start} where id = ${p.id}`;
-        out.moved.push(`${title} → ${when(p.to.start)}`);
-      } else {
-        const where = await bookBlock(u, calendars, {
-          title,
-          start: p.to.start,
-          end: p.to.end,
-          description: p.kind === "todo" ? "Booked from your Almanac to-do list." : "Focus time / habit from Almanac. It moves itself if something else needs this time.",
-          reminderMinutes: 10,
-          plan: `${p.kind}:${p.id}`,
-        });
-        if (p.kind === "todo") await sql`update todos set calendar_id = ${where.calendarId}, event_id = ${where.eventId}, scheduled_at = ${p.to.start} where id = ${p.id}`;
-        out.booked.push(`${title} → ${when(p.to.start)}`);
-      }
+      await apply(u, calendars, c);
+      (c.from_event_id ? out.moved : out.booked).push(`${c.title} → ${whenIn(c.to_start, tz)}`);
     } catch (err) {
-      console.error(`Auto-plan: couldn't place ${p.kind} ${p.id}:`, err);
-      out.unplaced.push(title);
+      console.error(`Auto-plan: couldn't place ${c.kind} ${c.item_id}:`, err);
+      out.unplaced.push(c.title);
     }
   }
-  for (const p of plan.unplaced) out.unplaced.push(titleOf(p.kind, p.id));
   return out;
 }
+
+// One change the planner wants: book a new block (from_* null) or move an existing one.
+type Change = {
+  key: string;
+  kind: "todo" | "routine";
+  item_id: string;
+  title: string;
+  reason: "new" | "clash" | "rollover";
+  from_calendar_id: string | null;
+  from_event_id: string | null;
+  from_start: Date | null;
+  to_start: Date;
+  to_end: Date;
+};
+export type Suggestion = Change & { id: string };
+
+const whenIn = (d: Date, tz: string) => d.toLocaleString("en-IN", { timeZone: tz, weekday: "short", hour: "numeric", minute: "2-digit" });
+
+// Carries out a change in Google (and on the to-do it belongs to).
+async function apply(u: User, calendars: Cal[], c: Change) {
+  const to = { start: c.to_start, end: c.to_end };
+  if (c.from_event_id) {
+    await moveBlock(u, c.from_calendar_id!, c.from_event_id, to);
+    if (c.kind === "todo") await sql`update todos set scheduled_at = ${c.to_start} where id = ${c.item_id}`;
+    return;
+  }
+  const where = await bookBlock(u, calendars, {
+    title: c.title,
+    start: c.to_start,
+    end: c.to_end,
+    description: c.kind === "todo" ? "Booked from your Almanac to-do list." : "Focus time / habit from Almanac. It moves itself if something else needs this time.",
+    reminderMinutes: 10,
+    plan: `${c.kind}:${c.item_id}`,
+  });
+  if (c.kind === "todo") await sql`update todos set calendar_id = ${where.calendarId}, event_id = ${where.eventId}, scheduled_at = ${c.to_start} where id = ${c.item_id}`;
+}
+
+// The thing a suggestion is about, whatever time it proposes: the part of its key before "|".
+const itemOf = (key: string) => key.split("|")[0];
+
+// Keeps the waiting suggestions in step with the latest plan: out-of-date ones go, new ones are added, and
+// items you said "Not now" to stay quiet for 6 hours. Returns, in words, only suggestions about something that
+// wasn't already waiting, so a time that shifts as the clock moves on doesn't notify you again.
+async function saveSuggestions(u: User, changes: Change[]) {
+  await sql`delete from plan_suggestions where user_id = ${u.id} and (dismissed_at < now() - interval '6 hours' or (dismissed_at is null and to_start < now()))`;
+  const existing = await sql<{ key: string; dismissed_at: Date | null }[]>`select key, dismissed_at from plan_suggestions where user_id = ${u.id}`;
+  const quiet = new Set(existing.filter((s) => s.dismissed_at).map((s) => itemOf(s.key)));
+  const waiting = new Set(existing.filter((s) => !s.dismissed_at).map((s) => itemOf(s.key)));
+  const wanted = changes.filter((c) => !quiet.has(itemOf(c.key)));
+  await sql`delete from plan_suggestions where user_id = ${u.id} and dismissed_at is null and not (key = any(${wanted.map((c) => c.key)}::text[]))`;
+  if (!wanted.length) return [];
+  const added = await sql<{ key: string; title: string; to_start: Date; from_event_id: string | null }[]>`
+    insert into plan_suggestions ${sql(wanted.map((c) => ({ ...c, user_id: u.id })))}
+    on conflict (user_id, key) do nothing
+    returning key, title, to_start, from_event_id`;
+  return added.filter((s) => !waiting.has(itemOf(s.key))).map((s) => `${s.from_event_id ? "Move" : "Book"} ${s.title} → ${whenIn(s.to_start, u.timezone)}`);
+}
+
+export const listSuggestions = (userId: string) =>
+  sql<Suggestion[]>`
+    select id, key, kind, item_id, title, reason, from_calendar_id, from_event_id, from_start, to_start, to_end from plan_suggestions
+    where user_id = ${userId} and dismissed_at is null and to_start > now()
+    order by to_start`;
+
+// You approved a suggestion: carry it out, if it still makes sense.
+export async function approveSuggestion(u: User, id: string) {
+  const [s] = await sql<Suggestion[]>`delete from plan_suggestions where id = ${id} and user_id = ${u.id} and dismissed_at is null returning *`;
+  if (!s) throw new InvalidInput("That suggestion is out of date. The list has been refreshed.");
+  if (s.kind === "todo" && !s.from_event_id) {
+    const [t] = await sql<Todo[]>`select * from todos where id = ${s.item_id} and user_id = ${u.id}`;
+    if (!t || t.done || t.event_id) return; // gone, done, or booked some other way meanwhile
+  }
+  if (s.kind === "routine" && !s.from_event_id) {
+    const [r] = await sql`select 1 from routines where id = ${s.item_id} and user_id = ${u.id}`;
+    if (!r) return;
+  }
+  await apply(u, await listCalendars(u.id), s);
+}
+
+export const dismissSuggestion = (u: User, id: string) => sql`update plan_suggestions set dismissed_at = now() where id = ${id} and user_id = ${u.id}`;
 
 // Ticking a to-do also ticks its calendar block in Priorities (and unticking reopens it).
 export async function setTodoDone(u: User, todoId: string, done: boolean) {

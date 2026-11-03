@@ -20,6 +20,16 @@ export async function setHiddenCalendars(ids: unknown) {
   await sql`update users set hidden_calendars = ${ids} where id = ${session.user.id}`;
 }
 
+// "ask": the auto-planner only suggests and you approve each change; "auto": it books and moves by itself.
+export async function setPlanMode(mode: unknown) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Not signed in");
+  if (mode !== "ask" && mode !== "auto") throw new Error("Invalid mode");
+  await sql`update users set plan_mode = ${mode} where id = ${session.user.id}`;
+  // Switching to Automatic hands over what was waiting: the next run carries it out, so drop the old suggestions.
+  if (mode === "auto") await sql`delete from plan_suggestions where user_id = ${session.user.id}`;
+}
+
 export type AlertStages = { remind: boolean; snooze: number; alarm: boolean };
 
 export async function setAlertStages(s: unknown) {

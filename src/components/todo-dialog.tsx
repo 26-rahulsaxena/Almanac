@@ -2,6 +2,7 @@
 import { motion } from "motion/react";
 import type { ComponentProps } from "react";
 import { Routines } from "./routines";
+import { Suggestions } from "./suggestions";
 import { TodoList } from "./todo-list";
 import { useDialog } from "./use-dialog";
 
@@ -32,6 +33,9 @@ export function TodoDialog({ onClose, ...list }: Omit<ComponentProps<typeof Todo
             </button>
           </header>
           <div className="overflow-y-auto px-5 pb-5">
+            <div className="mt-3 empty:hidden">
+              <Suggestions version={list.version} onCalendarChange={list.onCalendarChange} />
+            </div>
             <TodoList {...list} autoFocus />
             <h3 className="mt-6 font-mono text-xs uppercase tracking-[0.2em] text-muted">Focus time &amp; habits</h3>
             <Routines onCalendarChange={list.onCalendarChange} />

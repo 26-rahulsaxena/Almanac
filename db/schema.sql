@@ -123,6 +123,27 @@ create table if not exists routines (
 );
 create index if not exists routines_user on routines(user_id);
 alter table users add column if not exists planned_at timestamptz; -- last auto-plan run
+-- Planning mode: 'ask' = the planner only suggests, and you approve each change; 'auto' = it books and moves by itself.
+alter table users add column if not exists plan_mode text not null default 'ask' check (plan_mode in ('ask', 'auto'));
+-- The planner's suggestions waiting for your OK. key = item + block + time, so the same suggestion keeps its id
+-- across runs. "Not now" (dismissed_at) quiets suggestions for that item for 6 hours. Deleted once applied or stale.
+create table if not exists plan_suggestions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id) on delete cascade,
+  key text not null,
+  kind text not null check (kind in ('todo', 'routine')),
+  item_id uuid not null,
+  title text not null,
+  reason text not null check (reason in ('new', 'clash', 'rollover')),
+  from_calendar_id text, -- the block to move (null = book a new one)
+  from_event_id text,
+  from_start timestamptz,
+  to_start timestamptz not null,
+  to_end timestamptz not null,
+  dismissed_at timestamptz,
+  created_at timestamptz not null default now(),
+  unique (user_id, key)
+);
 
 -- Google Sheet sync: which sheet feeds the calendar, and when it was last read. Events made from it are
 -- marked inside Google Calendar itself (a private tag with the sheet id and row), so nothing else is stored.
@@ -141,3 +162,4 @@ alter table deadline_states enable row level security;
 alter table severity_rules enable row level security;
 alter table todos enable row level security;
 alter table routines enable row level security;
+alter table plan_suggestions enable row level security;

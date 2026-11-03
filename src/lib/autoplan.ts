@@ -97,18 +97,29 @@ export function autoPlan(busy: Interval[], todos: PlanTodo[], routines: PlanRout
       // A later week only partly in view gets its fair share for now, so sessions don't bunch up at its start.
       const target = week === weekOf(today) ? r.perWeek : Math.min(r.perWeek, Math.ceil((r.perWeek * inView.length) / 7));
       let need = target - kept.filter((b) => weekOf(ymdIn(b.start, timeZone)) === week).length;
-      const candidates = inView.filter((d) => !keptDays.has(d));
       const fromQueue = moving.filter((b) => weekOf(ymdIn(b.start, timeZone)) === week);
-      // Evenly spaced days first (3 a week → e.g. Mon, Wed, Fri), then the rest as fallbacks.
+      const used = new Set<string>();
+      const place = (day: string, from: Interval | null) => {
+        const to = find(r.minutes, [day], TIMES_OF_DAY[r.timeOfDay], earliest, lastDayEnd);
+        if (!to) return false;
+        taken.push(to);
+        used.add(day);
+        need--;
+        plan.placements.push({ kind: "routine", id: r.id, from, to });
+        return true;
+      };
+      // A session something now overlaps first tries another time the same day.
+      for (const b of [...fromQueue]) {
+        const d = ymdIn(b.start, timeZone);
+        if (need > 0 && inView.includes(d) && !keptDays.has(d) && place(d, b)) fromQueue.splice(fromQueue.indexOf(b), 1);
+      }
+      const candidates = inView.filter((d) => !keptDays.has(d) && !used.has(d));
+      // Then evenly spaced days (3 a week → e.g. Mon, Wed, Fri), with the rest as fallbacks.
       const spread = need > 0 && need < candidates.length ? Array.from({ length: need }, (_, i) => candidates[Math.floor((i * candidates.length) / need)]) : candidates;
       const order = [...spread, ...candidates.filter((d) => !spread.includes(d))];
       for (const day of order) {
         if (need <= 0) break;
-        const to = find(r.minutes, [day], TIMES_OF_DAY[r.timeOfDay], earliest, lastDayEnd);
-        if (!to) continue;
-        taken.push(to);
-        need--;
-        plan.placements.push({ kind: "routine", id: r.id, from: fromQueue.shift() ?? null, to });
+        if (place(day, fromQueue[0] ?? null)) fromQueue.shift();
       }
       for (const b of fromQueue) plan.unplaced.push({ kind: "routine", id: r.id, from: b });
     }
