@@ -94,6 +94,15 @@ export function draftFromEvent(e: Ev): Form {
   };
 }
 
+// The event's form with a new time, after dragging it on the calendar.
+export const draftMoved = (e: Ev, start: Date, end: Date): Form => ({
+  ...draftFromEvent(e),
+  date: ymd(start),
+  startTime: hhmm(start),
+  endDate: ymd(end),
+  endTime: hhmm(end),
+});
+
 type Props = {
   initial: Form;
   event?: Ev;

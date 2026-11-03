@@ -24,11 +24,13 @@ export function TodoList({
   now,
   onCalendarChange,
   onOpenDay,
+  onDragStart,
 }: {
   version: number;
   now: Date;
   onCalendarChange: () => void;
   onOpenDay: (d: Date) => void;
+  onDragStart: (t: Todo, x: number, y: number) => void; // a to-do picked up by its grip, to drop on the calendar
 }) {
   const [todos, setTodos] = useState<Todo[] | null>(null);
   const [title, setTitle] = useState("");
@@ -114,6 +116,22 @@ export function TodoList({
               className="group rounded-lg px-1 py-1 hover:bg-ink/[0.03]"
             >
               <div className="flex items-start gap-2">
+                {!t.done && !t.event_id && (
+                  // Mouse or finger: pick it up here and drop it on a time in the calendar. ("Find time" does it by keyboard.)
+                  <span
+                    aria-hidden
+                    title="Drag onto the calendar to book a time"
+                    onPointerDown={(pe) => {
+                      if (pe.button !== 0) return;
+                      pe.preventDefault();
+                      pe.currentTarget.releasePointerCapture?.(pe.pointerId);
+                      onDragStart(t, pe.clientX, pe.clientY);
+                    }}
+                    className="-ml-1 mt-0.5 cursor-grab touch-none select-none px-0.5 text-sm leading-none text-muted hover:text-ink"
+                  >
+                    ⠿
+                  </span>
+                )}
                 <motion.button
                   type="button"
                   role="checkbox"

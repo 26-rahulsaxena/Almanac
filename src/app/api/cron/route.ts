@@ -1,4 +1,4 @@
-import { sql } from "@/lib/db";
+import { healthCheck, sql } from "@/lib/db";
 import { listCalendars, listEvents, type Ev } from "@/lib/calendar";
 import { checkinText, loadPriorities } from "@/lib/priorities";
 import { sendPush } from "@/lib/push";
@@ -14,6 +14,7 @@ export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) return new Response("Unauthorized", { status: 401 });
 
+  await healthCheck();
   const now = new Date();
   // Every signed-in user, with or without a notification device: due reminders are also shown full screen
   // inside the open app, which reads them from reminder_deliveries.

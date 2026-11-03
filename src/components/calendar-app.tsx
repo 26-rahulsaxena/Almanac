@@ -5,10 +5,10 @@ import { setHiddenCalendars, signInWithGoogle, signOutNow } from "@/app/actions"
 import type { Cal, Ev } from "@/lib/calendar";
 import { CATEGORIES, categoryHex } from "@/lib/categories";
 import type { DeleteInput, SaveInput, Scope, SendUpdates } from "@/lib/recurrence";
-import { addDays, atHour, parseWhen, startOfDay, startOfMonth, startOfWeek } from "@/lib/time";
+import { addDays, atHour, formatTime, parseWhen, startOfDay, startOfMonth, startOfWeek } from "@/lib/time";
 import { Assistant } from "./assistant";
 import { FullScreenAlert } from "./full-screen-alert";
-import { draftFromEvent, draftFromSlot, EventPanel, type Form } from "./event-panel";
+import { draftFromEvent, draftFromSlot, draftMoved, EventPanel, type Form } from "./event-panel";
 import type { Priority } from "@/lib/priorities";
 import type { Severity } from "@/lib/priority";
 import { NotifySettings } from "./notify-settings";
@@ -18,7 +18,7 @@ import { ThemeToggle } from "./theme-toggle";
 import { TodoList } from "./todo-list";
 import { Agenda } from "./views/agenda";
 import { MonthGrid } from "./views/month-grid";
-import { TimeGrid } from "./views/time-grid";
+import { TimeGrid, type TodoDrag } from "./views/time-grid";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 type View = "day" | "week" | "month" | "agenda";
@@ -126,6 +126,8 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
   const firstPriorities = useRef(true);
   const [showAssistant, setShowAssistant] = useState(false);
   const [menu, setMenu] = useState(false);
+  const [moved, setMoved] = useState<{ key: number; title: string; undo: () => void } | null>(null);
+  const [todoDrag, setTodoDrag] = useState<TodoDrag | null>(null);
   const menuButton = useRef<HTMLButtonElement>(null);
   const menuClose = useRef<HTMLButtonElement>(null);
   const menuWasOpen = useRef(false);
@@ -262,6 +264,62 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
   function undo(key: number) {
     clearTimeout(pending.find((p) => p.key === key)?.timer);
     setPending((p) => p.filter((x) => x.key !== key));
+  }
+
+  // Dragging an event to a new time. Only events you organise, on calendars you can change.
+  const canDrag = useCallback((e: Ev) => !e.allDay && e.isOrganizer && !!calendars.find((c) => c.id === e.calendarId)?.canEdit, [calendars]);
+
+  // Simple events save straight away, with Undo. Repeating ones and ones with guests open the editor at the new
+  // time instead, so "This event or all?" and "Send invites to these people?" are still asked.
+  async function moveEvent(e: Ev, start: Date, end: Date) {
+    if (e.recurringEventId || e.attendees?.some((a) => !a.self)) return setPanel({ form: draftMoved(e, start, end), event: e });
+    const save = async (s: Date, en: Date) => {
+      mutate((evs) => evs.map((x) => (x.id === e.id && x.calendarId === e.calendarId ? { ...x, start: s.toISOString(), end: en.toISOString() } : x)));
+      try {
+        await send("POST", {
+          calendarId: e.calendarId,
+          id: e.id,
+          title: e.title === "(No title)" ? "" : e.title,
+          allDay: false,
+          start: s.toISOString(),
+          end: en.toISOString(),
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          location: e.location ?? "",
+          description: e.description ?? "",
+          colorId: e.colorId ?? null,
+          recurrence: null,
+        } satisfies SaveInput);
+      } catch (err) {
+        setError(`Couldn't move “${e.title}”. ${(err as Error).message}`);
+      }
+      setGen((g) => g + 1);
+    };
+    const before = [parseWhen(e.start, false), parseWhen(e.end, false)] as const;
+    await save(start, end);
+    const key = Date.now();
+    const when = `${start.toLocaleString("en-IN", { weekday: "short", hour: "numeric", minute: "2-digit" })} – ${formatTime(end)}`;
+    setMoved({ key, title: `“${e.title}” now ${when}`, undo: () => (setMoved(null), save(...before)) });
+    setTimeout(() => setMoved((m) => (m?.key === key ? null : m)), UNDO_MS);
+  }
+
+  // A to-do dragged from the menu onto the calendar gets that time booked for it.
+  function dragTodo(t: { id: string; title: string; minutes: number }, x: number, y: number) {
+    setMenu(false);
+    setQuery("");
+    if (view !== "day" && view !== "week") changeView("week");
+    setTodoDrag({ ...t, x, y });
+  }
+  async function dropTodo(start: Date | null) {
+    const t = todoDrag;
+    setTodoDrag(null);
+    if (!t || !start) return;
+    const r = await fetch("/api/todos", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: t.id, schedule: true, start: start.toISOString() }),
+    });
+    if (!r.ok) setError((await r.json().catch(() => null))?.error ?? "Couldn't book time for that to-do.");
+    setGen((g) => g + 1);
   }
 
   // Priorities: reloaded whenever the calendar is, and always shown beside it. A notification can ask to bring
@@ -486,6 +544,7 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
               openDay(startOfDay(d));
               setMenu(false);
             }}
+            onDragStart={dragTodo}
           />
 
           <h2 className="mt-6 font-mono text-xs uppercase tracking-[0.2em] text-muted">Google Sheet</h2>
@@ -651,6 +710,10 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
                         onPickDay={openDay}
                         onOpen={openEvent}
                         onBook={writable ? book : undefined}
+                        canDrag={canDrag}
+                        onMove={moveEvent}
+                        todoDrag={todoDrag}
+                        onTodoDrop={dropTodo}
                       />
                     )}
                   </motion.div>
@@ -685,6 +748,22 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
 
       <div role="status" aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-4 z-30 flex flex-col items-center gap-2 px-4">
         <AnimatePresence>
+          {moved && (
+            <motion.div
+              key={`moved-${moved.key}`}
+              layout
+              initial={{ y: 40, opacity: 0, scale: 0.95 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ y: 20, opacity: 0, scale: 0.95 }}
+              transition={{ type: "spring", damping: 26, stiffness: 380 }}
+              className="pointer-events-auto flex w-full max-w-sm items-center gap-3 rounded-2xl bg-ink px-4 py-3 text-sm text-paper shadow-xl"
+            >
+              <span className="min-w-0 flex-1 truncate">{moved.title}</span>
+              <button type="button" onClick={moved.undo} className="rounded-full bg-paper/15 px-3 py-1 font-medium hover:bg-paper/25">
+                Undo
+              </button>
+            </motion.div>
+          )}
           {pending.map((p) => (
             <motion.div
               key={p.key}
