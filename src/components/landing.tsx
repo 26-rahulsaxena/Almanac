@@ -9,6 +9,7 @@ const ease = [0.22, 1, 0.36, 1] as const;
 const errors: Record<string, string> = {
   AccessDenied: "Google refused the sign-in. Make sure this Google account is added as a test user in Google Cloud.",
   Configuration: "The app's Google keys or database aren't set up yet. Check the .env.local file.",
+  Reauth: "Google needs you to sign in again before it shares your calendar.",
 };
 
 export function Landing({ error }: { error?: string }) {

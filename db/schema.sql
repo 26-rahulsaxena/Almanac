@@ -20,6 +20,9 @@ create table if not exists google_tokens (
   updated_at timestamptz not null default now()
 );
 
+-- Stage 2: calendars the user switched off in the app (Google ids). Doesn't touch Google's own settings.
+alter table users add column if not exists hidden_calendars text[] not null default '{}';
+
 -- Row Level Security with no policies blocks Supabase's public API from these tables.
 -- The app connects as the database owner, which is unaffected.
 alter table users enable row level security;
