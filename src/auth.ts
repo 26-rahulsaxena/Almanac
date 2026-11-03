@@ -3,14 +3,16 @@ import Google from "next-auth/providers/google";
 import { sql } from "@/lib/db";
 import { encrypt } from "@/lib/crypto";
 
-// Minimum scopes: sign-in, list calendars, read/write events. Free/busy is computed from the events
-// we already read, so the separate free/busy scope isn't needed.
+// Minimum scopes: sign-in, list calendars, read/write events, and read (never change) Google Sheets for the
+// sheet sync. Free/busy is computed from the events we already read, so the separate free/busy scope isn't needed.
+export const SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets.readonly";
 const scope = [
   "openid",
   "email",
   "profile",
   "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
   "https://www.googleapis.com/auth/calendar.events",
+  SHEETS_SCOPE,
 ].join(" ");
 
 export const { handlers, auth, signIn, signOut } = NextAuth({

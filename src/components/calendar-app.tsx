@@ -12,6 +12,7 @@ import type { Priority } from "@/lib/priorities";
 import type { Severity } from "@/lib/priority";
 import { NotifySettings } from "./notify-settings";
 import { PrioritiesPanel, sevColor, type PriorityAction } from "./priorities-panel";
+import { SheetSync } from "./sheet-sync";
 import { ThemeToggle } from "./theme-toggle";
 import { TodoList } from "./todo-list";
 import { Agenda } from "./views/agenda";
@@ -409,6 +410,9 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
 
           <h2 className="mt-6 font-mono text-xs uppercase tracking-[0.2em] text-muted">To-do</h2>
           <TodoList version={gen} now={now}onCalendarChange={() => setGen((g) => g + 1)} onOpenDay={(d) => openDay(startOfDay(d))} />
+
+          <h2 className="mt-6 font-mono text-xs uppercase tracking-[0.2em] text-muted">Google Sheet</h2>
+          <SheetSync now={now} onCalendarChange={() => setGen((g) => g + 1)} />
 
           <h2 className="mt-6 font-mono text-xs uppercase tracking-[0.2em] text-muted">Categories</h2>
           <div role="group" aria-label="Filter by category" className="mt-3 flex flex-wrap gap-2">

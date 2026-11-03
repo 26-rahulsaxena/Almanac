@@ -4,6 +4,15 @@ import { decrypt, encrypt } from "./crypto";
 // Google no longer accepts our saved login (revoked, or the 7-day testing-mode expiry). User must sign in again.
 export class ReauthError extends Error {}
 
+export class GoogleError extends Error {
+  constructor(
+    readonly status: number,
+    readonly body: string,
+  ) {
+    super(`Google ${status}: ${body}`);
+  }
+}
+
 type Token = { token: string; expiresAt: number };
 
 async function freshToken(userId: string): Promise<Token> {
@@ -52,8 +61,11 @@ async function accessToken(userId: string) {
 }
 
 // Calls the Google Calendar REST API as this user.
-export async function gcal<T>(userId: string, path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`https://www.googleapis.com/calendar/v3${path}`, {
+export const gcal = <T>(userId: string, path: string, init?: RequestInit) => google<T>(userId, `https://www.googleapis.com/calendar/v3${path}`, init);
+
+// Calls any Google REST API (Calendar, Sheets) as this user.
+export async function google<T>(userId: string, url: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, {
     ...init,
     cache: "no-store",
     headers: { ...init?.headers, Authorization: `Bearer ${await accessToken(userId)}` },
@@ -62,6 +74,6 @@ export async function gcal<T>(userId: string, path: string, init?: RequestInit):
     tokens.delete(userId);
     throw new ReauthError();
   }
-  if (!res.ok) throw new Error(`Google Calendar ${res.status}: ${await res.text()}`);
+  if (!res.ok) throw new GoogleError(res.status, await res.text());
   return (res.status === 204 ? undefined : await res.json()) as T;
 }

@@ -60,7 +60,7 @@ export function Landing({ error }: { error?: string }) {
                 Continue with Google
               </motion.button>
             </form>
-            <p className="mt-4 text-sm text-muted">Asks only to see and manage your calendar. Never your email.</p>
+            <p className="mt-4 text-sm text-muted">Asks only to manage your calendar and read the Google Sheet you connect. Never your email.</p>
             {error && (
               <p role="alert" className="mt-6 max-w-md rounded-xl border border-accent/40 bg-accent/10 px-4 py-3 text-sm">
                 {errors[error] ?? `Sign-in failed (${error}). Try again.`}

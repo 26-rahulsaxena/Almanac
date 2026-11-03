@@ -2,13 +2,14 @@ import { sql } from "@/lib/db";
 import { listCalendars, listEvents, type Ev } from "@/lib/calendar";
 import { loadPriorities } from "@/lib/priorities";
 import { sendPush } from "@/lib/push";
+import { syncSheet } from "@/lib/sheet-sync";
 import { dueReminders, LOOKAHEAD_MS } from "@/lib/reminders";
 
 const DIGEST_HOUR = 8;
 
 // GET /api/cron — called every minute by the scheduler (Supabase pg_cron in production) with the shared secret.
 // Sends due reminders and deadline check-ins, re-sends snoozed reminders, sends the 8 am priorities summary,
-// and deletes old records.
+// syncs Google Sheets, and deletes old records.
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) return new Response("Unauthorized", { status: 401 });
@@ -44,9 +45,22 @@ export async function GET(req: Request) {
     }
   }
 
+  // Google Sheet sync every 15 minutes. Claiming the slot first keeps two overlapping runs from syncing twice.
+  const sheets = await sql<{ id: string; timezone: string; hidden_calendars: string[]; sheet_id: string }[]>`
+    update users set sheet_synced_at = now()
+    where sheet_id is not null and (sheet_synced_at is null or sheet_synced_at < now() - interval '15 minutes')
+    returning id, timezone, hidden_calendars, sheet_id`;
+  for (const s of sheets) {
+    try {
+      await syncSheet(s, s.sheet_id);
+    } catch (err) {
+      console.error(`Sheet sync for user ${s.id} failed:`, err);
+    }
+  }
+
   await sql`delete from reminder_deliveries where fire_at < now() - interval '2 days'`;
   await sql`delete from deadline_states where due_at < now() - interval '7 days'`;
-  return Response.json({ users: users.length, sent, snoozed: snoozed.length, checkins, digests });
+  return Response.json({ users: users.length, sent, snoozed: snoozed.length, checkins, digests, sheets: sheets.length });
 }
 
 // Check-ins you asked for ("Later", "Doing it now", "Stuck"). Unanswered ones repeat every 30 minutes until
