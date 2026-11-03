@@ -1,6 +1,6 @@
 "use client";
 import { motion } from "motion/react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { signInWithGoogle } from "@/app/actions";
 import { ThemeToggle } from "./theme-toggle";
 
@@ -12,7 +12,12 @@ const errors: Record<string, string> = {
   Reauth: "Google needs you to sign in again before it shares your calendar.",
 };
 
+// Today's date from the visitor's own clock; the server runs on UTC, which is still yesterday in India until 5:30 am.
+const noChanges = () => () => {};
+const browserToday = () => new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" });
+
 export function Landing({ error }: { error?: string }) {
+  const today = useSyncExternalStore(noChanges, browserToday, () => "");
   return (
     <div className="flex flex-1 flex-col">
       <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4 sm:px-8">
@@ -23,13 +28,12 @@ export function Landing({ error }: { error?: string }) {
       <main className="mx-auto grid w-full max-w-6xl flex-1 items-center gap-12 px-4 pb-12 sm:px-8 lg:grid-cols-[1.1fr_1fr]">
         <section>
           <motion.p
-            suppressHydrationWarning
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, ease }}
             className="font-mono text-xs uppercase tracking-[0.2em] text-muted"
           >
-            {new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })}
+            {today || " "}
           </motion.p>
           <motion.h1
             initial={{ opacity: 0, y: 16 }}
