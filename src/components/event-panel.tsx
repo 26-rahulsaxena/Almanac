@@ -19,6 +19,7 @@ import {
   type Scope,
   type SendUpdates,
 } from "@/lib/recurrence";
+import { describeReminder } from "@/lib/reminders";
 import { addDays, parseWhen } from "@/lib/time";
 import { useDialog } from "./use-dialog";
 
@@ -37,7 +38,13 @@ export type Form = {
   custom: Repeat;
   attendees: Attendee[];
   addMeet: boolean;
+  reminders: Reminders;
 };
+type Reminders = NonNullable<SaveInput["reminders"]>;
+
+// Quick choices in "Add reminder". All-day ones count back from midnight at the start of the day.
+const TIMED_REMINDERS = [0, 5, 10, 15, 30, 60, 120, 1440];
+const ALL_DAY_REMINDERS = [0, 360, 900, 2340];
 
 const EMAIL = /^[^\s@<>,;"]+@[^\s@<>,;"]+\.[^\s@<>,;"]+$/;
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -59,6 +66,7 @@ export function draftFromSlot(start: Date, end: Date, calendarId: string): Form 
     custom: NO_REPEAT,
     attendees: [],
     addMeet: false,
+    reminders: "default",
   };
 }
 
@@ -80,6 +88,7 @@ export function draftFromEvent(e: Ev): Form {
     custom: NO_REPEAT,
     attendees: e.attendees ?? [],
     addMeet: false,
+    reminders: (e.reminders as Reminders | undefined) ?? "default",
   };
 }
 
@@ -166,6 +175,8 @@ export function EventPanel({ initial, event, calendars, onClose, onSave, onDelet
       attendees: asksToSend ? f.attendees : undefined,
       addMeet: canEditGuests && f.addMeet,
       sendUpdates,
+      // Only sent when changed, so saving never rewrites reminders set elsewhere.
+      reminders: JSON.stringify(f.reminders) === JSON.stringify(initial.reminders) ? undefined : f.reminders,
     };
   }
 
@@ -276,6 +287,81 @@ export function EventPanel({ initial, event, calendars, onClose, onSave, onDelet
                 <option value="custom">Custom…</option>
               </select>
               {f.preset === "custom" && <CustomRepeat value={f.custom} onChange={(r) => set("custom", r)} />}
+            </div>
+
+            <div className="space-y-2">
+              <span className={label}>Reminders</span>
+              {f.reminders === "default" ? (
+                <p className="flex items-center justify-between gap-2 text-sm">
+                  <span>
+                    {cal?.defaultReminders.length
+                      ? `Calendar default: ${cal.defaultReminders.map((r) => describeReminder(r.minutes, f.allDay).toLowerCase()).join(", ")}`
+                      : "None (this calendar has no default)"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => set("reminders", (cal?.defaultReminders ?? []) as Reminders)}
+                    className="shrink-0 text-muted underline hover:text-ink"
+                  >
+                    Change
+                  </button>
+                </p>
+              ) : (
+                <>
+                  <ul className="flex flex-wrap gap-1.5">
+                    <AnimatePresence initial={false}>
+                      {f.reminders.map((r) => (
+                        <motion.li
+                          key={`${r.method}${r.minutes}`}
+                          layout
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.8 }}
+                          className="flex items-center gap-1 rounded-full border border-line py-1 pl-3 pr-1 text-sm"
+                        >
+                          {describeReminder(r.minutes, f.allDay)}
+                          {r.method === "email" && <span className="text-muted"> · email</span>}
+                          <button
+                            type="button"
+                            aria-label={`Remove reminder ${describeReminder(r.minutes, f.allDay)}`}
+                            onClick={() => set("reminders", (f.reminders as Exclude<Reminders, "default">).filter((x) => x !== r))}
+                            className="grid size-6 place-items-center rounded-full text-muted hover:bg-ink/5 hover:text-ink"
+                          >
+                            ✕
+                          </button>
+                        </motion.li>
+                      ))}
+                    </AnimatePresence>
+                    {f.reminders.length === 0 && <li className="text-sm text-muted">No reminders</li>}
+                  </ul>
+                  <div className="flex items-center gap-3">
+                    {f.reminders.length < 5 && (
+                      <select
+                        aria-label="Add reminder"
+                        value=""
+                        onChange={(e) => {
+                          const list = f.reminders as Exclude<Reminders, "default">;
+                          const minutes = Number(e.target.value);
+                          set("reminders", [...list, { method: "popup" as const, minutes }].sort((a, b) => a.minutes - b.minutes));
+                        }}
+                        className={`${field} w-auto`}
+                      >
+                        <option value="">+ Add reminder…</option>
+                        {(f.allDay ? ALL_DAY_REMINDERS : TIMED_REMINDERS)
+                          .filter((m) => !(f.reminders as Exclude<Reminders, "default">).some((r) => r.method === "popup" && r.minutes === m))
+                          .map((m) => (
+                            <option key={m} value={m}>
+                              {describeReminder(m, f.allDay)}
+                            </option>
+                          ))}
+                      </select>
+                    )}
+                    <button type="button" onClick={() => set("reminders", "default")} className="text-xs text-muted underline hover:text-ink">
+                      Use calendar default
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="space-y-2">

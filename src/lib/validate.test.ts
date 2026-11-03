@@ -37,6 +37,15 @@ test("guests: emails checked, nothing sent unless explicitly 'all'", () => {
   expect(() => parseSave({ ...ok, attendees: Array(101).fill({ email: "a@b.co" }) })).toThrow("100");
 });
 
+test("reminders: up to 5, popup or email, 0 to 4 weeks", () => {
+  expect(parseSave({ ...ok, reminders: [{ method: "popup", minutes: 10 }] }).reminders).toEqual([{ method: "popup", minutes: 10 }]);
+  expect(parseSave({ ...ok, reminders: "default" }).reminders).toBe("default");
+  expect(parseSave(ok).reminders).toBeUndefined();
+  expect(() => parseSave({ ...ok, reminders: Array(6).fill({ method: "popup", minutes: 5 }) })).toThrow("At most 5");
+  expect(() => parseSave({ ...ok, reminders: [{ method: "sms", minutes: 5 }] })).toThrow("Invalid reminder");
+  expect(() => parseSave({ ...ok, reminders: [{ method: "popup", minutes: -1 }] })).toThrow("reminder time");
+});
+
 test("editing an occurrence requires choosing which events", () => {
   expect(() => parseSave({ ...ok, id: "a_1", recurringEventId: "a", originalStart: ok.start })).toThrow("Choose which events");
   expect(() => parseDelete({ calendarId: "c", id: "a_1", recurringEventId: "a", originalStart: ok.start, scope: "everything" })).toThrow();

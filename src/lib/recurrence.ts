@@ -28,6 +28,7 @@ export type SaveInput = {
   attendees?: Attendee[]; // missing = leave the guest list as it is
   addMeet?: boolean;
   sendUpdates?: SendUpdates;
+  reminders?: { method: "popup" | "email"; minutes: number }[] | "default"; // missing = leave as is
 };
 export type DeleteInput = Pick<SaveInput, "calendarId" | "recurringEventId" | "originalStart" | "scope" | "allDay" | "sendUpdates"> & {
   id: string;
@@ -176,6 +177,9 @@ export function planSave(i: SaveInput, master?: Master, requestId: string = cryp
     end: when(i.end, i.allDay, i.timeZone),
     ...(i.attendees && { attendees: i.attendees.map(({ email, responseStatus }) => ({ email, responseStatus })) }),
     ...(i.addMeet && meet),
+    ...(i.reminders && {
+      reminders: i.reminders === "default" ? { useDefault: true, overrides: [] } : { useDefault: false, overrides: i.reminders },
+    }),
   };
   const rec = i.recurrence ? [i.recurrence] : undefined;
 

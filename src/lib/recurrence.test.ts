@@ -163,6 +163,19 @@ describe("guests and Meet", () => {
   });
 });
 
+describe("reminders", () => {
+  test("own reminders replace the calendar default", () => {
+    const [op] = planSave({ ...base, reminders: [{ method: "popup", minutes: 10 }, { method: "popup", minutes: 60 }] });
+    expect(op.body!.reminders).toEqual({ useDefault: false, overrides: [{ method: "popup", minutes: 10 }, { method: "popup", minutes: 60 }] });
+  });
+  test("back to the calendar default", () => {
+    expect(planSave({ ...base, id: "x", reminders: "default" })[0].body!.reminders).toEqual({ useDefault: true, overrides: [] });
+  });
+  test("untouched reminders aren't sent", () => {
+    expect(planSave({ ...base, id: "x" })[0].body).not.toHaveProperty("reminders");
+  });
+});
+
 describe("deleting", () => {
   const del = { calendarId: "me@gmail.com", allDay: false, ...occurrence };
 

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
 import { Providers } from "@/components/providers";
 import "./globals.css";
@@ -15,6 +15,14 @@ const instrumentSerif = Instrument_Serif({
 export const metadata: Metadata = {
   title: "Almanac",
   description: "Your Google Calendar, on one page.",
+  appleWebApp: { capable: true, title: "Almanac", statusBarStyle: "default" },
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f4f1ea" },
+    { media: "(prefers-color-scheme: dark)", color: "#141311" },
+  ],
 };
 
 // Runs before paint so the page never flashes the wrong theme.

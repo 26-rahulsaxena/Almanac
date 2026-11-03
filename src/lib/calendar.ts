@@ -1,7 +1,8 @@
 import { gcal, ReauthError } from "./google";
 import type { Attendee, Master } from "./recurrence";
+import type { Reminder } from "./reminders";
 
-export type Cal = { id: string; name: string; color: string; primary: boolean; canEdit: boolean };
+export type Cal = { id: string; name: string; color: string; primary: boolean; canEdit: boolean; defaultReminders: Reminder[] };
 // start/end are "YYYY-MM-DD" for all-day events, otherwise ISO date-times with offset (as Google sends them).
 export type Ev = {
   id: string;
@@ -19,9 +20,18 @@ export type Ev = {
   attendees?: Attendee[];
   meetLink?: string;
   isOrganizer: boolean; // only the organizer can change guests
+  reminders?: Reminder[]; // missing = the calendar's default reminders
 };
 
-type GCal = { id: string; summary: string; summaryOverride?: string; backgroundColor: string; primary?: boolean; accessRole: string };
+type GCal = {
+  id: string;
+  summary: string;
+  summaryOverride?: string;
+  backgroundColor: string;
+  primary?: boolean;
+  accessRole: string;
+  defaultReminders?: Reminder[];
+};
 type GTime = { date?: string; dateTime?: string };
 type GEvent = {
   id: string;
@@ -37,12 +47,13 @@ type GEvent = {
   attendees?: Attendee[];
   hangoutLink?: string;
   organizer?: { self?: boolean };
+  reminders?: { useDefault?: boolean; overrides?: Reminder[] };
 };
 
 export async function listCalendars(userId: string): Promise<Cal[]> {
   const data = await gcal<{ items: GCal[] }>(
     userId,
-    "/users/me/calendarList?fields=items(id,summary,summaryOverride,backgroundColor,primary,accessRole)",
+    "/users/me/calendarList?fields=items(id,summary,summaryOverride,backgroundColor,primary,accessRole,defaultReminders)",
   );
   return data.items
     .map((c) => ({
@@ -51,6 +62,7 @@ export async function listCalendars(userId: string): Promise<Cal[]> {
       color: c.backgroundColor,
       primary: !!c.primary,
       canEdit: c.accessRole === "owner" || c.accessRole === "writer",
+      defaultReminders: c.defaultReminders ?? [],
     }))
     .sort((a, b) => Number(b.primary) - Number(a.primary));
 }
@@ -67,7 +79,7 @@ export async function listEvents(userId: string, calendarIds: string[], from: st
     maxResults: query ? "50" : "2500",
     fields:
       "items(id,summary,description,start,end,recurringEventId,originalStartTime,location,transparency,colorId," +
-      "attendees(email,displayName,responseStatus,self,organizer),hangoutLink,organizer(self))",
+      "attendees(email,displayName,responseStatus,self,organizer),hangoutLink,organizer(self),reminders)",
   });
   if (query) q.set("q", query);
   const lists = await Promise.all(
@@ -92,6 +104,7 @@ export async function listEvents(userId: string, calendarIds: string[], from: st
             attendees: e.attendees,
             meetLink: e.hangoutLink,
             isOrganizer: e.organizer?.self ?? true,
+            reminders: e.reminders?.useDefault === false ? (e.reminders.overrides ?? []) : undefined,
           }),
         );
       } catch (err) {

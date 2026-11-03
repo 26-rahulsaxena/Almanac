@@ -7,6 +7,7 @@ import { CATEGORIES, categoryHex } from "@/lib/categories";
 import type { DeleteInput, SaveInput, Scope, SendUpdates } from "@/lib/recurrence";
 import { addDays, atHour, parseWhen, startOfDay, startOfMonth, startOfWeek } from "@/lib/time";
 import { draftFromEvent, draftFromSlot, EventPanel, type Form } from "./event-panel";
+import { NotifySettings } from "./notify-settings";
 import { ThemeToggle } from "./theme-toggle";
 import { Agenda } from "./views/agenda";
 import { MonthGrid } from "./views/month-grid";
@@ -374,6 +375,9 @@ export function CalendarApp({ name, calendars, hidden: initialHidden }: { name: 
               "Pick colours to filter."
             )}
           </p>
+
+          <h2 className="mt-6 font-mono text-xs uppercase tracking-[0.2em] text-muted">Notifications</h2>
+          <NotifySettings />
 
           <p className="mt-6 hidden text-xs leading-relaxed text-muted lg:block">
             Keys: <kbd>N</kbd> new · <kbd>D</kbd> <kbd>W</kbd> <kbd>M</kbd> <kbd>A</kbd> views · <kbd>T</kbd> today · <kbd>←</kbd> <kbd>→</kbd> move · <kbd>/</kbd> search

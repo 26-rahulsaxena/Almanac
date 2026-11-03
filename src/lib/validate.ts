@@ -62,6 +62,18 @@ function target(o: Body) {
   return t;
 }
 
+// Google allows 5 reminders per event, up to 4 weeks ahead.
+function reminders(v: unknown): SaveInput["reminders"] {
+  if (v === undefined || v === "default") return v;
+  if (!Array.isArray(v) || v.length > 5) throw new InvalidInput("At most 5 reminders per event");
+  return v.map((r) => {
+    const o = asBody(r);
+    if (!["popup", "email"].includes(o.method as string)) throw new InvalidInput("Invalid reminder");
+    if (!Number.isInteger(o.minutes) || (o.minutes as number) < 0 || (o.minutes as number) > 40320) throw new InvalidInput("Invalid reminder time");
+    return { method: o.method as "popup" | "email", minutes: o.minutes as number };
+  });
+}
+
 export function parseSave(raw: unknown): SaveInput {
   const o = asBody(raw);
   const t = target(o);
@@ -95,6 +107,7 @@ export function parseSave(raw: unknown): SaveInput {
     attendees: attendees(o.attendees),
     addMeet: o.addMeet === true,
     sendUpdates: sendUpdates(o),
+    reminders: reminders(o.reminders),
   };
 }
 
