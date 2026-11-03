@@ -150,7 +150,7 @@ export function CalendarApp({
   const [todos, setTodos] = useState(false); // the "+ To-do" pop-up
   const [nowOpen, setNowOpen] = useState(false); // "What now?"
   const [review, setReview] = useState(false); // the week in review
-  const [quick, setQuick] = useState(false); // quick add by text or voice
+  const [quick, setQuick] = useState(false); // "+ New": add by typing or saying one line
   // Focus moves into the menu when it opens and back to ☰ when it closes.
   useEffect(() => {
     if (menu) menuClose.current?.focus();
@@ -405,9 +405,8 @@ export function CalendarApp({
       if (e.target instanceof HTMLElement && e.target.closest("input, textarea, select, [contenteditable]")) return;
       if (KEYS[e.key]) changeView(KEYS[e.key]);
       else if (e.key === "t") goToday();
-      else if (e.key === "n") newEvent();
-      else if (e.key === "q") {
-        e.preventDefault(); // keep the "q" out of the box that opens
+      else if (e.key === "n") {
+        e.preventDefault(); // keep the "n" out of the box that opens
         setQuick(true);
       }
       else if (e.key === "p") showPriorities();
@@ -627,7 +626,7 @@ export function CalendarApp({
           <AlertStageSettings initial={stages} />
 
           <p className="mt-6 text-xs leading-relaxed text-muted">
-            Keys: <kbd>\</kbd> menu · <kbd>N</kbd> new · <kbd>Q</kbd> quick add · <kbd>K</kbd> assistant · <kbd>P</kbd> priorities · <kbd>D</kbd> <kbd>W</kbd> <kbd>M</kbd> <kbd>A</kbd> views · <kbd>T</kbd> today · <kbd>←</kbd> <kbd>→</kbd> move · <kbd>/</kbd> search
+            Keys: <kbd>\</kbd> menu · <kbd>N</kbd> new ·<kbd>K</kbd> assistant · <kbd>P</kbd> priorities · <kbd>D</kbd> <kbd>W</kbd> <kbd>M</kbd> <kbd>A</kbd> views · <kbd>T</kbd> today · <kbd>←</kbd> <kbd>→</kbd> move · <kbd>/</kbd> search
           </p>
         </motion.aside>
 
@@ -638,7 +637,7 @@ export function CalendarApp({
             <div className="flex items-center gap-1">
               <motion.button
                 type="button"
-                onClick={newEvent}
+                onClick={() => setQuick(true)}
                 disabled={!writable}
                 whileTap={{ scale: 0.95 }}
                 className="mr-1 rounded-full bg-ink px-4 py-1.5 text-sm font-medium text-paper disabled:opacity-40"
@@ -652,15 +651,6 @@ export function CalendarApp({
                 className="mr-1 rounded-full border border-line px-3 py-1.5 text-sm hover:border-ink/40"
               >
                 + To-do
-              </motion.button>
-              <motion.button
-                type="button"
-                onClick={() => setQuick(true)}
-                disabled={!writable}
-                whileTap={{ scale: 0.95 }}
-                className="mr-1 rounded-full border border-line px-3 py-1.5 text-sm hover:border-ink/40 disabled:opacity-40"
-              >
-                Quick add
               </motion.button>
               <button type="button" onClick={goToday} className="rounded-full border border-line px-4 py-1.5 text-sm hover:border-ink/40">
                 Today
@@ -823,6 +813,10 @@ export function CalendarApp({
           <QuickAdd
             key="quick"
             onClose={() => setQuick(false)}
+            onForm={() => {
+              setQuick(false);
+              newEvent();
+            }}
             onTodoAdded={() => setGen((g) => g + 1)}
             onEvent={(p) => {
               setQuick(false);

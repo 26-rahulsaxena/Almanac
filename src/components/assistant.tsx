@@ -1,6 +1,7 @@
 "use client";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
+import { MicButton } from "./mic-button";
 
 type Turn = { role: "user" | "assistant"; text: string };
 
@@ -178,6 +179,8 @@ export function Assistant({ open, onOpenChange, onChanged }: { open: boolean; on
                   className="max-h-32 w-full resize-none rounded-xl border border-line bg-paper px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
                 />
               </label>
+              {/* Spoken words go into the box and wait for Send, so a misheard "yes" can't approve a booking. */}
+              <MicButton onText={setText} onEnd={() => input.current?.focus()} onListening={(on) => on && setError(null)} onError={setError} />
               <button type="submit" disabled={thinking || !text.trim()} className="rounded-full bg-ink px-4 py-2 text-sm font-medium text-paper disabled:opacity-40">
                 Send
               </button>
