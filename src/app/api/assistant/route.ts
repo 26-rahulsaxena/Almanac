@@ -26,7 +26,7 @@ class ProviderError extends Error {
 }
 
 async function askClaude(sys: string, turns: Turn[], act: Act) {
-  const client = new Anthropic();
+  const client = new Anthropic({ timeout: 60_000, maxRetries: 1 });
   const messages: Anthropic.Beta.BetaMessageParam[] = turns.map((t) => ({ role: t.role, content: t.text }));
   try {
     for (let step = 0; step < MAX_STEPS; step++) {
@@ -77,6 +77,7 @@ async function askOpenAiStyle(sys: string, turns: Turn[], act: Act) {
     for (let attempt = 0; ; attempt++) {
       res = await fetch(`${base}/chat/completions`, {
         method: "POST",
+        signal: AbortSignal.timeout(60_000),
         headers: { Authorization: `Bearer ${process.env.AI_API_KEY}`, "Content-Type": "application/json" },
         body: JSON.stringify({ model, messages, tools: openAiTools, tool_choice: "auto" }),
       });

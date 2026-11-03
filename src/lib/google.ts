@@ -25,6 +25,7 @@ async function freshToken(userId: string): Promise<Token> {
 
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
+    signal: AbortSignal.timeout(20_000),
     body: new URLSearchParams({
       client_id: process.env.AUTH_GOOGLE_ID!,
       client_secret: process.env.AUTH_GOOGLE_SECRET!,
@@ -66,6 +67,7 @@ export const gcal = <T>(userId: string, path: string, init?: RequestInit) => goo
 // Calls any Google REST API (Calendar, Sheets) as this user.
 export async function google<T>(userId: string, url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
+    signal: AbortSignal.timeout(20_000), // never hang on a dead connection (e.g. after the computer slept)
     ...init,
     cache: "no-store",
     headers: { ...init?.headers, Authorization: `Bearer ${await accessToken(userId)}` },
