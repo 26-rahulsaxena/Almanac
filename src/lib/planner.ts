@@ -120,11 +120,18 @@ export type Replan = { booked: string[]; moved: string[]; unplaced: string[]; su
 // tomorrow or later. In "ask" mode (the default) these only become suggestions you approve; in "auto" mode they're
 // carried out in Google. Returns what changed or was suggested, in words; null if a run for this user is going.
 export async function replan(u: User, opts: { rollover?: boolean } = {}): Promise<Replan | null> {
-  // One run per user at a time (the minute job and a click can overlap); the lock ends with the transaction.
-  return sql.begin(async (tx) => {
-    const [{ ok }] = await tx<{ ok: boolean }[]>`select pg_try_advisory_xact_lock(hashtext(${u.id})) as ok`;
-    return ok ? planNow(u, !!opts.rollover) : null;
-  });
+  // One run per user at a time (the minute job and a click can overlap). Marked on the user row rather than with a
+  // lock that keeps a database connection open for the whole run: connections are scarce (see db.ts). The mark
+  // expires by itself in 2 minutes in case a run dies halfway.
+  const [claim] = await sql`
+    update users set planning_until = now() + interval '2 minutes'
+    where id = ${u.id} and (planning_until is null or planning_until < now()) returning id`;
+  if (!claim) return null;
+  try {
+    return await planNow(u, !!opts.rollover);
+  } finally {
+    await sql`update users set planning_until = null where id = ${u.id}`;
+  }
 }
 
 async function planNow(u: User, rollover: boolean): Promise<Replan> {

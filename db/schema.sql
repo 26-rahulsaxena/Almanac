@@ -176,3 +176,6 @@ create table if not exists priority_ratings (
   rated_at timestamptz not null default now()
 );
 alter table priority_ratings enable row level security;
+
+-- While the auto-planner runs for a user (one run at a time); expires by itself in case a run dies.
+alter table users add column if not exists planning_until timestamptz;
