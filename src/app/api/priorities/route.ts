@@ -20,7 +20,7 @@ export async function GET() {
   const u = await me();
   if (!u) return fail("signin", 401);
   try {
-    return Response.json(await loadPriorities(u.id, u.timezone, u.hidden_calendars));
+    return Response.json(await loadPriorities(u.id, u.timezone, u.hidden_calendars, new Date(), true));
   } catch (err) {
     if (err instanceof ReauthError) return fail("reauth", 401);
     throw err;

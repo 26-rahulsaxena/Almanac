@@ -111,3 +111,10 @@ describe("Later only offers safe times", () => {
     expect(laterOptions(now, inHours(2.5))).toEqual([]);
   });
 });
+
+test("starting within 3 hours raises it one level", () => {
+  expect(sev("Prepare client presentation", 1)).toBe("critical"); // work: high → critical
+  expect(sev("Gym", 2)).toBe("medium"); // leisure: low → medium
+  expect(sev("Gym", 4)).toBe("low");
+  expect(sev("Finance exam", 1)).toBe("critical"); // already the top
+});

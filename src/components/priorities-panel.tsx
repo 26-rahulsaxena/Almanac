@@ -88,7 +88,7 @@ export function PrioritiesPanel({ items, onAction }: Props) {
           )}
         </ol>
         <p className="border-t border-line px-4 py-3 text-xs text-muted">
-          Ranked by kind of task (deadline › work › personal › leisure) and time left. Pressing Later twice raises it a level. Your choice always wins and applies to every
+          Rated by AI from your whole calendar (or by kind of task and time left when it can’t). Pressing Later twice raises it a level. Your choice always wins and applies to every
           event with the same name.
         </p>
     </section>
@@ -167,7 +167,7 @@ function Card({ p, onAction }: { p: Priority; onAction: (a: PriorityAction) => P
                   >
                     <span className="size-2 rounded-full" style={{ background: sevColor(s) }} aria-hidden />
                     {SEVERITY_LABEL[s]}
-                    {p.suggested === s && <span className="font-normal text-muted">· suggested</span>}
+                    {p.suggested === s && <span className="font-normal text-muted">· {p.ai ? "AI suggested" : "suggested"}</span>}
                   </button>
                 );
               })}

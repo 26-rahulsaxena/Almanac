@@ -1,7 +1,8 @@
 import { listCalendars, listEvents, type Ev } from "./calendar";
 import { sql } from "./db";
 import { gcal } from "./google";
-import { byPriority, effective, isTracked, suggest, titleKey, WINDOW_DAYS, type Category, type Severity, type Status } from "./priority";
+import { aiRatings, type RateItem, type Rating } from "./ai-priority";
+import { byPriority, effective, isTracked, suggest, timeLeft, titleKey, WINDOW_DAYS, type Category, type Severity, type Status } from "./priority";
 import { midnightIn } from "./reminders";
 
 export type Priority = {
@@ -14,6 +15,7 @@ export type Priority = {
   category: Category;
   suggested: Severity;
   reason: string;
+  ai: boolean; // suggested by the AI (otherwise by the rules)
   severity: Severity; // what's shown: your choice, or the suggestion raised by repeated "Later"s
   chosen: Severity | null; // your choice for every event with this name
   manual: boolean | null; // "Show in priorities" / "Hide from priorities"; null = automatic
@@ -45,7 +47,9 @@ export function checkinText(title: string, status: string, due: Date, timeZone: 
 export const dueAt = (e: Pick<Ev, "start" | "allDay">, timeZone: string) => (e.allDay ? midnightIn(e.start, timeZone) : new Date(e.start));
 
 // Everything in the next 5 days from the user's visible calendars, ranked by kind of task and time left.
-export async function loadPriorities(userId: string, timeZone: string, hidden: string[], now = new Date()): Promise<Priority[]> {
+// The suggested level comes from the AI's ratings when it has rated the item (rate: may ask it now, else only
+// saved ratings are used), otherwise from the rules.
+export async function loadPriorities(userId: string, timeZone: string, hidden: string[], now = new Date(), rate = false): Promise<Priority[]> {
   const calendars = (await listCalendars(userId)).filter((c) => !hidden.includes(c.id));
   const calendarName = new Map(calendars.map((c) => [c.id, c.name]));
   const [events, states, rules] = await Promise.all([
@@ -56,8 +60,8 @@ export async function loadPriorities(userId: string, timeZone: string, hidden: s
   const stateOf = new Map(states.map((s) => [`${s.calendar_id}:${s.event_id}`, s]));
   const ruleOf = new Map(rules.map((r) => [r.title_key, r.severity]));
 
-  return events
-    .flatMap((e): Priority[] => {
+  const toRate: RateItem[] = [];
+  const list = events.flatMap((e): Priority[] => {
       const key = `${e.calendarId}:${e.id}`;
       const s = stateOf.get(key);
       const item = { ...e, calendarName: calendarName.get(e.calendarId), guests: e.attendees?.filter((a) => !a.self).length };
@@ -66,6 +70,11 @@ export async function loadPriorities(userId: string, timeZone: string, hidden: s
       if (declined || due <= now || !isTracked(item, s?.is_deadline ?? null)) return [];
       const { severity, reason, category } = suggest(item, due, now);
       const chosen = ruleOf.get(titleKey(e.title)) ?? null;
+      const status = s?.status ?? "open";
+      const cal = item.calendarName;
+      if (status !== "done") {
+        toRate.push({ key, title: e.title, due: due.toISOString(), end: e.allDay ? null : e.end, allDay: e.allDay, deadline: category === "deadline", guests: item.guests ?? 0, calendar: cal && !cal.includes("@") ? cal : undefined });
+      }
       return [
         {
           key,
@@ -77,14 +86,25 @@ export async function loadPriorities(userId: string, timeZone: string, hidden: s
           category,
           suggested: severity,
           reason,
+          ai: false,
           severity: effective(severity, chosen, s?.later_count ?? 0),
           chosen,
           manual: s?.is_deadline ?? null,
-          status: s?.status ?? "open",
+          status,
           nextCheck: s?.next_check_at?.toISOString() ?? null,
           laterCount: s?.later_count ?? 0,
         },
       ];
+    });
+
+  const rated = await aiRatings(userId, timeZone, toRate, now, rate).catch((err) => {
+    console.error("AI priority ratings:", err);
+    return new Map<string, Rating>();
+  });
+  return list
+    .map((p) => {
+      const r = rated.get(`${p.key}|${p.due}`);
+      return r ? { ...p, ai: true, suggested: r.severity, reason: `${r.reason} · in ${timeLeft(new Date(p.due), now)}`, severity: effective(r.severity, p.chosen, p.laterCount) } : p;
     })
     .sort(byPriority);
 }

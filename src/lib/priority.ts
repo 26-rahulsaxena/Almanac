@@ -12,6 +12,14 @@ export const WINDOW_DAYS = 5;
 export const SAFETY_MS = 2 * 60 * 60_000;
 
 const HOUR = 60 * 60_000;
+const SOON_HOURS = 3;
+
+// "under an hour", "5 h", "2 days".
+export function timeLeft(due: Date, now: Date) {
+  const hours = (+due - +now) / HOUR;
+  const days = Math.round(hours / 24);
+  return hours < 1 ? "under an hour" : hours < 23.5 ? `${Math.round(hours)} h` : `${days} day${days === 1 ? "" : "s"}`;
+}
 export const CATEGORY_LABEL: Record<Category, string> = {
   deadline: "Deadline",
   work: "Work",
@@ -61,16 +69,17 @@ export function isTracked(e: Item, manual: boolean | null) {
 const up = (s: Severity, steps: number) => SEVERITIES[Math.min(SEVERITIES.length - 1, Math.max(0, SEVERITIES.indexOf(s) + steps))];
 
 // Suggested severity: how important the kind of task is, lowered the further away it is
-// (full within 24 h, one level less within 3 days, two less beyond). Reason e.g. "Work (prep) · in 5 h".
+// (full within 24 h, one level less within 3 days, two less beyond), and one level higher when it's within
+// SOON_HOURS: a presentation in an hour outranks an exam tomorrow. Reason e.g. "Work (prep) · in 5 h".
 export function suggest(e: Item, due: Date, now: Date): { severity: Severity; reason: string; category: Category } {
   const { category, word, importance } = classify(e);
   const hours = (+due - +now) / HOUR;
   const distance = hours <= 24 ? 0 : hours <= 72 ? 1 : 2;
   const small = SMALL_WORDS.test(`${e.title} ${e.description ?? ""}`) ? 1 : 0;
-  const severity = SEVERITIES[Math.min(3, Math.max(0, importance - distance - small))];
-  const days = Math.round(hours / 24);
-  const left = hours < 1 ? "under an hour" : hours < 23.5 ? `${Math.round(hours)} h` : `${days} day${days === 1 ? "" : "s"}`;
-  const reason = `${CATEGORY_LABEL[category]}${word ? ` (${word})` : ""} · in ${left}`;
+  const soon = hours <= SOON_HOURS ? 1 : 0;
+  const severity = SEVERITIES[Math.min(3, Math.max(0, importance - distance - small + soon))];
+
+  const reason = `${CATEGORY_LABEL[category]}${word ? ` (${word})` : ""} · in ${timeLeft(due, now)}`;
   return { severity, reason, category };
 }
 

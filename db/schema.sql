@@ -165,3 +165,14 @@ alter table severity_rules enable row level security;
 alter table todos enable row level security;
 alter table routines enable row level security;
 alter table plan_suggestions enable row level security;
+
+-- The AI's latest priority ratings for the next 5 days, one row per user: what was rated (signature = the
+-- items and their times), and for each item {key, due, severity, reason}. Re-rated when the list changes or
+-- gets old, at most every 30 minutes; the rules fill in for anything not rated.
+create table if not exists priority_ratings (
+  user_id uuid primary key references users(id) on delete cascade,
+  signature text not null,
+  ratings jsonb not null default '[]',
+  rated_at timestamptz not null default now()
+);
+alter table priority_ratings enable row level security;
