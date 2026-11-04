@@ -27,7 +27,7 @@ describe("what now", () => {
     const a = whatNow([ev("Meeting", "2026-11-04T15:30", "2026-11-04T16:00")], [work("Prep for exam", 120, "critical"), work("Email", 30, "low")], now, IST);
     expect(a.state).toBe("free");
     expect(a.headline).toBe("Do “Prep for exam” now.");
-    expect(a.detail).toContain("free until 3:30 pm, then “Meeting” (1 h 30 min)");
+    expect(a.detail).toContain("You have 1 h 30 min free, until 3:30 pm, then “Meeting”.");
     expect(a.picks.map((p) => [p.title, p.minutes])).toEqual([
       ["Prep for exam", 90], // 2 h job, 1 h 30 min free: make a start
       ["Email", 30],

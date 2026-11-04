@@ -93,7 +93,7 @@ export function NotifySettings() {
 }
 
 // The three alert stages for every event, saved to the account (they apply on every device).
-export function AlertStageSettings({ initial }: { initial: AlertStages }) {
+export function AlertStageSettings({ initial, onChange }: { initial: AlertStages; onChange: (s: AlertStages) => void }) {
   const [s, setS] = useState(initial);
   const [error, setError] = useState(false);
 
@@ -101,15 +101,18 @@ export function AlertStageSettings({ initial }: { initial: AlertStages }) {
     const before = s;
     setS(next);
     setError(false);
-    setAlertStages(next).catch(() => {
-      setS(before);
-      setError(true);
-    });
+    setAlertStages(next).then(
+      () => onChange(next),
+      () => {
+        setS(before);
+        setError(true);
+      },
+    );
   }
 
   return (
-    <fieldset className="mt-4 space-y-2.5 text-sm">
-      <legend className="mb-2 font-medium">Alerts for each event</legend>
+    <fieldset className="mt-6 space-y-2.5 text-sm">
+      <legend className="mb-2 font-mono text-xs uppercase tracking-[0.2em] text-muted">Alerts for each event</legend>
       <label className="flex items-start gap-2">
         <input type="checkbox" className="mt-1 accent-[var(--accent)]" checked={s.remind} onChange={(e) => change({ ...s, remind: e.target.checked })} />
         <span>

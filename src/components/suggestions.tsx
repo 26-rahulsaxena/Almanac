@@ -98,14 +98,14 @@ export function Suggestions({ version, onCalendarChange }: { version: number; on
 }
 
 // Menu setting: whether the auto-planner asks first or acts by itself.
-export function PlanModeSetting({ initial, onChange }: { initial: PlanMode; onChange: () => void }) {
+export function PlanModeSetting({ initial, onChange }: { initial: PlanMode; onChange: (m: PlanMode) => void }) {
   const [mode, setMode] = useState(initial);
   const [error, setError] = useState(false);
   function pick(m: PlanMode) {
     const before = mode;
     setMode(m);
     setError(false);
-    setPlanMode(m).then(onChange, () => {
+    setPlanMode(m).then(() => onChange(m), () => {
       setMode(before);
       setError(true);
     });

@@ -52,9 +52,9 @@ describe("suggested severity: kind of task first, then time left", () => {
     expect(sev("Practice quiz", 5)).toBe("medium");
   });
   test("reason says the kind, the word and the time", () => {
-    expect(suggest(item("Finance exam"), inHours(18), now).reason).toBe("Deadline · exam · in 18 h");
-    expect(suggest(item("Gym"), inHours(5), now).reason).toBe("Leisure · gym · in 5 h");
-    expect(suggest(item("Office report review"), inHours(100), now).reason).toBe("Work · office · in 4 days");
+    expect(suggest(item("Finance exam"), inHours(18), now).reason).toBe("Deadline (exam) · in 18 h");
+    expect(suggest(item("Gym"), inHours(5), now).reason).toBe("Leisure (gym) · in 5 h");
+    expect(suggest(item("Office report review"), inHours(100), now).reason).toBe("Work (office) · in 4 days");
   });
 });
 

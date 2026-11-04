@@ -5,7 +5,7 @@
 import { freeByDay, ymdIn } from "./plan";
 import { CATEGORY_LABEL, classify, SEVERITIES, suggest, type Category, type Severity, type Status } from "./priority";
 import { midnightIn } from "./reminders";
-import type { Interval } from "./time";
+import { length, type Interval } from "./time";
 
 const MIN = 60_000;
 const DAY = 24 * 60 * MIN;
@@ -23,7 +23,6 @@ export type Pick = { title: string; why: string; minutes: number; todoId?: strin
 
 const time = (d: Date, tz: string) => d.toLocaleTimeString("en-IN", { timeZone: tz, hour: "numeric", minute: "2-digit" });
 const dayTime = (d: Date, tz: string) => d.toLocaleString("en-IN", { timeZone: tz, weekday: "short", hour: "numeric", minute: "2-digit" });
-export const length = (m: number) => (m < 60 ? `${m} min` : m % 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m / 60} h`);
 const hourIn = (d: Date, tz: string) => +new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", hourCycle: "h23" }).format(d);
 
 // Open to-dos that aren't booked yet, and coming deadlines (exam, submission…) to prepare for.
@@ -81,7 +80,7 @@ export function whatNow(events: Busy[], work: Work[], now: Date, tz: string): No
     minutes: Math.min(w.minutes, usable),
     todoId: w.todoId,
   }));
-  const until = `You're free until ${time(freeUntil, tz)}${next && next.start <= freeUntil ? `, then “${next.title}”` : ""} (${length(gap)}).`;
+  const until = `You have ${length(gap)} free, until ${time(freeUntil, tz)}${next && next.start <= freeUntil ? `, then “${next.title}”` : ""}.`;
   return picks.length
     ? { state: "free", headline: `Do “${picks[0].title}” now.`, detail: until, picks }
     : { state: "free", headline: "Nothing is waiting on you. Enjoy the break, or add a to-do.", detail: until, picks: [] };

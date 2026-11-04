@@ -1,6 +1,7 @@
 "use client";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
+import { length } from "@/lib/time";
 
 type Todo = {
   id: string;
@@ -18,7 +19,6 @@ const LENGTHS = [15, 30, 60, 90, 120, 180, 240, 360, 480];
 const SESSIONS = [45, 60, 90, 120];
 const when = (iso: string) =>
   new Date(iso).toLocaleString("en-IN", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
-const length = (m: number) => (m < 60 ? `${m} min` : `${+(m / 60).toFixed(1)} h`);
 // An ISO time as the value a datetime-local box expects, in the browser's own time zone.
 const localInput = (iso: string | null) => {
   if (!iso) return "";

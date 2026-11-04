@@ -88,7 +88,7 @@ export function PrioritiesPanel({ items, onAction }: Props) {
           )}
         </ol>
         <p className="border-t border-line px-4 py-3 text-xs text-muted">
-          Ranked by kind of task (deadline › work › personal › leisure) and time left. Two “Later”s raise it a level. Your choice always wins and applies to every
+          Ranked by kind of task (deadline › work › personal › leisure) and time left. Pressing Later twice raises it a level. Your choice always wins and applies to every
           event with the same name.
         </p>
     </section>

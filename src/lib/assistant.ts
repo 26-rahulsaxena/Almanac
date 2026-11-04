@@ -168,3 +168,23 @@ export async function run(u: User, name: string, input: Record<string, unknown>,
   throw new InvalidInput(`Unknown tool ${name}`);
 }
 
+
+// The chat shows plain text, so markdown some models add anyway is turned into readable lines: tables become
+// "a · b" rows, headings and bold/italic/code marks go, and "*" or "•" bullets become "- ".
+export function plainText(s: string) {
+  return s
+    .split("\n")
+    .filter((l) => !/^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/.test(l)) // table separator rows
+    .map((l) =>
+      /^\s*\|.*\|\s*$/.test(l)
+        ? l.trim().slice(1, -1).split("|").map((c) => c.trim()).filter(Boolean).join(" · ")
+        : l.replace(/^\s*#{1,6}\s+/, "").replace(/^(\s*)[*•]\s+/, "$1- "),
+    )
+    .join("\n")
+    .replace(/\*\*(.+?)\*\*|__(.+?)__/g, "$1$2")
+    .replace(/(^|[\s(])[*_]([^*_\s][^*_]*?)[*_](?=[\s.,;:!?)]|$)/gm, "$1$2")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}

@@ -1,12 +1,12 @@
 "use client";
 import { motion } from "motion/react";
 import { useEffect, useState, type ReactNode } from "react";
+import { length } from "@/lib/time";
 import type { DayPlan, NowAnswer, Pick, WeekReview } from "@/lib/coach";
 import { useDialog } from "./use-dialog";
 
 const time = (iso: string) => new Date(iso).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
-const length = (m: number) => (m < 60 ? `${m} min` : m % 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m / 60} h`);
-const hours = (m: number) => (m < 60 ? `${m} min` : `${+(m / 60).toFixed(1)} h`);
+const hours = (m: number) => length(Math.round(m / 5) * 5); // totals, to the nearest 5 min
 
 async function load<T>(url: string): Promise<T> {
   const r = await fetch(url);

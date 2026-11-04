@@ -1,6 +1,7 @@
 "use client";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
+import { length } from "@/lib/time";
 
 type TimeOfDay = "morning" | "afternoon" | "evening" | "any";
 type Routine = { id: string; title: string; minutes: number; per_week: number; time_of_day: TimeOfDay };
@@ -8,7 +9,6 @@ type Draft = { title: string; minutes: number; perWeek: number; timeOfDay: TimeO
 
 const LENGTHS = [15, 30, 45, 60, 90, 120, 180, 240];
 const TIMES: Record<TimeOfDay, string> = { morning: "Mornings (8–12)", afternoon: "Afternoons (12–5)", evening: "Evenings (5–10)", any: "Any time (8–10)" };
-const length = (m: number) => (m < 60 ? `${m} min` : `${+(m / 60).toFixed(1)} h`);
 const often = (n: number) => (n === 7 ? "Every day" : `${n}× a week`);
 const blank: Draft = { title: "", minutes: 60, perWeek: 3, timeOfDay: "evening" };
 const field = "w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/50";

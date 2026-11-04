@@ -11,13 +11,11 @@ import { FullScreenAlert } from "./full-screen-alert";
 import { draftFromEvent, draftFromSlot, draftMoved, EventPanel, type Form } from "./event-panel";
 import type { Priority } from "@/lib/priorities";
 import type { Severity } from "@/lib/priority";
-import { AlertStageSettings, NotifySettings } from "./notify-settings";
+import { Settings } from "./settings";
 import { PrioritiesPanel, type PriorityAction } from "./priorities-panel";
-import { SheetSync } from "./sheet-sync";
-import { ThemeToggle } from "./theme-toggle";
 import { Review, TodayCard, WhatNow } from "./coach";
 import { QuickAdd } from "./quick-add";
-import { PlanModeSetting, Suggestions, type PlanMode } from "./suggestions";
+import { Suggestions, type PlanMode } from "./suggestions";
 import { TodoDialog } from "./todo-dialog";
 import { TodoList } from "./todo-list";
 import { Agenda } from "./views/agenda";
@@ -151,6 +149,10 @@ export function CalendarApp({
   const [nowOpen, setNowOpen] = useState(false); // "What now?"
   const [review, setReview] = useState(false); // the week in review
   const [quick, setQuick] = useState(false); // "+ New": add by typing or saying one line
+  const [settings, setSettings] = useState(false);
+  // The latest saved settings, so the Settings window shows them when it's opened again.
+  const [stagesNow, setStagesNow] = useState(stages);
+  const [planModeNow, setPlanModeNow] = useState(planMode);
   // Focus moves into the menu when it opens and back to ☰ when it closes.
   useEffect(() => {
     if (menu) menuClose.current?.focus();
@@ -401,7 +403,7 @@ export function CalendarApp({
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (panel || showAssistant || menu || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (panel || showAssistant || menu || settings || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.target instanceof HTMLElement && e.target.closest("input, textarea, select, [contenteditable]")) return;
       if (KEYS[e.key]) changeView(KEYS[e.key]);
       else if (e.key === "t") goToday();
@@ -473,7 +475,7 @@ export function CalendarApp({
               ref={menuButton}
               type="button"
               onClick={() => setMenu(true)}
-              aria-label="Open menu: calendars, to-do, Google Sheet, settings"
+              aria-label="Open menu: calendars, to-do, categories"
               aria-expanded={menu}
               aria-controls="menu"
               title="Menu (\)"
@@ -487,7 +489,18 @@ export function CalendarApp({
           </div>
           <div className="flex items-center gap-2">
             <span className="hidden text-sm text-muted sm:inline">{name}</span>
-            <ThemeToggle />
+            <button
+              type="button"
+              onClick={() => setSettings(true)}
+              aria-label="Settings"
+              title="Settings"
+              className="grid size-10 place-items-center rounded-full border border-line bg-surface hover:border-ink/40"
+            >
+              <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" />
+              </svg>
+            </button>
             <form action={signOutNow}>
               <button type="submit" className="rounded-full border border-line px-4 py-2 text-sm hover:border-ink/40">
                 Sign out
@@ -573,8 +586,6 @@ export function CalendarApp({
             onDragStart={dragTodo}
           />
 
-          <h2 className="mt-6 font-mono text-xs uppercase tracking-[0.2em] text-muted">Planning mode</h2>
-          <PlanModeSetting initial={planMode} onChange={() => setGen((g) => g + 1)} />
           <button
             type="button"
             onClick={() => {
@@ -585,9 +596,6 @@ export function CalendarApp({
           >
             Your week in review
           </button>
-
-          <h2 className="mt-6 font-mono text-xs uppercase tracking-[0.2em] text-muted">Google Sheet</h2>
-          <SheetSync now={now} onCalendarChange={() => setGen((g) => g + 1)} />
 
           <h2 className="mt-6 font-mono text-xs uppercase tracking-[0.2em] text-muted">Categories</h2>
           <div role="group" aria-label="Filter by category" className="mt-3 flex flex-wrap gap-2">
@@ -620,21 +628,13 @@ export function CalendarApp({
               "Pick colours to filter."
             )}
           </p>
-
-          <h2 className="mt-6 font-mono text-xs uppercase tracking-[0.2em] text-muted">Notifications</h2>
-          <NotifySettings />
-          <AlertStageSettings initial={stages} />
-
-          <p className="mt-6 text-xs leading-relaxed text-muted">
-            Keys: <kbd>\</kbd> menu · <kbd>N</kbd> new ·<kbd>K</kbd> assistant · <kbd>P</kbd> priorities · <kbd>D</kbd> <kbd>W</kbd> <kbd>M</kbd> <kbd>A</kbd> views · <kbd>T</kbd> today · <kbd>←</kbd> <kbd>→</kbd> move · <kbd>/</kbd> search
-          </p>
         </motion.aside>
 
         {/* Calendar 70%, priorities 30% on wide screens; on narrower ones the priorities follow below. */}
         <main className="grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(0,7fr)_minmax(0,3fr)]">
           <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1">
+            <div className="flex flex-wrap items-center gap-1 *:whitespace-nowrap">
               <motion.button
                 type="button"
                 onClick={() => setQuick(true)}
@@ -809,6 +809,21 @@ export function CalendarApp({
       <AnimatePresence>
         {nowOpen && <WhatNow key="now" onClose={() => setNowOpen(false)} onCalendarChange={() => setGen((g) => g + 1)} />}
         {review && <Review key="review" onClose={() => setReview(false)} />}
+        {settings && (
+          <Settings
+            key="settings"
+            onClose={() => setSettings(false)}
+            stages={stagesNow}
+            onStages={setStagesNow}
+            planMode={planModeNow}
+            onPlanMode={(m) => {
+              setPlanModeNow(m);
+              setGen((g) => g + 1);
+            }}
+            now={now}
+            onCalendarChange={() => setGen((g) => g + 1)}
+          />
+        )}
         {quick && writable && (
           <QuickAdd
             key="quick"

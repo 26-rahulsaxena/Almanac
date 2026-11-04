@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { auth } from "@/auth";
-import { run, system, tools } from "@/lib/assistant";
+import { plainText, run, system, tools } from "@/lib/assistant";
 import { ReauthError } from "@/lib/google";
 import { me } from "@/lib/planner";
 import { InvalidInput } from "@/lib/validate";
@@ -148,8 +148,7 @@ export async function POST(req: Request) {
     const history = turns.slice(turns.findIndex((t) => t.role === "user")).map((t) => ({ role: t.role, text: t.text }));
     const sys = system(session?.user?.name ?? "the user", u, now);
     const reply = await (claude ? askClaude : askOpenAiStyle)(sys, history, act);
-    // The chat shows plain text, so drop **bold** marks some models add anyway.
-    const text = reply === null ? "That took too many steps. Try asking in smaller parts." : reply.replace(/\*\*(.+?)\*\*/g, "$1").trim() || "Done.";
+    const text = reply === null ? "That took too many steps. Try asking in smaller parts." : plainText(reply) || "Done.";
     return Response.json({ reply: text, changed });
   } catch (err) {
     if (err instanceof ReauthError) return fail("reauth", 401);

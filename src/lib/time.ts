@@ -53,7 +53,9 @@ export function myReply(e: { attendees?: { self?: boolean; responseStatus?: stri
   return { className: "", note: "", dashed: false };
 }
 
-export const formatTime =(d: Date) => d.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
+// A length of time in words: "45 min", "2 h", "1 h 30 min".
+export const length = (m: number) => (m < 60 ? `${m} min` : m % 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m / 60} h`);
+export const formatTime = (d: Date) => d.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
 
 // True if the event covers any part of that local day (handles multi-day and past-midnight events).
 export function overlapsDay(e: Timed, day: Date) {

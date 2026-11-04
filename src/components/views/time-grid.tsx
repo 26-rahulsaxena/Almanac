@@ -58,6 +58,11 @@ type Props = {
 
 const minutesInto = (d: Date) => d.getHours() * 60 + d.getMinutes();
 const snap = (m: number) => Math.round(m / 15) * 15;
+// "2:00 pm – 6:00 pm", "5:00 pm – midnight", or "all day" for an empty day.
+const freeSpan = (s: Interval) => {
+  const end = minutesInto(s.end) === 0 ? "midnight" : formatTime(s.end);
+  return minutesInto(s.start) === 0 && end === "midnight" ? "all day" : `${minutesInto(s.start) === 0 ? "midnight" : formatTime(s.start)} – ${end}`;
+};
 const at = (day: Date, minutes: number) => {
   const d = new Date(day);
   d.setMinutes(minutes);
@@ -241,12 +246,12 @@ export function TimeGrid({ days, events, color, severityOf, now, onPickDay, onOp
                     initial={{ opacity: 0, y: -4 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.9 }}
-                    className="block w-full truncate rounded px-1.5 py-0.5 text-left text-[11px] font-medium hover:brightness-95"
+                    className="line-clamp-2 w-full hyphens-auto break-words rounded px-1.5 py-0.5 text-left text-[11px] font-medium leading-tight hover:brightness-95"
                     style={{ background: `color-mix(in srgb, ${color(e)} 28%, var(--surface))` }}
                     title={e.title}
                   >
                     <Flag severity={severityOf(e)} />
-                    {e.title}
+                    {e.title.replaceAll("/", "/​") /* may wrap after a slash: "Diwali/Deepavali" */}
                   </motion.button>
                 ))}
             </AnimatePresence>
@@ -352,12 +357,12 @@ function DayColumn({ day, index, colRef, events, color, severityOf, now, onOpen,
               const offset = e.detail === 0 ? 0 : e.clientY - e.currentTarget.getBoundingClientRect().top;
               onBook(...pickTime(s, offset));
             }}
-            aria-label={`Book free time, ${formatTime(s.start)} to ${formatTime(s.end)}`}
+            aria-label={`Book free time, ${freeSpan(s)}`}
             className="group absolute inset-x-1 rounded-lg border border-dashed border-transparent text-left transition-colors duration-200 hover:border-ink/25 hover:bg-[color-mix(in_srgb,var(--cat-2)_8%,transparent)] focus-visible:border-ink/40"
             style={{ top: y(s.start) + 1, height: y(s.end) - y(s.start) - 2 }}
           >
             <span className="pointer-events-none absolute left-2 top-1 translate-y-1 text-[11px] text-muted opacity-0 transition duration-200 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:opacity-100">
-              + Book · free {formatTime(s.start)} – {formatTime(s.end)}
+              + Book · free {freeSpan(s)}
             </span>
           </button>
         ))}
@@ -407,21 +412,24 @@ function DayColumn({ day, index, colRef, events, color, severityOf, now, onOpen,
               }}
               title={`${e.title} · ${formatTime(s)} – ${formatTime(en)}${e.busy ? "" : " · shown as free"}${reply.note}${movable ? " · drag to move, drag the bottom edge to change the length" : ""}`}
             >
-              <p className="truncate font-medium">
-                <Flag severity={sev} />
-                {e.meetLink && (
-                  <span className="mr-1" aria-label="has video call">
-                    ▶
-                  </span>
-                )}
-                {e.title}
-                {e.recurringEventId && <span className="ml-1 text-muted" aria-label="repeats">↻</span>}
-              </p>
-              {h > 34 && (
-                <p className="truncate text-muted">
-                  {formatTime(s)} – {formatTime(en)}
+              {/* Title, then time, wrapped over as many lines (about 15px each) as the block has room for. */}
+              <div className="hyphens-auto break-words" style={{ display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: Math.max(1, Math.floor((h - 4) / 15)), overflow: "hidden" }}>
+                <p className="font-medium">
+                  <Flag severity={sev} />
+                  {e.meetLink && (
+                    <span className="mr-1" aria-label="has video call">
+                      ▶
+                    </span>
+                  )}
+                  {e.title}
+                  {e.recurringEventId && <span className="ml-1 text-muted" aria-label="repeats">↻</span>}
                 </p>
-              )}
+                {h > 34 && (
+                  <p className="text-muted">
+                    {formatTime(s)} – {formatTime(en)}
+                  </p>
+                )}
+              </div>
               {movable && (
                 <span
                   aria-hidden
