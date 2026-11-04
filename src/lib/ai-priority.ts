@@ -1,6 +1,6 @@
 // AI priority ratings: the AI reads the next 5 days as one list and rates each item, so it can weigh what the
 // rules can't (a presentation in an hour against an exam tomorrow, a prep block against what it prepares for).
-// Saved per user and re-rated when the list changes or gets old, at most every few minutes. Anything it didn't
+// Saved per user and re-rated when the list changes or gets old, at most once a minute. Anything it didn't
 // rate, or when it's unavailable, keeps the rule-based suggestion. Your own choice always wins over both.
 // Sent to the AI: titles, times, guest counts and calendar names (never notes or email addresses).
 
@@ -12,7 +12,7 @@ import { SEVERITIES, type Severity } from "./priority";
 export type RateItem = { key: string; title: string; due: string; end: string | null; allDay: boolean; deadline: boolean; guests: number; calendar?: string };
 export type Rating = { key: string; due: string; severity: Severity; reason: string };
 
-const MIN_GAP_MS = 5 * 60_000; // never asks more often than this (also the wait after a failure)
+const MIN_GAP_MS = 60_000; // never asks more often than this (also the wait after a failure)
 const STALE_MS = 2 * 60 * 60_000; // re-rates anyway after this, as things get closer
 const MAX_ITEMS = 40;
 
@@ -75,6 +75,9 @@ export async function aiRatings(userId: string, tz: string, all: RateItem[], now
     let next = signature;
     try {
       ratings = parseRatings(await askJson(ratingPrompt(now, tz), ratingList(items, tz), 20_000), items);
+      // Now and then the answer stops partway through a long list; ask once more for just the ones it left out.
+      const missing = items.filter((i) => !ratings.some((r) => r.key === i.key));
+      if (missing.length) ratings = ratings.concat(parseRatings(await askJson(ratingPrompt(now, tz), ratingList(missing, tz), 20_000), missing));
     } catch (err) {
       console.error("AI priority ratings:", err);
       next = row?.signature ?? ""; // keep the old ratings; try again after MIN_GAP_MS
