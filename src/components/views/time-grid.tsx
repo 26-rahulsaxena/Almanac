@@ -209,7 +209,7 @@ export function TimeGrid({ days, events, color, severityOf, now, onPickDay, onOp
   }, [todoId]);
 
   return (
-    <div className={`overflow-hidden rounded-2xl border border-line bg-surface ${drag ? "cursor-grabbing select-none" : ""}`}>
+    <div className={`overflow-hidden rounded-2xl border border-line bg-surface lg:flex lg:h-full lg:flex-col ${drag ? "cursor-grabbing select-none" : ""}`}>
       <div className="grid border-b border-line" style={{ gridTemplateColumns: cols }}>
         <div />
         {days.map((d) => (
@@ -259,7 +259,7 @@ export function TimeGrid({ days, events, color, severityOf, now, onPickDay, onOp
         ))}
       </div>
 
-      <div ref={scrollOnce} className="max-h-[max(24rem,calc(100dvh-17rem))] overflow-y-auto">
+      <div ref={scrollOnce} className="max-h-[max(24rem,calc(100dvh-17rem))] overflow-y-auto lg:max-h-none lg:min-h-0 lg:flex-1">
         <div className="grid" style={{ gridTemplateColumns: cols, height: 24 * HOUR }}>
           <div className="relative">
             {Array.from({ length: 23 }, (_, i) => i + 1).map((h) => (

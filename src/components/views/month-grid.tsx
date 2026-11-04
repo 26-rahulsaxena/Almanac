@@ -18,7 +18,7 @@ type Props = {
 export function MonthGrid({ days, month, events, color, severityOf, now, onPickDay }: Props) {
   const today = +startOfDay(now);
   return (
-    <div className="overflow-hidden rounded-2xl border border-line bg-surface">
+    <div className="overflow-hidden rounded-2xl border border-line bg-surface lg:flex lg:h-full lg:flex-col lg:overflow-y-auto">
       <div className="grid grid-cols-7 border-b border-line">
         {days.slice(0, 7).map((d) => (
           <span key={+d} className="py-2 text-center font-mono text-[10px] uppercase tracking-widest text-muted">
@@ -26,7 +26,7 @@ export function MonthGrid({ days, month, events, color, severityOf, now, onPickD
           </span>
         ))}
       </div>
-      <div className="grid grid-cols-7">
+      <div className="grid grid-cols-7 lg:flex-1 lg:auto-rows-fr">
         {days.map((d, i) => {
           const dayEvents = events.filter((e) => overlapsDay(e, d));
           const from = atHour(d, FREE_FROM_HOUR);

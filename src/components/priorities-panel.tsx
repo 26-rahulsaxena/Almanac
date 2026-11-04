@@ -47,7 +47,7 @@ export function PrioritiesPanel({ items, onAction }: Props) {
       id="priorities"
       aria-labelledby="pri-title"
       tabIndex={-1}
-      className="flex flex-col rounded-2xl border border-line bg-surface focus:outline-none lg:sticky lg:top-[4.75rem] lg:max-h-[calc(100dvh-6rem)]"
+      className="flex flex-col rounded-2xl border border-line bg-surface focus:outline-none lg:min-h-[18rem] lg:flex-1"
     >
         <div className="border-b border-line px-4 pb-3 pt-4">
           <div>

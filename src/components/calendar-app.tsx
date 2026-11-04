@@ -89,6 +89,10 @@ function showPriorities() {
 }
 
 // Dates depend on the viewer's clock and time zone, so the calendar only renders in the browser.
+const SPLIT_DEFAULT = 70;
+const SPLIT_MIN = 40;
+const SPLIT_MAX = 80;
+
 const useMounted = () => useSyncExternalStore(() => () => {}, () => true, () => false);
 
 const slide = {
@@ -119,6 +123,23 @@ export function CalendarApp({
     } catch {}
     return typeof window !== "undefined" && window.innerWidth < 640 ? "day" : "week";
   });
+  // The calendar's share of the width on wide screens (%), set by dragging the divider; saved in this browser.
+  const mainRef = useRef<HTMLElement>(null);
+  const [split, setSplit] = useState(() => {
+    try {
+      const v = Number(localStorage.split);
+      if (v >= SPLIT_MIN && v <= SPLIT_MAX) return v;
+    } catch {}
+    return SPLIT_DEFAULT;
+  });
+  const shownSplit = mounted ? split : SPLIT_DEFAULT; // the server can't know the saved one
+  function saveSplit(v: number) {
+    const next = Math.round(Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, v)));
+    setSplit(next);
+    try {
+      localStorage.split = next;
+    } catch {}
+  }
   const [anchor, setAnchor] = useState(() => startOfDay(new Date()));
   const [dir, setDir] = useState(0);
   // Loaded ranges, kept while you browse. gen bumps when you come back to the tab, to refetch in the background.
@@ -630,9 +651,14 @@ export function CalendarApp({
           </p>
         </motion.aside>
 
-        {/* Calendar 70%, priorities 30% on wide screens; on narrower ones the priorities follow below. */}
-        <main className="grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(0,7fr)_minmax(0,3fr)]">
-          <div className="min-w-0">
+        {/* Wide screens: calendar and side column fill the screen's height (6.25rem = header + padding), split
+            where you drag the divider (70/30 to start). Narrower: the side column follows below. */}
+        <main
+          ref={mainRef}
+          className="grid min-w-0 items-start gap-4 lg:h-[calc(100dvh-6.25rem)] lg:grid-cols-[minmax(0,var(--l))_auto_minmax(0,var(--r))] lg:items-stretch lg:gap-0"
+          style={{ "--l": `${shownSplit}fr`, "--r": `${100 - shownSplit}fr` } as React.CSSProperties}
+        >
+          <div className="flex min-w-0 flex-col lg:min-h-0">
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex flex-wrap items-center gap-1 *:whitespace-nowrap">
               <motion.button
@@ -710,7 +736,7 @@ export function CalendarApp({
             error && <Notice text={error} onClose={() => setError(null)} />
           )}
 
-          <div className="relative mt-4">
+          <div className="relative mt-4 lg:min-h-0 lg:flex-1">
             {mounted && !searching && !entry && (
               <motion.div
                 className="absolute inset-x-4 -top-2 z-10 h-0.5 origin-left rounded-full bg-accent"
@@ -721,14 +747,14 @@ export function CalendarApp({
               />
             )}
             {!mounted ? null : searching ? (
-              <section aria-live="polite">
+              <section aria-live="polite" className="lg:h-full lg:overflow-y-auto">
                 <p className="mb-4 text-sm text-muted">
                   {found ? `${found.length} result${found.length === 1 ? "" : "s"} for “${q}” in the past and next year` : `Searching for “${q}”…`}
                 </p>
                 {found && <Agenda days={foundDays} events={found} color={color} severityOf={severityOf} now={now} onOpen={openEvent} showFree={false} />}
               </section>
             ) : (
-              <div className="overflow-hidden">
+              <div className="overflow-hidden lg:h-full">
                 <AnimatePresence mode="popLayout" custom={dir} initial={false}>
                   <motion.div
                     key={`${view}:${key}`}
@@ -738,6 +764,7 @@ export function CalendarApp({
                     animate="center"
                     exit="exit"
                     transition={{ duration: 0.35, ease }}
+                    className="lg:h-full lg:overflow-y-auto"
                   >
                     {view === "month" ? (
                       <MonthGrid days={days} month={anchor.getMonth()} events={visible} color={color} severityOf={severityOf} now={now} onPickDay={openDay} />
@@ -765,7 +792,34 @@ export function CalendarApp({
             )}
           </div>
           </div>
-          <div className="min-w-0 space-y-4">
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Drag to resize the calendar and the side column. Double-click to reset."
+            aria-valuemin={SPLIT_MIN}
+            aria-valuemax={SPLIT_MAX}
+            aria-valuenow={shownSplit}
+            tabIndex={0}
+            title="Drag to resize · double-click to reset"
+            onPointerDown={(e) => e.currentTarget.setPointerCapture(e.pointerId)}
+            onPointerMove={(e) => {
+              const rect = mainRef.current?.getBoundingClientRect();
+              if (rect && e.currentTarget.hasPointerCapture(e.pointerId)) saveSplit(((e.clientX - rect.left) / rect.width) * 100);
+            }}
+            onDoubleClick={() => saveSplit(SPLIT_DEFAULT)}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+                e.preventDefault();
+                saveSplit(split + (e.key === "ArrowLeft" ? -2 : 2));
+              }
+            }}
+            className="group hidden w-4 cursor-col-resize touch-none justify-center rounded-full focus-visible:outline-2 focus-visible:outline-accent lg:flex"
+          >
+            <span className="relative w-px bg-line transition-colors group-hover:bg-accent group-active:bg-accent">
+              <span className="absolute top-1/2 left-1/2 h-10 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-line transition-colors group-hover:bg-accent group-active:bg-accent" />
+            </span>
+          </div>
+          <div className="min-w-0 space-y-4 lg:flex lg:min-h-0 lg:flex-col lg:gap-4 lg:space-y-0 lg:overflow-y-auto">
             <TodayCard version={gen} onCalendarChange={() => setGen((g) => g + 1)} />
             <Suggestions version={gen} onCalendarChange={() => setGen((g) => g + 1)} />
             <PrioritiesPanel items={priorities} onAction={priorityAction} />
