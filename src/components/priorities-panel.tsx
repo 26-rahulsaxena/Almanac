@@ -51,10 +51,10 @@ export function PrioritiesPanel({ items, onAction }: Props) {
     >
         <div className="border-b border-line px-4 pb-3 pt-4">
           <div>
-            <h2 id="pri-title" className="font-serif text-2xl">
+            <h2 id="pri-title" className="font-serif text-xl">
               Your priorities
             </h2>
-            <p className="mt-0.5 text-sm text-muted">
+            <p className="mt-0.5 text-xs text-muted">
               {items === null
                 ? "Reading your calendar…"
                 : open.length
@@ -81,7 +81,7 @@ export function PrioritiesPanel({ items, onAction }: Props) {
           </AnimatePresence>
           {lowCount > 0 && (
             <li>
-              <button type="button" onClick={() => setShowLow(!showLow)} aria-expanded={showLow} className="w-full rounded-2xl border border-dashed border-line py-2.5 text-sm text-muted hover:text-ink">
+              <button type="button" onClick={() => setShowLow(!showLow)} aria-expanded={showLow} className="w-full rounded-2xl border border-dashed border-line py-2 text-xs text-muted hover:text-ink">
                 {showLow ? "Hide low-priority items" : `Show ${lowCount} low-priority item${lowCount === 1 ? "" : "s"}`}
               </button>
             </li>
@@ -127,20 +127,20 @@ function Card({ p, onAction }: { p: Priority; onAction: (a: PriorityAction) => P
             ? "Done ✓"
             : null;
 
-  const btn = "rounded-full px-3 py-1.5 text-sm transition-colors disabled:opacity-50";
+  const btn = "rounded-full px-2.5 py-1 text-xs transition-colors disabled:opacity-50";
   return (
     <div className="relative overflow-hidden rounded-2xl border border-line bg-paper pl-3" style={{ boxShadow: `inset 4px 0 0 ${c}` }}>
       <div className="p-3 pl-2">
         <div className="flex flex-wrap items-center gap-2">
           <SeverityChip severity={p.severity} />
-          <h3 className={`min-w-0 flex-1 font-medium ${p.status === "done" ? "line-through" : ""}`}>{p.title}</h3>
+          <h3 className={`min-w-0 flex-1 text-sm font-medium leading-tight ${p.status === "done" ? "line-through" : ""}`}>{p.title}</h3>
         </div>
-        <p className="mt-1 text-sm text-muted">
+        <p className="mt-1 text-xs text-muted">
           {p.category === "deadline" ? "Due" : "Starts"}{" "}
           {p.allDay ? `${new Date(p.due).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })} · all day` : when(p.due)} · {p.reason}
         </p>
         {status && (
-          <p className="mt-1 text-sm font-medium" style={{ color: p.status === "stuck" ? "var(--sev-critical)" : undefined }}>
+          <p className="mt-1 text-xs font-medium" style={{ color: p.status === "stuck" ? "var(--sev-critical)" : undefined }}>
             {status}
           </p>
         )}
@@ -209,7 +209,7 @@ function Card({ p, onAction }: { p: Priority; onAction: (a: PriorityAction) => P
                   transition={{ duration: 0.25, ease }}
                   className="overflow-hidden"
                 >
-                  <div className="mt-3 rounded-xl bg-ink/[0.04] p-3 text-sm">
+                  <div className="mt-3 rounded-xl bg-ink/[0.04] p-3 text-xs">
                     {mode === "doing" && (
                       <>
                         <p>How long will it take? I&apos;ll check back then.</p>
@@ -268,7 +268,7 @@ function Card({ p, onAction }: { p: Priority; onAction: (a: PriorityAction) => P
           </>
         )}
         {error && (
-          <p role="alert" className="mt-2 text-sm" style={{ color: "var(--sev-critical)" }}>
+          <p role="alert" className="mt-2 text-xs" style={{ color: "var(--sev-critical)" }}>
             {error}
           </p>
         )}
