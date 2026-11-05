@@ -1,10 +1,11 @@
 import { auth } from "@/auth";
 import { sql } from "@/lib/db";
-import { isPushEndpoint, sendPush } from "@/lib/push";
+import { appOrigin, isPushEndpoint, sendPush } from "@/lib/push";
 
 const KEY = /^[A-Za-z0-9_-]{1,200}={0,2}$/;
 
-// POST /api/push {endpoint, keys:{p256dh, auth}} → this device gets notifications.
+// POST /api/push {endpoint, keys:{p256dh, auth}} → this device gets notifications, for whoever is signed in (sent
+// again each time the app opens, so a device follows the account in use and comes back if it was dropped).
 // POST /api/push {test: true} → send a test notification to all your devices.
 // DELETE /api/push {endpoint} → this device stops getting them.
 export async function POST(req: Request) {
@@ -23,8 +24,8 @@ export async function POST(req: Request) {
     return Response.json({ error: "Invalid subscription" }, { status: 400 });
   }
   await sql`
-    insert into push_subscriptions (endpoint, user_id, p256dh, auth) values (${endpoint}, ${userId}, ${p256dh}, ${secret})
-    on conflict (endpoint) do update set user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth`;
+    insert into push_subscriptions (endpoint, user_id, p256dh, auth, origin) values (${endpoint}, ${userId}, ${p256dh}, ${secret}, ${appOrigin()})
+    on conflict (endpoint) do update set user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth, origin = excluded.origin`;
   return Response.json({ ok: true });
 }
 

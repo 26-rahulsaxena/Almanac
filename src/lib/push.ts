@@ -19,10 +19,17 @@ export function isPushEndpoint(endpoint: string) {
   }
 }
 
+// The site this server runs as. Each device is saved with the site it switched notifications on from, and only
+// gets this site's notifications (the live site and a copy on a computer share one database).
+// shortcut: the copy on a computer is assumed to run at localhost:3000; set APP_ORIGIN if it runs elsewhere.
+export const appOrigin = () =>
+  process.env.APP_ORIGIN ??
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "http://localhost:3000");
+
 // Sends to every device the user switched notifications on for. Returns how many devices it reached.
 export async function sendPush(userId: string, payload: PushPayload) {
   const subs = await sql<{ endpoint: string; p256dh: string; auth: string }[]>`
-    select endpoint, p256dh, auth from push_subscriptions where user_id = ${userId}`;
+    select endpoint, p256dh, auth from push_subscriptions where user_id = ${userId} and origin = ${appOrigin()}`;
   const vapidDetails = {
     subject: process.env.VAPID_SUBJECT!,
     publicKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,

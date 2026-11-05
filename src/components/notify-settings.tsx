@@ -12,6 +12,22 @@ const vapidKey = (b64: string) =>
 const post = (method: "POST" | "DELETE", body: object) =>
   fetch("/api/push", { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
+const currentSub = async () => (await navigator.serviceWorker?.getRegistration())?.pushManager.getSubscription();
+
+// On app open: if this browser has notifications on, tell the server again, so it belongs to whoever is signed in
+// now and comes back if the server dropped it. Never switches notifications on by itself.
+export async function syncPush() {
+  const sub = await currentSub().catch(() => null);
+  if (sub && Notification.permission === "granted") await post("POST", sub.toJSON()).catch(() => {});
+}
+
+// On sign out: this device stops getting the account's notifications (it stays switched on in the browser,
+// so it picks up the next account that signs in here).
+export async function forgetDevice() {
+  const sub = await currentSub().catch(() => null);
+  if (sub) await post("DELETE", { endpoint: sub.endpoint }).catch(() => {});
+}
+
 // Switches reminder notifications on or off for this browser / phone.
 export function NotifySettings() {
   const [state, setState] = useState<State>("loading");

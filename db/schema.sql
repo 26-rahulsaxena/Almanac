@@ -179,3 +179,7 @@ alter table priority_ratings enable row level security;
 
 -- While the auto-planner runs for a user (one run at a time); expires by itself in case a run dies.
 alter table users add column if not exists planning_until timestamptz;
+
+-- Which site the device switched notifications on from (the live site or a copy running on a computer). Each
+-- site only notifies its own devices, so the live site never sends to a test copy's. Filled in on the next visit.
+alter table push_subscriptions add column if not exists origin text;

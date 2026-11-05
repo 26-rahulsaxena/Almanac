@@ -8,6 +8,7 @@ import type { DeleteInput, SaveInput, Scope, SendUpdates } from "@/lib/recurrenc
 import { addDays, atHour, formatTime, parseWhen, startOfDay, startOfMonth, startOfWeek } from "@/lib/time";
 import { Assistant } from "./assistant";
 import { FullScreenAlert } from "./full-screen-alert";
+import { forgetDevice, syncPush } from "./notify-settings";
 import { draftFromEvent, draftFromSlot, draftMoved, EventPanel, type Form } from "./event-panel";
 import type { Priority } from "@/lib/priorities";
 import type { Severity } from "@/lib/priority";
@@ -383,6 +384,7 @@ export function CalendarApp({
       if (e.data === "show-review") setReview(true);
     };
     navigator.serviceWorker?.addEventListener("message", onMessage);
+    syncPush();
     // Opened from the Sunday notification (?review=1): show the week in review.
     const t = setTimeout(() => new URLSearchParams(location.search).has("review") && setReview(true));
     return () => {
@@ -524,7 +526,7 @@ export function CalendarApp({
               </svg>
             </button>
             <ThemeToggle />
-            <form action={signOutNow}>
+            <form action={async () => { await forgetDevice(); await signOutNow(); }}>
               <button type="submit" className="rounded-full border border-line px-4 py-2 text-sm hover:border-ink/40">
                 Sign out
               </button>
