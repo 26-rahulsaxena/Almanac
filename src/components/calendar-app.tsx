@@ -31,7 +31,7 @@ import { TimeGrid, type TodoDrag } from "./views/time-grid";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 type View = "day" | "week" | "month" | "agenda";
-const VIEWS: View[] = ["day", "week", "month", "agenda"];
+const VIEWS: View[] = ["agenda", "day", "week", "month"];
 const LENGTH: Record<View, number> = { day: 1, week: 7, month: 42, agenda: 14 };
 const KEYS: Record<string, View> = { d: "day", w: "week", m: "month", a: "agenda" };
 
@@ -175,10 +175,10 @@ export function CalendarApp({
   const menuButton = useRef<HTMLButtonElement>(null);
   const menuClose = useRef<HTMLButtonElement>(null);
   const menuWasOpen = useRef(false);
-  const [todos, setTodos] = useState(false); // the "+ To-do" pop-up
+  const [todos, setTodos] = useState(false); // the to-do pop-up (from the "+" menu)
   const [nowOpen, setNowOpen] = useState(false); // "What now?"
   const [review, setReview] = useState(false); // the week in review
-  const [quick, setQuick] = useState(false); // "+ New": add by typing or saying one line
+  const [quick, setQuick] = useState(false); // "New": add by typing or saying one line
   const [away, setAway] = useState<AwayKind | null>(null); // the out of office / focus time pop-up
   const [settings, setSettings] = useState(false);
   // The latest saved settings, so the Settings window shows them when it's opened again.
@@ -675,23 +675,7 @@ export function CalendarApp({
           <div className="flex min-w-0 flex-col lg:min-h-0">
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex flex-wrap items-center gap-1 *:whitespace-nowrap">
-              <motion.button
-                type="button"
-                onClick={() => setQuick(true)}
-                disabled={!writable}
-                whileTap={{ scale: 0.95 }}
-                className="mr-1 rounded-full bg-ink px-4 py-1.5 text-sm font-medium text-paper disabled:opacity-40"
-              >
-                + New
-              </motion.button>
-              <motion.button
-                type="button"
-                onClick={() => setTodos(true)}
-                whileTap={{ scale: 0.95 }}
-                className="mr-1 rounded-full border border-line px-3 py-1.5 text-sm hover:border-ink/40"
-              >
-                + To-do
-              </motion.button>
+              {/* New, To-do and the rest live in the round "+" above Ask Almanac. */}
               <button type="button" onClick={goToday} className="rounded-full border border-line px-4 py-1.5 text-sm hover:border-ink/40">
                 Today
               </button>
