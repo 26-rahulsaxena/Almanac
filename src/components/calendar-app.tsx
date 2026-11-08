@@ -1,7 +1,8 @@
 "use client";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { setHiddenCalendars, signInWithGoogle, type AlertStages } from "@/app/actions";
+import { setHiddenCalendars, type AlertStages } from "@/app/actions";
+import { GoogleSignIn } from "./google-sign-in";
 import type { Cal, Ev } from "@/lib/calendar";
 import { CATEGORIES, categoryHex } from "@/lib/categories";
 import type { DeleteInput, SaveInput, Scope, SendUpdates } from "@/lib/recurrence";
@@ -748,11 +749,11 @@ export function CalendarApp({
 
           {error === "reauth" ? (
             <Notice text="Google needs you to sign in again before it shares your calendar.">
-              <form action={signInWithGoogle}>
+              <GoogleSignIn>
                 <button type="submit" className="mt-3 rounded-full bg-ink px-4 py-2 text-sm text-paper">
                   Sign in again
                 </button>
-              </form>
+              </GoogleSignIn>
             </Notice>
           ) : (
             error && <Notice text={error} onClose={() => setError(null)} />

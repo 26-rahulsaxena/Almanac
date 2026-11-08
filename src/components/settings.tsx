@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { signOutNow, type AlertStages } from "@/app/actions";
+import { isAndroidApp } from "@/lib/android-app";
 import { Modal } from "./coach";
 import { AlertStageSettings, forgetDevice, NotifySettings } from "./notify-settings";
 import { SheetSync } from "./sheet-sync";
@@ -103,6 +104,11 @@ export function Settings(props: {
           <>
             <h3 className={h3}>This device</h3>
             <NotifySettings />
+            {!isAndroidApp() && (
+              <p className="mt-3 text-sm text-muted">
+                On Android? <a href="/download" className="text-ink underline">Get the Almanac app</a> (test version).
+              </p>
+            )}
             <AlertStageSettings initial={props.stages} onChange={props.onStages} />
           </>
         )}

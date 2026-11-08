@@ -1,7 +1,7 @@
 "use client";
 import { motion } from "motion/react";
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { signInWithGoogle } from "@/app/actions";
+import { GoogleSignIn } from "./google-sign-in";
 import { ThemeToggle } from "./theme-toggle";
 
 const ease = [0.22, 1, 0.36, 1] as const;
@@ -10,6 +10,7 @@ const errors: Record<string, string> = {
   AccessDenied: "Google refused the sign-in. Make sure this Google account is added as a test user in Google Cloud.",
   Configuration: "The app's Google keys or database aren't set up yet. Check the .env.local file.",
   Reauth: "Google needs you to sign in again before it shares your calendar.",
+  AppSignIn: "Sign-in didn't reach the app (it may have taken over 2 minutes). Tap Continue with Google again.",
 };
 
 // Today's date from the visitor's own clock; the server runs on UTC, which is still yesterday in India until 5:30 am.
@@ -53,7 +54,7 @@ export function Landing({ error }: { error?: string }) {
             <p className="mt-6 max-w-md text-lg text-muted">
               Every Google calendar you have, merged. Free time made obvious. Reminders that refuse to be ignored.
             </p>
-            <form action={signInWithGoogle} className="mt-8">
+            <GoogleSignIn className="mt-8">
               <motion.button
                 type="submit"
                 whileHover={{ y: -2 }}
@@ -63,7 +64,7 @@ export function Landing({ error }: { error?: string }) {
                 <GoogleMark />
                 Continue with Google
               </motion.button>
-            </form>
+            </GoogleSignIn>
             <p className="mt-4 text-sm text-muted">Asks only to manage your calendar and read the Google Sheet you connect. Never your email.</p>
             {error && (
               <p role="alert" className="mt-6 max-w-md rounded-xl border border-accent/40 bg-accent/10 px-4 py-3 text-sm">

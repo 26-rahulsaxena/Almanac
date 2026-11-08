@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { setAlertStages, type AlertStages } from "@/app/actions";
+import { isAndroidApp } from "@/lib/android-app";
 import { SNOOZE_CHOICES } from "@/lib/reminders";
 
 // Whether this device gets reminders when Almanac is closed:
@@ -94,7 +95,12 @@ export const PUSH_HELP: Record<Exclude<PushState, "on">, string> = {
   off: "You won't get reminders on this device when Almanac is closed.",
   denied: "Notifications are blocked for Almanac in this browser. Allow them in the site settings (the icon left of the address bar), then reload.",
   "ios-install": "To get reminders on iPhone, add Almanac to your Home Screen: tap Share, then “Add to Home Screen”, and open it from there.",
-  unsupported: "This browser can't show reminders. Use Chrome, Edge or Safari.",
+  get unsupported() {
+    // The Android app's own reminders come in its next stage; until then Chrome on the phone keeps getting them.
+    return isAndroidApp()
+      ? "Reminders inside the Android app are coming in the next update. Until then, keep them on in Chrome on this phone."
+      : "This browser can't show reminders. Use Chrome, Edge or Safari.";
+  },
 };
 
 // Switches reminder notifications on or off for this browser / phone, and lists the other devices that get them.

@@ -191,3 +191,14 @@ alter table users add column if not exists profile jsonb;
 -- A name for each device ("Chrome on Windows") and when the app was last opened on it, for Settings > Alerts.
 alter table push_subscriptions add column if not exists device text;
 alter table push_subscriptions add column if not exists seen_at timestamptz not null default now();
+
+-- Android app sign-in: Google sign-in happens in the phone's browser, then hands the session to the app through a
+-- one-time code (kept 2 minutes, usable once, only by the app that started it: it must show the secret behind
+-- `challenge`). The session cookie is stored encrypted.
+create table if not exists app_handoffs (
+  code_hash text primary key,
+  challenge text not null,
+  cookies_enc text not null,
+  expires_at timestamptz not null
+);
+alter table app_handoffs enable row level security;
