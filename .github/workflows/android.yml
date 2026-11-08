@@ -67,5 +67,6 @@ jobs:
           git config user.email "rahulshakaya12310@gmail.com"
           git add public/almanac.apk
           git commit -m "Android app build ${{ github.run_number }}"
-          git pull --rebase
-          git push
+          # --autostash: the build leaves generated files changed, which a plain pull refuses to work around.
+          git pull --rebase --autostash || { echo "::error::Couldn't catch up with main before publishing."; exit 1; }
+          git push || { echo "::error::GitHub refused the push. Settings → Actions → General → Workflow permissions must allow read and write."; exit 1; }
