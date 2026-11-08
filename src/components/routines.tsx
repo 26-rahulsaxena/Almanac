@@ -170,11 +170,11 @@ export function Routines({ onCalendarChange }: { onCalendarChange: () => void })
                     onClick={() => setEditing({ id: r.id, d: { title: r.title, minutes: r.minutes, perWeek: r.per_week, timeOfDay: r.time_of_day } })}
                     aria-label={`Edit ${r.title}`}
                     title="Edit"
-                    className="text-muted opacity-60 hover:text-ink group-hover:opacity-100"
+                    className="-m-1 p-1 text-muted hover:text-ink"
                   >
                     ✎
                   </button>
-                  <button type="button" onClick={() => setRemoving(r.id)} aria-label={`Stop ${r.title}`} title="Remove" className="text-muted opacity-60 hover:text-ink group-hover:opacity-100">
+                  <button type="button" onClick={() => setRemoving(r.id)} aria-label={`Stop ${r.title}`} title="Remove" className="-m-1 p-1 text-muted hover:text-ink">
                     ✕
                   </button>
                 </div>

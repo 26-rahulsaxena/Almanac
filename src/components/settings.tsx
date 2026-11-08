@@ -88,8 +88,9 @@ export function Settings(props: {
                 <h3 className={h3}>Account</h3>
                 <p className="mt-1 text-sm">Signing out stops notifications on this device.</p>
               </div>
-              {/* This device stops getting the account's notifications before the session ends. */}
-              <form action={async () => { await forgetDevice(); await signOutNow(); }}>
+              {/* This device stops getting the account's notifications before the session ends; a slow phone or
+                  network never holds up signing out for more than 3 seconds. */}
+              <form action={async () => { await Promise.race([forgetDevice(), new Promise((r) => setTimeout(r, 3000))]); await signOutNow(); }}>
                 <button type="submit" className="shrink-0 rounded-full border border-line px-4 py-1.5 text-sm hover:border-ink/40">
                   Sign out
                 </button>

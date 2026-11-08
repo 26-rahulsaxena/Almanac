@@ -250,7 +250,10 @@ export function EventPanel({ initial, event, calendars, priority, onDeadline, on
             save();
           }}
         >
-          <fieldset disabled={readOnly || saving} className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 pb-5">
+          {/* The scrolling is on a div: browsers don't reliably scroll (or clip) a fieldset, so on phones the fields
+              spilled under the Save row. */}
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          <fieldset disabled={readOnly || saving} className="min-w-0 space-y-5 px-5 pb-5">
             <input
               data-autofocus
               aria-label="Title"
@@ -551,15 +554,16 @@ export function EventPanel({ initial, event, calendars, priority, onDeadline, on
               <textarea id="notes" value={f.description} onChange={(e) => set("description", e.target.value)} maxLength={8000} rows={3} className={field} />
             </div>
           </fieldset>
+          </div>
 
           {error && (
             <p role="alert" className="mx-5 mb-3 rounded-lg bg-accent/10 px-3 py-2 text-sm">
               {error}
             </p>
           )}
-          <div className="flex items-center gap-2 border-t border-line px-5 py-4">
+          <div className="flex items-center gap-2 border-t border-line bg-surface px-5 py-4">
             {event && !readOnly && (
-              <button type="button" onClick={() => setAsk("delete")} className="rounded-full px-4 py-2 text-sm text-accent hover:bg-accent/10">
+              <button type="button" onClick={() => setAsk("delete")} className="rounded-full border border-accent/60 px-4 py-2 text-sm font-medium text-accent hover:bg-accent/10">
                 Delete
               </button>
             )}

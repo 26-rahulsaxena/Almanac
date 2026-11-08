@@ -36,6 +36,7 @@ type View = "day" | "week" | "month" | "agenda";
 const VIEWS: View[] = ["agenda", "day", "week", "month"];
 const LENGTH: Record<View, number> = { day: 1, week: 7, month: 42, agenda: 14 };
 const KEYS: Record<string, View> = { d: "day", w: "week", m: "month", a: "agenda" };
+const TODO_CAL = "almanac:todos"; // marks to-dos shown among the events (never a real Google calendar id)
 
 function rangeOf(view: View, anchor: Date) {
   const start = view === "week" ? startOfWeek(anchor) : view === "month" ? startOfWeek(startOfMonth(anchor)) : startOfDay(anchor);
@@ -409,6 +410,28 @@ export function CalendarApp({
       .catch(() => {});
   }, [gen, showPriorities]);
 
+  // Open to-dos that have no time booked yet, shown as all-day items: on the day they're due, or today when they
+  // have no due date or it has passed. Booked ones are already on the calendar as their own block.
+  const [todoList, setTodoList] = useState<{ id: string; title: string; due_at: string | null; done: boolean; event_id: string | null }[]>([]);
+  useEffect(() => {
+    fetch("/api/todos")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((list) => list && setTodoList(list))
+      .catch(() => {});
+  }, [gen]);
+  const todayKey = +startOfDay(now); // changes once a day, not every minute
+  const todoEvents = useMemo(() => {
+    const today = new Date(todayKey);
+    const ymd = (d: Date) => d.toLocaleDateString("en-CA"); // YYYY-MM-DD, local
+    return todoList
+      .filter((t) => !t.done && !t.event_id)
+      .map((t): Ev => {
+        const due = t.due_at ? startOfDay(new Date(t.due_at)) : today;
+        const day = due > today ? due : today;
+        return { id: t.id, calendarId: TODO_CAL, title: `☐ ${t.title}`, start: ymd(day), end: ymd(addDays(day, 1)), allDay: true, busy: false, isOrganizer: false };
+      });
+  }, [todoList, todayKey]);
+
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
       if (e.data === "show-priorities") showPriorities();
@@ -505,13 +528,13 @@ export function CalendarApp({
   );
   const visible = useMemo(
     () =>
-      (entry?.events ?? [])
+      [...(entry?.events ?? []), ...todoEvents]
         .filter(shown)
         .sort((a, b) => +parseWhen(a.start, a.allDay) - +parseWhen(b.start, b.allDay) || Number(b.allDay) - Number(a.allDay)),
-    [entry, shown],
+    [entry, todoEvents, shown],
   );
   const found = results?.q === q ? results.events.filter(shown) : null;
-  const openEvent = (e: Ev) => setPanel({ form: draftFromEvent(e), event: e });
+  const openEvent = (e: Ev) => (e.calendarId === TODO_CAL ? setTodos(true) : setPanel({ form: draftFromEvent(e), event: e }));
   const foundDays = useMemo(() => {
     const seen = new Map<number, Date>();
     for (const e of found ?? []) {

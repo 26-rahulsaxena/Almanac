@@ -107,12 +107,12 @@ export function TodoList({
     call("GET").then(setTodos, (e: Error) => setError(e.message));
   }, [version]);
 
-  async function change(id: string, method: "POST" | "PATCH" | "DELETE", body: object, calendar = false) {
+  async function change(id: string, method: "POST" | "PATCH" | "DELETE", body: object) {
     setBusy(id);
     setError(null);
     try {
       setTodos(await call(method, body));
-      if (calendar) onCalendarChange();
+      onCalendarChange(); // to-dos show on the calendar, so every change is a calendar change
       return true;
     } catch (e) {
       setError((e as Error).message);
@@ -127,7 +127,7 @@ export function TodoList({
   async function add(e: React.FormEvent) {
     e.preventDefault();
     if (!draft.title.trim()) return;
-    const ok = await change("new", "POST", { title: draft.title, minutes: draft.minutes, due: iso(draft.due), auto: draft.auto, split: draft.split }, draft.auto);
+    const ok = await change("new", "POST", { title: draft.title, minutes: draft.minutes, due: iso(draft.due), auto: draft.auto, split: draft.split });
     if (ok) setDraft(blank);
   }
 
@@ -135,13 +135,12 @@ export function TodoList({
     e.preventDefault();
     if (!editing) return;
     const { id, d } = editing;
-    const t = todos?.find((x) => x.id === id);
-    if (await change(id, "PATCH", { id, title: d.title, minutes: d.minutes, due: iso(d.due), auto: d.auto }, d.auto || !!t?.event_id)) setEditing(null);
+    if (await change(id, "PATCH", { id, title: d.title, minutes: d.minutes, due: iso(d.due), auto: d.auto })) setEditing(null);
   }
 
   async function remove(t: Todo, removeBlock: boolean) {
     setRemoving(null);
-    await change(t.id, "DELETE", { id: t.id, removeBlock }, removeBlock);
+    await change(t.id, "DELETE", { id: t.id, removeBlock });
   }
 
   const soon = (iso: string) => +new Date(iso) - +now < 24 * 3_600_000;
@@ -229,7 +228,7 @@ export function TodoList({
                     aria-checked={t.done}
                     aria-label={`${t.done ? "Not done" : "Done"}: ${t.title}`}
                     disabled={busy === t.id}
-                    onClick={() => change(t.id, "PATCH", { id: t.id, done: !t.done }, !!t.event_id)}
+                    onClick={() => change(t.id, "PATCH", { id: t.id, done: !t.done })}
                     whileTap={{ scale: 0.8 }}
                     className={`mt-0.5 grid size-4 shrink-0 place-items-center rounded-full border-2 text-[9px] text-paper ${t.done ? "border-ink bg-ink" : "border-muted"}`}
                   >
@@ -252,7 +251,7 @@ export function TodoList({
                       ) : t.auto ? (
                         <p className="mt-0.5 text-xs text-muted">Not booked yet: approve the time under “Almanac suggests” (or it books itself in Automatic mode).</p>
                       ) : (
-                        <button type="button" disabled={busy === t.id} onClick={() => change(t.id, "PATCH", { id: t.id, schedule: true }, true)} className={`mt-1 ${small}`}>
+                        <button type="button" disabled={busy === t.id} onClick={() => change(t.id, "PATCH", { id: t.id, schedule: true })} className={`mt-1 ${small}`}>
                           {busy === t.id ? "Finding time…" : "Find time"}
                         </button>
                       ))}
@@ -279,7 +278,7 @@ export function TodoList({
                       onClick={() => setEditing({ id: t.id, d: { title: t.title, due: localInput(t.due_at), minutes: t.minutes, auto: t.auto, split: null } })}
                       aria-label={`Edit ${t.title}`}
                       title="Edit"
-                      className="text-muted opacity-60 hover:text-ink group-hover:opacity-100"
+                      className="-m-1 p-1 text-muted hover:text-ink"
                     >
                       ✎
                     </button>
@@ -289,7 +288,7 @@ export function TodoList({
                     onClick={() => (t.event_id && !t.done ? setRemoving(t.id) : remove(t, false))}
                     aria-label={`Remove ${t.title} from the list`}
                     title="Remove"
-                    className="text-muted opacity-60 hover:text-ink group-hover:opacity-100"
+                    className="-m-1 p-1 text-muted hover:text-ink"
                   >
                     ✕
                   </button>

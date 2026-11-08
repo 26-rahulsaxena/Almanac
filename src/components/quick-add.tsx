@@ -69,7 +69,7 @@ export function QuickAdd({ onClose, onEvent, onForm, onTodoAdded }: { onClose: (
             value={text}
             onChange={(e) => setText(e.target.value)}
             maxLength={300}
-            placeholder="Lunch with Riya Friday 1 pm at the cafe"
+            placeholder="Lunch Friday 1 pm"
             className="w-full rounded-full border border-line bg-paper px-4 py-2 text-sm outline-none focus:border-ink/40"
           />
         </label>

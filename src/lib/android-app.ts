@@ -11,7 +11,11 @@ type AlmanacPlugin = {
   token(): Promise<{ token?: string }>;
   openFullScreenSettings(): Promise<void>;
 };
-export const almanacPlugin = async () => (await import("@capacitor/core")).registerPlugin<AlmanacPlugin>("Almanac");
+export async function almanacPlugin(): Promise<AlmanacPlugin> {
+  const p = (await import("@capacitor/core")).registerPlugin<AlmanacPlugin>("Almanac");
+  // The plugin answers to every name, even "then", so returning it as-is from here would never resolve.
+  return { status: () => p.status(), enable: () => p.enable(), token: () => p.token(), openFullScreenSettings: () => p.openFullScreenSettings() };
+}
 
 const VERIFIER_KEY = "almanacAppVerifier";
 const b64url = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");

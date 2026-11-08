@@ -173,10 +173,11 @@ export function Assistant({ open, onOpenChange, onChanged }: { open: boolean; on
                       ask(text);
                     }
                   }}
-                  rows={1}
+                  rows={2}
                   maxLength={4000}
                   placeholder="e.g. Book 2 hours to study before Friday"
-                  className="max-h-32 w-full resize-none rounded-xl border border-line bg-paper px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
+                  // Grows with what's typed (and with the hint), so nothing is cut off on a narrow phone.
+                  className="field-sizing-content max-h-32 w-full resize-none rounded-xl border border-line bg-paper px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
                 />
               </label>
               {/* Spoken words go into the box and wait for Send, so a misheard "yes" can't approve a booking. */}
