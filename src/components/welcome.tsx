@@ -4,8 +4,9 @@ import { useState } from "react";
 import { saveProfile } from "@/app/actions";
 import { FOCUS, isRole, ROLES, type Profile } from "@/lib/profile";
 import { Modal } from "./coach";
+import { enablePush, PUSH_HELP, usePushState } from "./notify-settings";
 
-const STEPS = 4;
+// The first time there's one more step: getting reminders on this device.
 
 // "About you", one question at a time: role, title, what matters most, anything else. Shown once after the
 // first sign-in (skipping counts as answered) and again from Settings to edit.
@@ -25,8 +26,9 @@ export function Welcome({ initial, first, onDone }: { initial: Profile; first: b
       setBusy(false);
     }
   }
-  // Closing the first-time pop-up counts as "Skip for now"; closing an edit keeps what was saved.
-  const close = () => (first ? finish(true) : onDone(initial));
+  // Closing the first-time pop-up counts as "Skip for now" (on the reminders step the answers are already given, so
+  // they're saved); closing an edit keeps what was saved.
+  const close = () => (first ? finish(step < 4) : onDone(initial));
 
   // "Other": they type their own role, so it waits for Next instead of moving on.
   const [other, setOther] = useState(!!initial.role && !isRole(initial.role));
@@ -46,6 +48,7 @@ export function Welcome({ initial, first, onDone }: { initial: Profile; first: b
   const chip = (on: boolean) =>
     `rounded-full border px-3 py-1.5 text-sm transition ${on ? "border-ink bg-ink text-surface" : "border-line hover:border-ink/40"}`;
   const input = "mt-3 w-full rounded-xl border border-line bg-transparent px-3 py-2 text-sm outline-none focus:border-ink/40";
+  const STEPS = first ? 5 : 4;
   const last = step === STEPS - 1;
 
   return (
@@ -115,6 +118,7 @@ export function Welcome({ initial, first, onDone }: { initial: Profile; first: b
             <span className="mt-1 block text-xs text-muted">The AI reads this when it rates your priorities. Your name and email are never sent.</span>
           </label>
         )}
+        {step === 4 && <AlertsStep />}
       </motion.div>
 
       {error && <p className="mt-2 text-sm text-[var(--cat-1)]">{error}</p>}
@@ -138,5 +142,31 @@ export function Welcome({ initial, first, onDone }: { initial: Profile; first: b
         </button>
       </div>
     </Modal>
+  );
+}
+
+// Last step the first time: switch on reminders for this device, so they arrive when Almanac is closed.
+function AlertsStep() {
+  const state = usePushState();
+  const [error, setError] = useState(false);
+  return (
+    <div>
+      <p className="font-serif text-xl">Get reminders on this device</p>
+      <p className="mt-1 text-sm text-muted">So reminders and alarms reach you even when Almanac is closed. Do the same on your phone.</p>
+      <div className="mt-4">
+        {state === "on" && (
+          <p className="flex items-center gap-2 text-sm">
+            <span className="size-2 rounded-full bg-[var(--cat-2)]" aria-hidden /> Reminders are on for this device
+          </p>
+        )}
+        {state === "off" && (
+          <button type="button" onClick={() => enablePush().catch(() => setError(true))} className="rounded-full bg-ink px-4 py-2 text-sm font-medium text-paper">
+            Turn on reminders
+          </button>
+        )}
+        {state && state !== "on" && state !== "off" && <p className="text-sm">{PUSH_HELP[state]}</p>}
+        {error && <p className="mt-2 text-sm text-muted">Couldn&rsquo;t switch them on here. Try again, or use Chrome or Edge.</p>}
+      </div>
+    </div>
   );
 }

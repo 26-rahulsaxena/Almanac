@@ -27,9 +27,11 @@ export const appOrigin = () =>
   (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "http://localhost:3000");
 
 // Sends to every device the user switched notifications on for. Returns how many devices it reached.
-export async function sendPush(userId: string, payload: PushPayload) {
-  const subs = await sql<{ endpoint: string; p256dh: string; auth: string }[]>`
+// only: limit it to some devices (e.g. the one being tested in Settings).
+export async function sendPush(userId: string, payload: PushPayload, only?: (endpoint: string) => boolean) {
+  const all = await sql<{ endpoint: string; p256dh: string; auth: string }[]>`
     select endpoint, p256dh, auth from push_subscriptions where user_id = ${userId} and origin = ${appOrigin()}`;
+  const subs = only ? all.filter((s) => only(s.endpoint)) : all;
   const vapidDetails = {
     subject: process.env.VAPID_SUBJECT!,
     publicKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,

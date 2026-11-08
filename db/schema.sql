@@ -187,3 +187,7 @@ alter table push_subscriptions add column if not exists origin text;
 -- "About you" from the welcome pop-up: {role, title, focus[], note}, read by the AI when rating priorities.
 -- null = not asked yet (the pop-up shows); {} or blanks = skipped.
 alter table users add column if not exists profile jsonb;
+
+-- A name for each device ("Chrome on Windows") and when the app was last opened on it, for Settings > Alerts.
+alter table push_subscriptions add column if not exists device text;
+alter table push_subscriptions add column if not exists seen_at timestamptz not null default now();

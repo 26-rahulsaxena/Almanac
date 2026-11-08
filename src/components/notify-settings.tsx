@@ -3,7 +3,13 @@ import { useEffect, useState } from "react";
 import { setAlertStages, type AlertStages } from "@/app/actions";
 import { SNOOZE_CHOICES } from "@/lib/reminders";
 
-type State = "loading" | "unsupported" | "ios-install" | "denied" | "off" | "on";
+// Whether this device gets reminders when Almanac is closed:
+// on · off (not asked yet, or turned off) · denied (blocked in the browser) · ios-install (iPhone: add to Home Screen
+// first) · unsupported (this browser can't).
+export type PushState = "unsupported" | "ios-install" | "denied" | "off" | "on";
+// Fired when this device's state changes, so the banner, the welcome pop-up and Settings stay in step.
+const PUSH_EVENT = "almanac-push";
+const changed = () => window.dispatchEvent(new Event(PUSH_EVENT));
 
 // The public half of the push key pair, as the bytes browsers expect.
 const vapidKey = (b64: string) =>
@@ -13,12 +19,67 @@ const post = (method: "POST" | "DELETE", body: object) =>
   fetch("/api/push", { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
 const currentSub = async () => (await navigator.serviceWorker?.getRegistration())?.pushManager.getSubscription();
+const installed = () => matchMedia("(display-mode: standalone)").matches;
+
+// "Chrome on Windows", "Safari on iPhone (app)": how this device is listed in Settings.
+export function deviceName() {
+  const ua = navigator.userAgent;
+  const browser = /Edg\//.test(ua) ? "Edge" : /SamsungBrowser/.test(ua) ? "Samsung Internet" : /Firefox\//.test(ua) ? "Firefox" : /Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "Browser";
+  const os = /iPhone/.test(ua) ? "iPhone" : /iPad/.test(ua) ? "iPad" : /Android/.test(ua) ? "Android" : /Windows/.test(ua) ? "Windows" : /Mac OS X/.test(ua) ? "Mac" : /Linux/.test(ua) ? "Linux" : "";
+  return `${browser}${os ? ` on ${os}` : ""}${installed() ? " (app)" : ""}`;
+}
+
+export async function pushState(): Promise<PushState> {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
+    // iPhone only offers push to apps added to the Home Screen.
+    return /iPhone|iPad|iPod/.test(navigator.userAgent) && !installed() ? "ios-install" : "unsupported";
+  }
+  if (Notification.permission === "denied") return "denied";
+  const reg = await navigator.serviceWorker.register("/sw.js");
+  return Notification.permission === "granted" && (await reg.pushManager.getSubscription()) ? "on" : "off";
+}
+
+// Asks for permission and signs this device up. Must run straight from a tap: iPhone refuses the prompt otherwise.
+export async function enablePush(): Promise<PushState> {
+  const answer = await Notification.requestPermission();
+  if (answer !== "granted") {
+    changed();
+    return answer === "denied" ? "denied" : "off";
+  }
+  const reg = await navigator.serviceWorker.register("/sw.js");
+  await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: vapidKey(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!) });
+  if (!(await post("POST", { ...sub.toJSON(), device: deviceName() })).ok) throw new Error("Couldn't save this device");
+  changed();
+  return "on";
+}
+
+async function disablePush() {
+  const sub = await currentSub();
+  if (sub) {
+    await post("DELETE", { endpoint: sub.endpoint });
+    await sub.unsubscribe();
+  }
+  changed();
+}
+
+// This device's state, kept up to date when it changes anywhere in the app. null while checking.
+export function usePushState() {
+  const [state, setState] = useState<PushState | null>(null);
+  useEffect(() => {
+    const check = () => pushState().then(setState, () => setState("unsupported"));
+    check();
+    window.addEventListener(PUSH_EVENT, check);
+    return () => window.removeEventListener(PUSH_EVENT, check);
+  }, []);
+  return state;
+}
 
 // On app open: if this browser has notifications on, tell the server again, so it belongs to whoever is signed in
 // now and comes back if the server dropped it. Never switches notifications on by itself.
 export async function syncPush() {
   const sub = await currentSub().catch(() => null);
-  if (sub && Notification.permission === "granted") await post("POST", sub.toJSON()).catch(() => {});
+  if (sub && Notification.permission === "granted") await post("POST", { ...sub.toJSON(), device: deviceName() }).catch(() => {});
 }
 
 // On sign out: this device stops getting the account's notifications (it stays switched on in the browser,
@@ -28,51 +89,26 @@ export async function forgetDevice() {
   if (sub) await post("DELETE", { endpoint: sub.endpoint }).catch(() => {});
 }
 
-// Switches reminder notifications on or off for this browser / phone.
-export function NotifySettings() {
-  const [state, setState] = useState<State>("loading");
-  const [msg, setMsg] = useState<string | null>(null);
+// What to tell someone whose device can't get reminders yet, for each state.
+export const PUSH_HELP: Record<Exclude<PushState, "on">, string> = {
+  off: "You won't get reminders on this device when Almanac is closed.",
+  denied: "Notifications are blocked for Almanac in this browser. Allow them in the site settings (the icon left of the address bar), then reload.",
+  "ios-install": "To get reminders on iPhone, add Almanac to your Home Screen: tap Share, then “Add to Home Screen”, and open it from there.",
+  unsupported: "This browser can't show reminders. Use Chrome, Edge or Safari.",
+};
 
-  useEffect(() => {
-    (async () => {
-      if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
-        // iPhone only offers push to apps added to the Home Screen.
-        const iphone = /iPhone|iPad|iPod/.test(navigator.userAgent) && !matchMedia("(display-mode: standalone)").matches;
-        return setState(iphone ? "ios-install" : "unsupported");
-      }
-      const reg = await navigator.serviceWorker.register("/sw.js");
-      if (Notification.permission === "denied") return setState("denied");
-      setState((await reg.pushManager.getSubscription()) ? "on" : "off");
-    })().catch(() => setState("unsupported"));
-  }, []);
+// Switches reminder notifications on or off for this browser / phone, and lists the other devices that get them.
+export function NotifySettings() {
+  const state = usePushState();
+  const [msg, setMsg] = useState<string | null>(null);
 
   async function enable() {
     setMsg(null);
     try {
-      // Ask first, straight from the tap: iPhone refuses the prompt otherwise.
-      if ((await Notification.requestPermission()) !== "granted") return setState("denied");
-      const reg = await navigator.serviceWorker.ready;
-      const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: vapidKey(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!) });
-      if (!(await post("POST", sub.toJSON())).ok) throw new Error();
-      setState("on");
+      await enablePush();
     } catch {
       setMsg("Couldn't switch on notifications here. Try again, or use Chrome or Edge.");
     }
-  }
-
-  async function disable() {
-    const sub = await (await navigator.serviceWorker.ready).pushManager.getSubscription();
-    if (sub) {
-      await post("DELETE", { endpoint: sub.endpoint });
-      await sub.unsubscribe();
-    }
-    setState("off");
-  }
-
-  async function test() {
-    setMsg("Sending…");
-    const { devices } = await (await post("POST", { test: true })).json();
-    setMsg(devices ? `Sent to ${devices} device${devices === 1 ? "" : "s"}. It should pop up in a few seconds.` : "No device received it. Turn notifications off and on again.");
   }
 
   const button = "rounded-full px-3 py-1.5 text-sm";
@@ -83,14 +119,9 @@ export function NotifySettings() {
           <p className="flex items-center gap-2">
             <span className="size-2 rounded-full bg-[var(--cat-2)]" aria-hidden /> On for this device
           </p>
-          <div className="flex flex-wrap gap-1">
-            <button type="button" onClick={test} className={`${button} border border-line hover:border-ink/40`}>
-              Send a test
-            </button>
-            <button type="button" onClick={disable} className={`${button} text-muted hover:text-ink`}>
-              Turn off
-            </button>
-          </div>
+          <button type="button" onClick={() => disablePush()} className={`${button} text-muted hover:text-ink`}>
+            Turn off on this device
+          </button>
         </>
       )}
       {state === "off" && (
@@ -98,12 +129,69 @@ export function NotifySettings() {
           Turn on notifications
         </button>
       )}
-      {state === "denied" && <p className="text-muted">Notifications are blocked for this site. Allow them in the browser&apos;s site settings, then reload.</p>}
-      {state === "ios-install" && (
-        <p className="text-muted">On iPhone: tap Share, then “Add to Home Screen”. Open Almanac from the Home Screen and turn notifications on there.</p>
-      )}
-      {state === "unsupported" && <p className="text-muted">This browser can&apos;t receive notifications.</p>}
+      {state && state !== "on" && state !== "off" && <p className="text-muted">{PUSH_HELP[state]}</p>}
       {msg && <p className="text-xs text-muted">{msg}</p>}
+      <DeviceList key={state ?? ""} />
+    </div>
+  );
+}
+
+type Device = { id: string; device: string | null; addedAt: string; seenAt: string };
+const ago = (iso: string) => {
+  const days = Math.floor((Date.now() - +new Date(iso)) / 86_400_000);
+  return days < 1 ? "today" : days === 1 ? "yesterday" : `${days} days ago`;
+};
+
+// Every device that gets your reminders, with a test for each, so you can check them all from one place.
+function DeviceList() {
+  const [devices, setDevices] = useState<Device[] | null>(null);
+  const [note, setNote] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    fetch("/api/push")
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setDevices, () => setDevices([]));
+  }, []);
+
+  async function test(id: string) {
+    setNote((n) => ({ ...n, [id]: "Sending…" }));
+    const { devices: reached } = await (await post("POST", { test: true, id })).json().catch(() => ({ devices: 0 }));
+    setNote((n) => ({ ...n, [id]: reached ? "Sent. It should pop up in a few seconds." : "Didn't reach it. Open Almanac on that device and turn notifications on again." }));
+  }
+  async function remove(id: string) {
+    await post("DELETE", { id });
+    setDevices((d) => d?.filter((x) => x.id !== id) ?? null);
+  }
+
+  if (!devices) return null;
+  return (
+    <div className="pt-3">
+      <h4 className="font-mono text-xs uppercase tracking-[0.2em] text-muted">Your devices</h4>
+      {devices.length === 0 ? (
+        <p className="mt-1 text-muted">None yet. Turn notifications on here and on your phone, so reminders reach you when Almanac is closed.</p>
+      ) : (
+        <ul className="mt-1 divide-y divide-line">
+          {devices.map((d) => (
+            <li key={d.id} className="py-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="min-w-0">
+                  <span className="block truncate">{d.device ?? "A device"}</span>
+                  <span className="block text-xs text-muted">Last opened {ago(d.seenAt)}</span>
+                </span>
+                <span className="flex shrink-0 gap-1">
+                  <button type="button" onClick={() => test(d.id)} className="rounded-full border border-line px-3 py-1 text-xs hover:border-ink/40">
+                    Test
+                  </button>
+                  <button type="button" onClick={() => remove(d.id)} className="rounded-full px-2 py-1 text-xs text-muted hover:text-ink">
+                    Remove
+                  </button>
+                </span>
+              </div>
+              {note[d.id] && <p className="mt-1 text-xs text-muted">{note[d.id]}</p>}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

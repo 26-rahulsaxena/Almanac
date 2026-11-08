@@ -15,6 +15,7 @@ import type { Severity } from "@/lib/priority";
 import { Settings } from "./settings";
 import { Welcome } from "./welcome";
 import { CreateMenu } from "./create-menu";
+import { AlertsBanner } from "./alerts-banner";
 import { AwayDialog } from "./away-dialog";
 import type { AwayKind } from "@/lib/away";
 import { EMPTY_PROFILE, type Profile } from "@/lib/profile";
@@ -679,6 +680,7 @@ export function CalendarApp({
           </p>
         </motion.aside>
 
+        <AlertsBanner />
         {/* Wide screens: calendar and side column fill the screen's height (6.25rem = header + padding), split
             where you drag the divider (70/30 to start). Narrower: the side column follows below. */}
         <main
