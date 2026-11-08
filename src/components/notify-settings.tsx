@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { setAlertStages, type AlertStages } from "@/app/actions";
-import { isAndroidApp } from "@/lib/android-app";
+import { almanacPlugin, appHasReminders, isAndroidApp } from "@/lib/android-app";
 import { SNOOZE_CHOICES } from "@/lib/reminders";
 
 // Whether this device gets reminders when Almanac is closed:
@@ -31,6 +31,11 @@ export function deviceName() {
 }
 
 export async function pushState(): Promise<PushState> {
+  if (isAndroidApp()) {
+    // The app gets reminders through Firebase, not the browser. The first app version can't: it needs updating.
+    if (!appHasReminders()) return "unsupported";
+    return (await (await almanacPlugin()).status()).notifications && localStorage.getItem(APP_TOKEN_KEY) ? "on" : "off";
+  }
   if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
     // iPhone only offers push to apps added to the Home Screen.
     return /iPhone|iPad|iPod/.test(navigator.userAgent) && !installed() ? "ios-install" : "unsupported";
@@ -41,7 +46,21 @@ export async function pushState(): Promise<PushState> {
 }
 
 // Asks for permission and signs this device up. Must run straight from a tap: iPhone refuses the prompt otherwise.
+// The Android app: asks for permission, then saves this phone's Firebase token. The last token sent is kept, so
+// signing out can remove it.
+const APP_TOKEN_KEY = "almanacAppToken";
+async function enableAppPush(): Promise<PushState> {
+  const { notifications, token } = await (await almanacPlugin()).enable();
+  if (notifications && token) {
+    if (!(await post("POST", { fcm: token, device: "Almanac app on Android" })).ok) throw new Error("Couldn't save this device");
+    localStorage.setItem(APP_TOKEN_KEY, token);
+  }
+  changed();
+  return notifications && token ? "on" : "off";
+}
+
 export async function enablePush(): Promise<PushState> {
+  if (isAndroidApp()) return enableAppPush();
   const answer = await Notification.requestPermission();
   if (answer !== "granted") {
     changed();
@@ -56,6 +75,11 @@ export async function enablePush(): Promise<PushState> {
 }
 
 async function disablePush() {
+  if (isAndroidApp()) {
+    await forgetDevice();
+    changed();
+    return;
+  }
   const sub = await currentSub();
   if (sub) {
     await post("DELETE", { endpoint: sub.endpoint });
@@ -79,6 +103,11 @@ export function usePushState() {
 // On app open: if this browser has notifications on, tell the server again, so it belongs to whoever is signed in
 // now and comes back if the server dropped it. Never switches notifications on by itself.
 export async function syncPush() {
+  if (isAndroidApp()) {
+    // Only when already allowed, so opening the app never pops up a permission question by itself.
+    if (appHasReminders() && (await (await almanacPlugin()).status()).notifications) await enableAppPush().catch(() => {});
+    return;
+  }
   const sub = await currentSub().catch(() => null);
   if (sub && Notification.permission === "granted") await post("POST", { ...sub.toJSON(), device: deviceName() }).catch(() => {});
 }
@@ -86,6 +115,12 @@ export async function syncPush() {
 // On sign out: this device stops getting the account's notifications (it stays switched on in the browser,
 // so it picks up the next account that signs in here).
 export async function forgetDevice() {
+  const token = isAndroidApp() ? localStorage.getItem(APP_TOKEN_KEY) : null;
+  if (token) {
+    localStorage.removeItem(APP_TOKEN_KEY);
+    await post("DELETE", { endpoint: `fcm:${token}` }).catch(() => {});
+    return;
+  }
   const sub = await currentSub().catch(() => null);
   if (sub) await post("DELETE", { endpoint: sub.endpoint }).catch(() => {});
 }
@@ -96,9 +131,8 @@ export const PUSH_HELP: Record<Exclude<PushState, "on">, string> = {
   denied: "Notifications are blocked for Almanac in this browser. Allow them in the site settings (the icon left of the address bar), then reload.",
   "ios-install": "To get reminders on iPhone, add Almanac to your Home Screen: tap Share, then “Add to Home Screen”, and open it from there.",
   get unsupported() {
-    // The Android app's own reminders come in its next stage; until then Chrome on the phone keeps getting them.
     return isAndroidApp()
-      ? "Reminders inside the Android app are coming in the next update. Until then, keep them on in Chrome on this phone."
+      ? "This version of the app can't get reminders. Install the new version from almanac-tau-orcin.vercel.app/download."
       : "This browser can't show reminders. Use Chrome, Edge or Safari.";
   },
 };
@@ -128,6 +162,7 @@ export function NotifySettings() {
           <button type="button" onClick={() => disablePush()} className={`${button} text-muted hover:text-ink`}>
             Turn off on this device
           </button>
+          {isAndroidApp() && <FullScreenSetting />}
         </>
       )}
       {state === "off" && (
@@ -138,6 +173,27 @@ export function NotifySettings() {
       {state && state !== "on" && state !== "off" && <p className="text-muted">{PUSH_HELP[state]}</p>}
       {msg && <p className="text-xs text-muted">{msg}</p>}
       <DeviceList key={state ?? ""} />
+    </div>
+  );
+}
+
+// Android 14+ lets each app show alarms full screen only if allowed in the phone's settings. Without it the alarm
+// still rings, as a pop-up at the top of the screen.
+function FullScreenSetting() {
+  const [allowed, setAllowed] = useState<boolean | null>(null);
+  useEffect(() => {
+    const check = () => almanacPlugin().then((p) => p.status()).then((s) => setAllowed(s.fullScreen), () => setAllowed(null));
+    check();
+    window.addEventListener("focus", check); // back from the phone's settings
+    return () => window.removeEventListener("focus", check);
+  }, []);
+  if (allowed !== false) return null;
+  return (
+    <div className="rounded-xl border border-accent/40 bg-accent/10 p-3">
+      <p>Allow full-screen alarms, so an event starting shows over your lock screen like an alarm clock.</p>
+      <button type="button" onClick={() => almanacPlugin().then((p) => p.openFullScreenSettings())} className="mt-2 rounded-full bg-ink px-3 py-1.5 text-sm font-medium text-paper">
+        Allow
+      </button>
     </div>
   );
 }

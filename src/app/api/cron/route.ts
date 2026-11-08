@@ -202,7 +202,7 @@ async function remindUser(u: Settings, now: Date) {
         if (due.alarm) await sql`
           update reminder_deliveries set status = 'done', snooze_until = null
           where user_id = ${userId} and calendar_id = ${e.calendarId} and event_id = ${e.id} and not alarm and status <> 'done'`;
-        await sendPush(userId, { id: row.id, title: e.title, body, snooze: u.snooze_minutes });
+        await sendPush(userId, { id: row.id, title: e.title, body, snooze: u.snooze_minutes, alarm: due.alarm });
         sent++;
       }
     }

@@ -2,6 +2,6 @@
   "appId": "app.almanac.calendar",
   "appName": "Almanac",
   "webDir": "android-web",
-  "appendUserAgent": "AlmanacAndroid/1",
+  "appendUserAgent": "AlmanacAndroid/2",
   "server": { "url": "https://almanac-tau-orcin.vercel.app" }
 }

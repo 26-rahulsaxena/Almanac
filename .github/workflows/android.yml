@@ -30,6 +30,14 @@ jobs:
           java-version: 21
       - run: npx cap sync android
 
+      # Firebase settings for the app (reminders), from Firebase → Project settings → Your apps → google-services.json.
+      - name: Add Firebase settings
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          printf %s "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+          grep -q '"package_name": *"app.almanac.calendar"' android/app/google-services.json || { echo "::error::Add the GOOGLE_SERVICES_JSON secret: the whole google-services.json for the app app.almanac.calendar."; exit 1; }
+
       - name: Build the signed APK
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE }}

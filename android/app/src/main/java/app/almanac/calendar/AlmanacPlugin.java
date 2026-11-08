@@ -1,0 +1,86 @@
+package app.almanac.calendar;
+
+import android.Manifest;
+import android.app.NotificationManager;
+import android.content.Intent;
+import android.net.Uri;
+import android.os.Build;
+import android.provider.Settings;
+import androidx.core.app.NotificationManagerCompat;
+import com.getcapacitor.JSObject;
+import com.getcapacitor.PermissionState;
+import com.getcapacitor.Plugin;
+import com.getcapacitor.PluginCall;
+import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
+import com.google.firebase.messaging.FirebaseMessaging;
+
+// What the website (src/lib/android-app.ts) can ask the app: switch on reminders and get this phone's Firebase
+// token, check what's allowed, and open the phone's settings for full-screen alarms.
+@CapacitorPlugin(name = "Almanac", permissions = @Permission(alias = "notifications", strings = { Manifest.permission.POST_NOTIFICATIONS }))
+public class AlmanacPlugin extends Plugin {
+    private boolean notificationsOn() {
+        return NotificationManagerCompat.from(getContext()).areNotificationsEnabled();
+    }
+
+    private boolean fullScreenOn() {
+        return Build.VERSION.SDK_INT < 34 || getContext().getSystemService(NotificationManager.class).canUseFullScreenIntent();
+    }
+
+    @PluginMethod
+    public void status(PluginCall call) {
+        JSObject r = new JSObject();
+        r.put("notifications", notificationsOn());
+        r.put("fullScreen", fullScreenOn());
+        call.resolve(r);
+    }
+
+    // Asks for permission if needed (Android 13+), then returns the token. Already refused twice: Android won't
+    // ask again, so the app's notification settings open instead.
+    @PluginMethod
+    public void enable(PluginCall call) {
+        Notify.channels(getContext());
+        if (Build.VERSION.SDK_INT >= 33 && getPermissionState("notifications") != PermissionState.GRANTED) {
+            requestPermissionForAlias("notifications", call, "afterPermission");
+            return;
+        }
+        token(call);
+    }
+
+    @PermissionCallback
+    private void afterPermission(PluginCall call) {
+        if (getPermissionState("notifications") != PermissionState.GRANTED) {
+            Intent i = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, getContext().getPackageName());
+            getActivity().startActivity(i);
+            JSObject r = new JSObject();
+            r.put("notifications", false);
+            call.resolve(r);
+            return;
+        }
+        token(call);
+    }
+
+    private void token(PluginCall call) {
+        FirebaseMessaging.getInstance().getToken().addOnCompleteListener(task -> {
+            if (!task.isSuccessful()) {
+                call.reject("Couldn't reach Firebase");
+                return;
+            }
+            JSObject r = new JSObject();
+            r.put("notifications", notificationsOn());
+            r.put("token", task.getResult());
+            call.resolve(r);
+        });
+    }
+
+    @PluginMethod
+    public void openFullScreenSettings(PluginCall call) {
+        Intent i = Build.VERSION.SDK_INT >= 34
+            ? new Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:" + getContext().getPackageName()))
+            : new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, getContext().getPackageName());
+        getActivity().startActivity(i);
+        call.resolve();
+    }
+}

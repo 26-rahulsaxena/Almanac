@@ -2,6 +2,15 @@
 // browser name. Sign-in goes through the phone's browser (Google refuses it inside apps): see src/lib/app-handoff.ts.
 
 export const isAndroidApp = () => typeof navigator !== "undefined" && /AlmanacAndroid\//.test(navigator.userAgent);
+// Version 2 and later can get reminders (the "Almanac" plugin in android/.../AlmanacPlugin.java).
+export const appHasReminders = () => Number(navigator.userAgent.match(/AlmanacAndroid\/(\d+)/)?.[1] ?? 0) >= 2;
+
+type AlmanacPlugin = {
+  status(): Promise<{ notifications: boolean; fullScreen: boolean }>;
+  enable(): Promise<{ notifications: boolean; token?: string }>;
+  openFullScreenSettings(): Promise<void>;
+};
+export const almanacPlugin = async () => (await import("@capacitor/core")).registerPlugin<AlmanacPlugin>("Almanac");
 
 const VERIFIER_KEY = "almanacAppVerifier";
 const b64url = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");

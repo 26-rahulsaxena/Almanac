@@ -1,10 +1,16 @@
 import webpush from "web-push";
 import { sql } from "./db";
+import { sendFcm } from "./fcm";
+
+// Android app installs are stored like browser subscriptions, with endpoint "fcm:<Firebase token>".
+export const FCM_PREFIX = "fcm:";
+export const isFcmToken = (t: unknown): t is string => typeof t === "string" && /^[\w:-]{20,4096}$/.test(t);
 
 // kind "reminder" (default): id = reminder delivery, buttons Snooze / Done.
 // kind "checkin": id = deadline, ask "start" (buttons Doing it now / Open) or "finished" (Yes, done / Need 30 more min).
 // kind "digest": morning priorities summary, opens the priorities list.
-export type PushPayload = { title: string; body: string; id?: string; kind?: "reminder" | "checkin" | "digest" | "review"; ask?: "start" | "finished"; snooze?: number };
+// alarm: the event is starting; the Android app rings full screen until answered.
+export type PushPayload = { title: string; body: string; id?: string; kind?: "reminder" | "checkin" | "digest" | "review"; ask?: "start" | "finished"; snooze?: number; alarm?: boolean };
 
 // Push services run by browser makers. Only these may receive subscriptions, so nobody can make
 // the server post to an arbitrary address.
@@ -39,6 +45,12 @@ export async function sendPush(userId: string, payload: PushPayload, only?: (end
   };
   const results = await Promise.all(
     subs.map(async (s) => {
+      // The Android app: saved as "fcm:<token>", sent through Firebase.
+      if (s.endpoint.startsWith(FCM_PREFIX)) {
+        const r = await sendFcm(s.endpoint.slice(FCM_PREFIX.length), payload);
+        if (r === "gone") await sql`delete from push_subscriptions where endpoint = ${s.endpoint}`;
+        return r === "ok";
+      }
       try {
         await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, JSON.stringify(payload), {
           TTL: 600,

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { auth } from "@/auth";
 import { sql } from "@/lib/db";
-import { appOrigin, isPushEndpoint, sendPush } from "@/lib/push";
+import { appOrigin, FCM_PREFIX, isFcmToken, isPushEndpoint, sendPush } from "@/lib/push";
 
 const KEY = /^[A-Za-z0-9_-]{1,200}={0,2}$/;
 // Devices are named to the browser by a short fingerprint of their push address, never the address itself.
@@ -18,7 +18,7 @@ export async function GET() {
   return Response.json(rows.map((r) => ({ id: idOf(r.endpoint), device: r.device, addedAt: r.created_at, seenAt: r.seen_at })));
 }
 
-// POST /api/push {endpoint, keys:{p256dh, auth}, device} → this device gets notifications, for whoever is signed in
+// POST /api/push {endpoint, keys:{p256dh, auth}, device} or {fcm, device} (Android app) → this device gets notifications, for whoever is signed in
 // (sent again each time the app opens, so a device follows the account in use and comes back if it was dropped).
 // POST /api/push {test: true, id?} → a test notification to one of your devices, or to all of them.
 export async function POST(req: Request) {
@@ -32,9 +32,11 @@ export async function POST(req: Request) {
     return Response.json({ devices });
   }
 
-  const endpoint = body?.endpoint;
-  const { p256dh, auth: secret } = body?.keys ?? {};
-  if (typeof endpoint !== "string" || endpoint.length > 1000 || !isPushEndpoint(endpoint) || !KEY.test(p256dh) || !KEY.test(secret)) {
+  // {fcm: token}: the Android app (no browser keys; Firebase delivers it).
+  const app = isFcmToken(body?.fcm);
+  const endpoint = app ? FCM_PREFIX + body.fcm : body?.endpoint;
+  const { p256dh, auth: secret } = app ? { p256dh: "", auth: "" } : (body?.keys ?? {});
+  if (!app && (typeof endpoint !== "string" || endpoint.length > 1000 || !isPushEndpoint(endpoint) || !KEY.test(p256dh) || !KEY.test(secret))) {
     return Response.json({ error: "Invalid subscription" }, { status: 400 });
   }
   const device = deviceName(body?.device);
