@@ -1,8 +1,8 @@
 "use client";
 import { useState } from "react";
-import type { AlertStages } from "@/app/actions";
+import { signOutNow, type AlertStages } from "@/app/actions";
 import { Modal } from "./coach";
-import { AlertStageSettings, NotifySettings } from "./notify-settings";
+import { AlertStageSettings, forgetDevice, NotifySettings } from "./notify-settings";
 import { SheetSync } from "./sheet-sync";
 import { PlanModeSetting, type PlanMode } from "./suggestions";
 import { ThemeToggle } from "./theme-toggle";
@@ -85,6 +85,18 @@ export function Settings(props: {
                 </div>
               ))}
             </dl>
+            <div className="mt-6 flex items-center justify-between gap-3 border-t border-line pt-4">
+              <div>
+                <h3 className={h3}>Account</h3>
+                <p className="mt-1 text-sm">Signing out stops notifications on this device.</p>
+              </div>
+              {/* This device stops getting the account's notifications before the session ends. */}
+              <form action={async () => { await forgetDevice(); await signOutNow(); }}>
+                <button type="submit" className="shrink-0 rounded-full border border-line px-4 py-1.5 text-sm hover:border-ink/40">
+                  Sign out
+                </button>
+              </form>
+            </div>
           </>
         )}
         {tab === "Alerts" && (

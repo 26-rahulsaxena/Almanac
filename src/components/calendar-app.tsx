@@ -1,14 +1,14 @@
 "use client";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { setHiddenCalendars, signInWithGoogle, signOutNow, type AlertStages } from "@/app/actions";
+import { setHiddenCalendars, signInWithGoogle, type AlertStages } from "@/app/actions";
 import type { Cal, Ev } from "@/lib/calendar";
 import { CATEGORIES, categoryHex } from "@/lib/categories";
 import type { DeleteInput, SaveInput, Scope, SendUpdates } from "@/lib/recurrence";
 import { addDays, atHour, formatTime, parseWhen, startOfDay, startOfMonth, startOfWeek } from "@/lib/time";
 import { Assistant } from "./assistant";
 import { FullScreenAlert } from "./full-screen-alert";
-import { forgetDevice, syncPush } from "./notify-settings";
+import { syncPush } from "./notify-settings";
 import { draftFromEvent, draftFromSlot, draftMoved, EventPanel, type Form } from "./event-panel";
 import type { Priority } from "@/lib/priorities";
 import type { Severity } from "@/lib/priority";
@@ -19,7 +19,7 @@ import { AwayDialog } from "./away-dialog";
 import type { AwayKind } from "@/lib/away";
 import { EMPTY_PROFILE, type Profile } from "@/lib/profile";
 import { PrioritiesPanel, type PriorityAction } from "./priorities-panel";
-import { Review, TodayCard, WhatNow } from "./coach";
+import { Modal, Review, TodayCard, WhatNow } from "./coach";
 import { QuickAdd } from "./quick-add";
 import { Suggestions, type PlanMode } from "./suggestions";
 import { ThemeToggle } from "./theme-toggle";
@@ -88,12 +88,6 @@ function deletes(d: DeleteInput, e: Ev) {
   return d.scope === "all" || +parseWhen(e.originalStart ?? e.start, e.allDay) >= +parseWhen(d.originalStart!, d.allDay);
 }
 
-// Brings the priorities panel into view (on phones it sits below the calendar).
-function showPriorities() {
-  const el = document.getElementById("priorities");
-  el?.scrollIntoView({ behavior: "smooth", block: "start" });
-  el?.focus({ preventScroll: true });
-}
 
 // Dates depend on the viewer's clock and time zone, so the calendar only renders in the browser.
 const SPLIT_DEFAULT = 70;
@@ -101,6 +95,19 @@ const SPLIT_MIN = 40;
 const SPLIT_MAX = 80;
 
 const useMounted = () => useSyncExternalStore(() => () => {}, () => true, () => false);
+
+// Wide screens (lg and up) show Today and Priorities beside the calendar; phones open them from two buttons.
+const WIDE = "(min-width: 1024px)";
+const useWide = () =>
+  useSyncExternalStore(
+    (cb) => {
+      const m = matchMedia(WIDE);
+      m.addEventListener("change", cb);
+      return () => m.removeEventListener("change", cb);
+    },
+    () => matchMedia(WIDE).matches,
+    () => true,
+  );
 
 const slide = {
   enter: (dir: number) => ({ opacity: 0, x: dir * 48, scale: dir ? 1 : 0.985 }),
@@ -180,6 +187,18 @@ export function CalendarApp({
   const [review, setReview] = useState(false); // the week in review
   const [quick, setQuick] = useState(false); // "New": add by typing or saying one line
   const [away, setAway] = useState<AwayKind | null>(null); // the out of office / focus time pop-up
+  const wide = useWide();
+  const [sheet, setSheet] = useState<"today" | "priorities" | null>(null); // phones: Today's plan / Priorities
+  // Priorities sit beside the calendar on wide screens (scroll to them) and open as a sheet on phones.
+  const showPriorities = useCallback(() => {
+    if (!matchMedia(WIDE).matches) return setSheet("priorities");
+    const el = document.getElementById("priorities");
+    el?.scrollIntoView({ behavior: "smooth", block: "start" });
+    el?.focus({ preventScroll: true });
+  }, []);
+  // Swipe left / right (finger, or two fingers on a trackpad) for the next / previous day, week or month.
+  const swipe = useRef<{ x: number; y: number; t: number } | null>(null);
+  const wheel = useRef({ dx: 0, last: 0, until: 0 });
   const [settings, setSettings] = useState(false);
   // The latest saved settings, so the Settings window shows them when it's opened again.
   const [stagesNow, setStagesNow] = useState(stages);
@@ -386,7 +405,7 @@ export function CalendarApp({
         history.replaceState(null, "", location.pathname);
       })
       .catch(() => {});
-  }, [gen]);
+  }, [gen, showPriorities]);
 
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
@@ -401,7 +420,7 @@ export function CalendarApp({
       navigator.serviceWorker?.removeEventListener("message", onMessage);
       clearTimeout(t);
     };
-  }, []);
+  }, [showPriorities]);
 
   async function priorityAction(p: Pick<Priority, "calendarId" | "eventId">, a: PriorityAction) {
     const r = await fetch("/api/priorities", {
@@ -536,11 +555,6 @@ export function CalendarApp({
               </svg>
             </button>
             <ThemeToggle />
-            <form action={async () => { await forgetDevice(); await signOutNow(); }}>
-              <button type="submit" className="rounded-full border border-line px-4 py-2 text-sm hover:border-ink/40">
-                Sign out
-              </button>
-            </form>
           </div>
         </div>
       </header>
@@ -682,8 +696,6 @@ export function CalendarApp({
               <button type="button" onClick={() => setNowOpen(true)} className="rounded-full border border-accent/60 px-3 py-1.5 text-sm text-accent hover:border-accent">
                 What now?
               </button>
-              <NavButton label="Previous" onClick={() => go(-1)} d="M15 18l-6-6 6-6" />
-              <NavButton label="Next" onClick={() => go(1)} d="M9 6l6 6-6 6" />
             </div>
             <h1 className="order-last w-full font-serif text-3xl sm:order-none sm:mr-auto sm:w-auto sm:text-4xl" aria-live="polite">
               {mounted ? titleOf(view, anchor, days) : " "}
@@ -700,6 +712,16 @@ export function CalendarApp({
                 className="w-24 rounded-full border border-line bg-surface px-3 py-1.5 text-sm placeholder:text-muted focus:w-40 focus:outline-none focus:ring-2 focus:ring-accent/50 sm:w-44 sm:px-4 sm:focus:w-56 motion-safe:transition-[width]"
               />
             </label>
+            {mounted && !wide && (
+              <div className="flex w-full gap-2">
+                <button type="button" onClick={() => setSheet("today")} className="flex-1 rounded-full border border-line bg-surface px-3 py-1.5 text-sm hover:border-ink/40">
+                  Today&rsquo;s plan
+                </button>
+                <button type="button" onClick={() => setSheet("priorities")} className="flex-1 rounded-full border border-line bg-surface px-3 py-1.5 text-sm hover:border-ink/40">
+                  Priorities{priorities?.length ? ` · ${priorities.filter((p) => p.status !== "done").length}` : ""}
+                </button>
+              </div>
+            )}
             <div className="relative flex rounded-full border border-line bg-surface p-0.5" role="group" aria-label="View">
               {VIEWS.map((v) => {
                 const on = mounted && view === v; // the saved view is only known in the browser
@@ -752,7 +774,36 @@ export function CalendarApp({
                 {found && <Agenda days={foundDays} events={found} color={color} severityOf={severityOf} now={now} onOpen={openEvent} showFree={false} />}
               </section>
             ) : (
-              <div className="overflow-hidden lg:h-full">
+              <div
+                className="overflow-hidden overscroll-x-contain lg:h-full"
+                onTouchStart={(e) => {
+                  const t = e.touches[0];
+                  swipe.current = e.touches.length === 1 ? { x: t.clientX, y: t.clientY, t: Date.now() } : null;
+                }}
+                onTouchEnd={(e) => {
+                  const s = swipe.current;
+                  swipe.current = null;
+                  const t = e.changedTouches[0];
+                  if (!s || !t) return;
+                  const dx = t.clientX - s.x;
+                  // A quick, mostly sideways stroke; a long press (moving an event) or a scroll doesn't count.
+                  if (Math.abs(dx) > 60 && Math.abs(dx) > 2 * Math.abs(t.clientY - s.y) && Date.now() - s.t < 700) go(dx < 0 ? 1 : -1);
+                }}
+                onWheel={(e) => {
+                  if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+                  const w = wheel.current;
+                  const t = Date.now();
+                  // After a change, wait for the trackpad's glide to stop before the next one.
+                  if (t < w.until) return void (w.until = t + 300);
+                  if (t - w.last > 250) w.dx = 0;
+                  w.last = t;
+                  w.dx += e.deltaX;
+                  if (Math.abs(w.dx) < 120) return;
+                  go(w.dx > 0 ? 1 : -1);
+                  w.dx = 0;
+                  w.until = t + 300;
+                }}
+              >
                 <AnimatePresence mode="popLayout" custom={dir} initial={false}>
                   <motion.div
                     key={`${view}:${key}`}
@@ -817,11 +868,13 @@ export function CalendarApp({
               <span className="absolute top-1/2 left-1/2 h-10 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-line transition-colors group-hover:bg-accent group-active:bg-accent" />
             </span>
           </div>
-          <div className="min-w-0 space-y-4 lg:flex lg:min-h-0 lg:flex-col lg:gap-4 lg:space-y-0 lg:overflow-y-auto">
-            <TodayCard version={gen} onCalendarChange={() => setGen((g) => g + 1)} />
-            <Suggestions version={gen} onCalendarChange={() => setGen((g) => g + 1)} />
-            <PrioritiesPanel items={priorities} onAction={priorityAction} />
-          </div>
+          {wide && (
+            <div className="min-w-0 space-y-4 lg:flex lg:min-h-0 lg:flex-col lg:gap-4 lg:space-y-0 lg:overflow-y-auto">
+              <TodayCard version={gen} onCalendarChange={() => setGen((g) => g + 1)} />
+              <Suggestions version={gen} onCalendarChange={() => setGen((g) => g + 1)} />
+              <PrioritiesPanel items={priorities} onAction={priorityAction} />
+            </div>
+          )}
         </main>
       </div>
 
@@ -914,6 +967,18 @@ export function CalendarApp({
           />
         )}
         {away && <AwayDialog key="away" kind={away} now={now} onClose={() => setAway(null)} onSaved={() => setGen((g) => g + 1)} />}
+        {sheet && !wide && (
+          <Modal key="sheet" title={sheet === "today" ? "Today" : "Your priorities"} onClose={() => setSheet(null)}>
+            {sheet === "today" ? (
+              <div className="space-y-4">
+                <TodayCard version={gen} onCalendarChange={() => setGen((g) => g + 1)} />
+                <Suggestions version={gen} onCalendarChange={() => setGen((g) => g + 1)} />
+              </div>
+            ) : (
+              <PrioritiesPanel items={priorities} onAction={priorityAction} />
+            )}
+          </Modal>
+        )}
       </AnimatePresence>
 
       <FullScreenAlert onChanged={() => setGen((g) => g + 1)} />
@@ -977,16 +1042,6 @@ export function CalendarApp({
         </AnimatePresence>
       </div>
     </div>
-  );
-}
-
-function NavButton({ label, onClick, d }: { label: string; onClick: () => void; d: string }) {
-  return (
-    <button type="button" onClick={onClick} aria-label={label} className="grid size-8 place-items-center rounded-full hover:bg-ink/5">
-      <svg className="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-        <path d={d} />
-      </svg>
-    </button>
   );
 }
 
