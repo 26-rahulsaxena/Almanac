@@ -22,7 +22,7 @@ export const FOCUS = [
 ] as const;
 type Focus = (typeof FOCUS)[number];
 
-// Each role with what's ticked for it to start with.
+// Each role with what's ticked for it to start with. "Other" lets people type their own role instead.
 export const ROLES: [string, Focus[]][] = [
   ["Student", ["Exams", "Assignments and submissions", "Classes", "Projects"]],
   ["Teacher / faculty", ["Exams", "Grading", "Classes", "Research"]],
@@ -31,8 +31,9 @@ export const ROLES: [string, Focus[]][] = [
   ["Manager / team lead", ["Team meetings", "Paperwork and deadlines", "Leadership meetings", "Clients"]],
   ["Sales / client-facing", ["Clients", "Targets and reports", "Team meetings"]],
   ["Self-employed", ["Clients", "Paperwork and deadlines", "Family"]],
-  ["Other", []],
 ];
+
+export const isRole = (r: unknown): r is string => ROLES.some(([x]) => x === r);
 
 export type Profile = { role: string; title: string; focus: string[]; note: string };
 export const EMPTY_PROFILE: Profile = { role: "", title: "", focus: [], note: "" };
@@ -44,7 +45,7 @@ export function cleanProfile(raw: unknown): Profile {
   const p = (raw ?? {}) as Partial<Record<keyof Profile, unknown>>;
   const focus = Array.isArray(p.focus) ? FOCUS.filter((f) => (p.focus as unknown[]).includes(f)) : [];
   return {
-    role: ROLES.some(([r]) => r === p.role) ? (p.role as string) : "",
+    role: isRole(p.role) ? p.role : line(p.role, 60),
     title: line(p.title, 80),
     focus,
     note: line(p.note, 200),
@@ -55,7 +56,7 @@ export function cleanProfile(raw: unknown): Profile {
 // Empty when nothing was filled in (skipped), so priorities work as before.
 export function profileLine(raw: unknown) {
   const p = cleanProfile(raw);
-  const who = [p.role === "Other" ? "" : p.role, p.title].filter(Boolean).join(", ");
+  const who = [p.role, p.title].filter(Boolean).join(", ");
   return [
     who && `${who}.`,
     p.focus.length ? `Cares most about: ${p.focus.join(", ").toLowerCase()}.` : "",

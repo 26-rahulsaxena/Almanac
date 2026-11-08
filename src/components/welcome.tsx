@@ -2,7 +2,7 @@
 import { motion } from "motion/react";
 import { useState } from "react";
 import { saveProfile } from "@/app/actions";
-import { FOCUS, ROLES, type Profile } from "@/lib/profile";
+import { FOCUS, isRole, ROLES, type Profile } from "@/lib/profile";
 import { Modal } from "./coach";
 
 const STEPS = 4;
@@ -28,10 +28,18 @@ export function Welcome({ initial, first, onDone }: { initial: Profile; first: b
   // Closing the first-time pop-up counts as "Skip for now"; closing an edit keeps what was saved.
   const close = () => (first ? finish(true) : onDone(initial));
 
+  // "Other": they type their own role, so it waits for Next instead of moving on.
+  const [other, setOther] = useState(!!initial.role && !isRole(initial.role));
+
   function pickRole(role: string) {
     // A new role brings its usual priorities; the same role keeps what was picked.
+    setOther(false);
     setP((x) => (x.role === role ? x : { ...x, role, focus: [...(ROLES.find(([r]) => r === role)?.[1] ?? [])] }));
     setStep(1);
+  }
+  function pickOther() {
+    setOther(true);
+    setP((x) => (isRole(x.role) ? { ...x, role: "", focus: [] } : x));
   }
   const toggle = (f: string) => setP((x) => ({ ...x, focus: x.focus.includes(f) ? x.focus.filter((y) => y !== f) : [...x.focus, f] }));
 
@@ -61,7 +69,22 @@ export function Welcome({ initial, first, onDone }: { initial: Profile; first: b
                   {r}
                 </button>
               ))}
+              <button type="button" aria-pressed={other} onClick={pickOther} className={chip(other)}>
+                Other
+              </button>
             </div>
+            {other && (
+              <input
+                autoFocus
+                aria-label="Your role"
+                value={p.role}
+                maxLength={60}
+                onChange={(e) => setP({ ...p, role: e.target.value })}
+                onKeyDown={(e) => e.key === "Enter" && setStep(1)}
+                placeholder="Type your role, e.g. Librarian"
+                className={input}
+              />
+            )}
           </fieldset>
         )}
         {step === 1 && (
@@ -74,7 +97,7 @@ export function Welcome({ initial, first, onDone }: { initial: Profile; first: b
         {step === 2 && (
           <fieldset>
             <legend className="font-serif text-xl">What matters most to you?</legend>
-            <p className="mt-1 text-sm text-muted">{p.role && p.role !== "Other" ? `Picked for ${p.role.toLowerCase()}. Tap to change.` : "Pick as many as you like."}</p>
+            <p className="mt-1 text-sm text-muted">{isRole(p.role) ? `Picked for ${p.role.toLowerCase()}. Tap to change.` : "Pick as many as you like."}</p>
             <div className="mt-3 flex flex-wrap gap-2">
               {FOCUS.map((f) => (
                 <button key={f} type="button" aria-pressed={p.focus.includes(f)} onClick={() => toggle(f)} className={chip(p.focus.includes(f))}>
@@ -96,11 +119,9 @@ export function Welcome({ initial, first, onDone }: { initial: Profile; first: b
 
       {error && <p className="mt-2 text-sm text-[var(--cat-1)]">{error}</p>}
       <div className="mt-4 flex items-center gap-2">
-        {first && (
-          <button type="button" disabled={busy} onClick={() => finish(true)} className="rounded-full px-3 py-1.5 text-sm text-muted hover:text-ink">
-            Skip for now
-          </button>
-        )}
+        <button type="button" disabled={busy} onClick={close} className="rounded-full px-3 py-1.5 text-sm text-muted hover:text-ink">
+          Skip for now
+        </button>
         <span className="flex-1" />
         {step > 0 && (
           <button type="button" disabled={busy} onClick={() => setStep(step - 1)} className="rounded-full border border-line px-4 py-1.5 text-sm hover:border-ink/40">
