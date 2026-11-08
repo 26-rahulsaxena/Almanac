@@ -40,12 +40,21 @@ jobs:
             echo "::error::Add the ANDROID_KEYSTORE and ANDROID_KEYSTORE_PASSWORD repository secrets first."
             exit 1
           fi
-          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/almanac.p12"
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/almanac.p12" || { echo "::error::The ANDROID_KEYSTORE secret isn't the text from ANDROID_KEYSTORE.txt."; exit 1; }
           export KEYSTORE_FILE="$RUNNER_TEMP/almanac.p12"
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon
+          set +e
+          ./gradlew assembleRelease --no-daemon 2>&1 | tee "$RUNNER_TEMP/gradle.log"
+          status=${PIPESTATUS[0]}
+          set -e
           rm "$KEYSTORE_FILE"
+          if [ "$status" -ne 0 ]; then
+            # The reason goes into the run's summary, which shows without signing in to GitHub.
+            reason=$( (grep -A25 "What went wrong" "$RUNNER_TEMP/gradle.log" || tail -40 "$RUNNER_TEMP/gradle.log") | head -45 | tr -d '\r' | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=Android build failed::$reason"
+            exit 1
+          fi
 
       # shortcut: the APK is committed into public/ (a few MB per build) so Vercel serves it; move it to file
       # storage if builds get frequent.
