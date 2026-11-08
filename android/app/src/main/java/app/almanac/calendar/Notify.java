@@ -60,7 +60,8 @@ public final class Notify {
 
         String path = kind.equals("reminder") ? "/" : kind.equals("review") ? "/?review=1" : "/?priorities=1";
         NotificationCompat.Builder b = new NotificationCompat.Builder(c, alarm ? ALARM : !id.isEmpty() ? REMINDER : UPDATE)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_stat_almanac)
+            .setColor(0xFFFF6A45)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(new NotificationCompat.BigTextStyle().bigText(body))

@@ -76,3 +76,30 @@ body {
   outline-offset: 2px;
   border-radius: 6px;
 }
+
+/* Opening animation (src/components/intro.tsx): about 2.4 seconds, then it fades out and stops covering the page. */
+.intro {
+  display: none;
+}
+html[data-intro] .intro {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0 1.5rem;
+  animation: intro-out 0.4s ease-in 2s forwards;
+}
+.intro-a { animation: intro-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.intro-dot { transform-box: fill-box; transform-origin: center; animation: intro-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) 0.4s both; }
+.intro-line { transform-box: fill-box; transform-origin: left; animation: intro-sweep 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.5s both; }
+.intro-name { margin-top: 0.75rem; font-size: 1.125rem; letter-spacing: 0.25em; animation: intro-fade 0.45s 0.8s both; }
+.intro-tagline { margin-top: 1rem; font-size: 1.25rem; font-style: italic; animation: intro-up 0.5s 1.05s both; }
+@keyframes intro-rise { from { opacity: 0; transform: translateY(12px); } }
+@keyframes intro-pop { from { opacity: 0; transform: scale(0); } }
+@keyframes intro-sweep { from { transform: scaleX(0); } }
+@keyframes intro-fade { from { opacity: 0; } }
+@keyframes intro-up { from { opacity: 0; transform: translateY(6px); } to { opacity: 0.8; } }
+@keyframes intro-out { to { opacity: 0; visibility: hidden; } }

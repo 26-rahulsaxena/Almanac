@@ -3,5 +3,8 @@
   "appName": "Almanac",
   "webDir": "android-web",
   "appendUserAgent": "AlmanacAndroid/2",
-  "server": { "url": "https://almanac-tau-orcin.vercel.app" }
+  "server": {
+    "url": "https://almanac-tau-orcin.vercel.app"
+  },
+  "backgroundColor": "#1d1b18"
 }

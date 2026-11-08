@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Status bar icon: the Almanac mark in one colour (Android tints it). Same drawing as scripts/android-icons.mjs. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="100"
+    android:viewportHeight="100">
+    <group android:translateY="4">
+        <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd" android:pathData="M22 70L44 22H56L78 70H66L60.8 58H39.2L34 70ZM50 33L56.5 48H43.5Z" />
+        <path android:fillColor="#FFFFFFFF" android:pathData="M14.25 66H85.75A2.25 2.25 0 0 1 85.75 70.5H14.25ZM8 69A4.5 4.5 0 1 0 17 69A4.5 4.5 0 1 0 8 69Z" />
+    </group>
+</vector>
