@@ -1,5 +1,6 @@
 # Builds the Android app (an APK) whenever its files change, and puts it on the website at /almanac.apk.
 # The signing key comes from two repository secrets: ANDROID_KEYSTORE (base64) and ANDROID_KEYSTORE_PASSWORD.
+# To rebuild by hand: Actions tab → Android app → Run workflow.
 name: Android app
 
 on:
