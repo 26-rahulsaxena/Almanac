@@ -183,3 +183,7 @@ alter table users add column if not exists planning_until timestamptz;
 -- Which site the device switched notifications on from (the live site or a copy running on a computer). Each
 -- site only notifies its own devices, so the live site never sends to a test copy's. Filled in on the next visit.
 alter table push_subscriptions add column if not exists origin text;
+
+-- "About you" from the welcome pop-up: {role, title, focus[], note}, read by the AI when rating priorities.
+-- null = not asked yet (the pop-up shows); {} or blanks = skipped.
+alter table users add column if not exists profile jsonb;

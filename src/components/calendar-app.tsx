@@ -13,6 +13,8 @@ import { draftFromEvent, draftFromSlot, draftMoved, EventPanel, type Form } from
 import type { Priority } from "@/lib/priorities";
 import type { Severity } from "@/lib/priority";
 import { Settings } from "./settings";
+import { Welcome } from "./welcome";
+import { EMPTY_PROFILE, type Profile } from "@/lib/profile";
 import { PrioritiesPanel, type PriorityAction } from "./priorities-panel";
 import { Review, TodayCard, WhatNow } from "./coach";
 import { QuickAdd } from "./quick-add";
@@ -109,12 +111,14 @@ export function CalendarApp({
   hidden: initialHidden,
   stages,
   planMode,
+  profile,
 }: {
   name: string;
   calendars: Cal[];
   hidden: string[];
   stages: AlertStages;
   planMode: PlanMode;
+  profile: Profile | null; // null: not asked yet, so the welcome pop-up shows
 }) {
   const mounted = useMounted();
   const now = useNow();
@@ -176,6 +180,8 @@ export function CalendarApp({
   // The latest saved settings, so the Settings window shows them when it's opened again.
   const [stagesNow, setStagesNow] = useState(stages);
   const [planModeNow, setPlanModeNow] = useState(planMode);
+  const [profileNow, setProfileNow] = useState(profile);
+  const [about, setAbout] = useState(profile === null);
   // Focus moves into the menu when it opens and back to ☰ when it closes.
   useEffect(() => {
     if (menu) menuClose.current?.focus();
@@ -880,6 +886,24 @@ export function CalendarApp({
             }}
             now={now}
             onCalendarChange={() => setGen((g) => g + 1)}
+            profile={profileNow}
+            onEditProfile={() => {
+              setSettings(false);
+              setAbout(true);
+            }}
+          />
+        )}
+        {about && (
+          <Welcome
+            key="about"
+            initial={profileNow ?? EMPTY_PROFILE}
+            first={profileNow === null}
+            onDone={(p) => {
+              setAbout(false);
+              if (JSON.stringify(p) === JSON.stringify(profileNow)) return;
+              setProfileNow(p);
+              setGen((g) => g + 1); // priorities are re-rated with the new answers
+            }}
           />
         )}
         {quick && writable && (

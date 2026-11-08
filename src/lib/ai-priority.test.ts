@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { parseRatings, ratingList, type RateItem } from "./ai-priority";
+import { parseRatings, ratingList, ratingPrompt, type RateItem } from "./ai-priority";
 
 const IST = "Asia/Kolkata";
 const items: RateItem[] = [
@@ -34,4 +34,10 @@ test("only known ids and levels are kept, with short one-line reasons", () => {
   expect(parseRatings({ ratings: [{ id: 1, level: "low", why: "x".repeat(300) }] }, items)[0].reason).toHaveLength(100);
   expect(parseRatings(null, items)).toEqual([]);
   expect(parseRatings({ ratings: "nope" }, items)).toEqual([]);
+});
+
+test("the AI is told about the person only when they filled it in", () => {
+  const now = new Date("2026-11-04T05:00:00Z");
+  expect(ratingPrompt(now, IST, "Teacher / faculty. Cares most about: exams.")).toContain("About this person (what they told the app about their work; weigh items by it): Teacher / faculty. Cares most about: exams.");
+  expect(ratingPrompt(now, IST)).not.toContain("About this person");
 });

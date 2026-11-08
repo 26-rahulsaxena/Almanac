@@ -1,6 +1,7 @@
 "use server";
 import { auth, signIn, signOut } from "@/auth";
 import { sql } from "@/lib/db";
+import { cleanProfile, EMPTY_PROFILE } from "@/lib/profile";
 import { SNOOZE_CHOICES } from "@/lib/reminders";
 
 export async function signInWithGoogle() {
@@ -40,4 +41,13 @@ export async function setAlertStages(s: unknown) {
   await sql`
     update users set remind_popup = ${v.remind}, snooze_minutes = ${v.snooze}, alarm_at_start = ${v.alarm}
     where id = ${session.user.id}`;
+}
+
+// "About you" from the welcome pop-up or Settings. null = skipped: saved as blank so the pop-up doesn't come back.
+export async function saveProfile(raw: unknown) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Not signed in");
+  const p = raw === null ? EMPTY_PROFILE : cleanProfile(raw);
+  await sql`update users set profile = ${sql.json(p)} where id = ${session.user.id}`;
+  return p;
 }

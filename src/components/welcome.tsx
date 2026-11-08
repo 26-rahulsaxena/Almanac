@@ -1,0 +1,121 @@
+"use client";
+import { motion } from "motion/react";
+import { useState } from "react";
+import { saveProfile } from "@/app/actions";
+import { FOCUS, ROLES, type Profile } from "@/lib/profile";
+import { Modal } from "./coach";
+
+const STEPS = 4;
+
+// "About you", one question at a time: role, title, what matters most, anything else. Shown once after the
+// first sign-in (skipping counts as answered) and again from Settings to edit.
+export function Welcome({ initial, first, onDone }: { initial: Profile; first: boolean; onDone: (p: Profile) => void }) {
+  const [p, setP] = useState(initial);
+  const [step, setStep] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function finish(skip: boolean) {
+    setBusy(true);
+    setError(null);
+    try {
+      onDone(await saveProfile(skip ? null : p));
+    } catch {
+      setError("Couldn't save. Try again.");
+      setBusy(false);
+    }
+  }
+  // Closing the first-time pop-up counts as "Skip for now"; closing an edit keeps what was saved.
+  const close = () => (first ? finish(true) : onDone(initial));
+
+  function pickRole(role: string) {
+    // A new role brings its usual priorities; the same role keeps what was picked.
+    setP((x) => (x.role === role ? x : { ...x, role, focus: [...(ROLES.find(([r]) => r === role)?.[1] ?? [])] }));
+    setStep(1);
+  }
+  const toggle = (f: string) => setP((x) => ({ ...x, focus: x.focus.includes(f) ? x.focus.filter((y) => y !== f) : [...x.focus, f] }));
+
+  const chip = (on: boolean) =>
+    `rounded-full border px-3 py-1.5 text-sm transition ${on ? "border-ink bg-ink text-surface" : "border-line hover:border-ink/40"}`;
+  const input = "mt-3 w-full rounded-xl border border-line bg-transparent px-3 py-2 text-sm outline-none focus:border-ink/40";
+  const last = step === STEPS - 1;
+
+  return (
+    <Modal title={first ? "Welcome to Almanac" : "About you"} onClose={close}>
+      <p className="text-sm text-muted">
+        {first ? "A few quick questions so priorities fit your work. " : ""}Step {step + 1} of {STEPS}
+      </p>
+      <div className="mt-2 flex gap-1" aria-hidden>
+        {Array.from({ length: STEPS }, (_, i) => (
+          <span key={i} className={`h-1 flex-1 rounded-full ${i <= step ? "bg-ink" : "bg-ink/10"}`} />
+        ))}
+      </div>
+
+      <motion.div key={step} initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.15 }} className="mt-5 min-h-[13rem]">
+        {step === 0 && (
+          <fieldset>
+            <legend className="font-serif text-xl">What best describes you?</legend>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {ROLES.map(([r]) => (
+                <button key={r} type="button" aria-pressed={p.role === r} onClick={() => pickRole(r)} className={chip(p.role === r)}>
+                  {r}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+        )}
+        {step === 1 && (
+          <label className="block">
+            <span className="font-serif text-xl">What&rsquo;s your title?</span>
+            <span className="ml-2 text-sm text-muted">optional</span>
+            <input autoFocus value={p.title} maxLength={80} onChange={(e) => setP({ ...p, title: e.target.value })} onKeyDown={(e) => e.key === "Enter" && setStep(2)} placeholder="Assistant Professor, Marketing" className={input} />
+          </label>
+        )}
+        {step === 2 && (
+          <fieldset>
+            <legend className="font-serif text-xl">What matters most to you?</legend>
+            <p className="mt-1 text-sm text-muted">{p.role && p.role !== "Other" ? `Picked for ${p.role.toLowerCase()}. Tap to change.` : "Pick as many as you like."}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {FOCUS.map((f) => (
+                <button key={f} type="button" aria-pressed={p.focus.includes(f)} onClick={() => toggle(f)} className={chip(p.focus.includes(f))}>
+                  {f}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+        )}
+        {step === 3 && (
+          <label className="block">
+            <span className="font-serif text-xl">Anything else?</span>
+            <span className="ml-2 text-sm text-muted">optional</span>
+            <textarea autoFocus value={p.note} maxLength={200} rows={3} onChange={(e) => setP({ ...p, note: e.target.value })} placeholder="Committee meetings matter less to me" className={`${input} resize-none`} />
+            <span className="mt-1 block text-xs text-muted">The AI reads this when it rates your priorities. Your name and email are never sent.</span>
+          </label>
+        )}
+      </motion.div>
+
+      {error && <p className="mt-2 text-sm text-[var(--cat-1)]">{error}</p>}
+      <div className="mt-4 flex items-center gap-2">
+        {first && (
+          <button type="button" disabled={busy} onClick={() => finish(true)} className="rounded-full px-3 py-1.5 text-sm text-muted hover:text-ink">
+            Skip for now
+          </button>
+        )}
+        <span className="flex-1" />
+        {step > 0 && (
+          <button type="button" disabled={busy} onClick={() => setStep(step - 1)} className="rounded-full border border-line px-4 py-1.5 text-sm hover:border-ink/40">
+            Back
+          </button>
+        )}
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => (last ? finish(false) : setStep(step + 1))}
+          className="rounded-full bg-ink px-4 py-1.5 text-sm text-surface hover:bg-ink/85 disabled:opacity-60"
+        >
+          {last ? (busy ? "Saving…" : "Save") : "Next"}
+        </button>
+      </div>
+    </Modal>
+  );
+}

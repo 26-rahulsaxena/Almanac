@@ -6,6 +6,7 @@ import { AlertStageSettings, NotifySettings } from "./notify-settings";
 import { SheetSync } from "./sheet-sync";
 import { PlanModeSetting, type PlanMode } from "./suggestions";
 import { ThemeToggle } from "./theme-toggle";
+import { profileLine, type Profile } from "@/lib/profile";
 
 const TABS = ["General", "Alerts", "Planning", "Sheet"] as const;
 type Tab = (typeof TABS)[number];
@@ -31,6 +32,8 @@ export function Settings(props: {
   onPlanMode: (m: PlanMode) => void;
   now: Date;
   onCalendarChange: () => void;
+  profile: Profile | null;
+  onEditProfile: () => void;
 }) {
   const [tab, setTab] = useState<Tab>("General");
   const h3 = "font-mono text-xs uppercase tracking-[0.2em] text-muted";
@@ -57,7 +60,16 @@ export function Settings(props: {
       <div role="tabpanel" id="settings-panel" aria-labelledby={`tab-${tab}`} className="mt-5 min-h-[22rem]">
         {tab === "General" && (
           <>
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className={h3}>About you</h3>
+                <p className="mt-1 text-sm">{profileLine(props.profile) || "Not set. Tell Almanac about your work so priorities fit it."}</p>
+              </div>
+              <button type="button" onClick={props.onEditProfile} className="shrink-0 rounded-full border border-line px-3 py-1.5 text-sm hover:border-ink/40">
+                {profileLine(props.profile) ? "Edit" : "Set up"}
+              </button>
+            </div>
+            <div className="mt-6 flex items-center justify-between gap-3">
               <div>
                 <h3 className={h3}>Appearance</h3>
                 <p className="mt-1 text-sm">Light or dark</p>
