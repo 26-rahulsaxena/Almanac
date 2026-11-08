@@ -179,7 +179,7 @@ export function weekReview(
   };
 }
 
-type ClashEv = Busy & { id: string; calendarId: string; plan?: string; attendees?: { self?: boolean }[] };
+type ClashEv = Busy & { id: string; calendarId: string; plan?: string; away?: string; attendees?: { self?: boolean }[] };
 
 // The morning check: today's clashes between your own events, each with a fix for you to approve — move one of the
 // pair to the nearest free time today. Only events that can move without telling anyone: on a calendar you can
@@ -191,7 +191,8 @@ export function clashFixes<E extends ClashEv>(events: E[], editable: Set<string>
   const startOf = (e: E) => +new Date(e.start);
   let busy = events.filter((e) => e.busy && !e.allDay);
   const own = busy.filter((e) => !e.plan && ymdIn(new Date(e.start), tz) === today && new Date(e.end) > now).sort((a, b) => startOf(a) - startOf(b));
-  const movable = (e: E) => editable.has(e.calendarId) && !e.attendees?.some((a) => !a.self) && startOf(e) > +now;
+  // Out of office / focus time is never the one moved: the meeting clashing with it is.
+  const movable = (e: E) => editable.has(e.calendarId) && !e.away && !e.attendees?.some((a) => !a.self) && startOf(e) > +now;
   const done = new Set<E>();
   const fixes: { event: E; other: E; to: Interval }[] = [];
   for (const [i, a] of own.entries()) {

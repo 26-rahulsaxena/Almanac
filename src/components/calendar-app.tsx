@@ -14,6 +14,9 @@ import type { Priority } from "@/lib/priorities";
 import type { Severity } from "@/lib/priority";
 import { Settings } from "./settings";
 import { Welcome } from "./welcome";
+import { CreateMenu } from "./create-menu";
+import { AwayDialog } from "./away-dialog";
+import type { AwayKind } from "@/lib/away";
 import { EMPTY_PROFILE, type Profile } from "@/lib/profile";
 import { PrioritiesPanel, type PriorityAction } from "./priorities-panel";
 import { Review, TodayCard, WhatNow } from "./coach";
@@ -176,6 +179,7 @@ export function CalendarApp({
   const [nowOpen, setNowOpen] = useState(false); // "What now?"
   const [review, setReview] = useState(false); // the week in review
   const [quick, setQuick] = useState(false); // "+ New": add by typing or saying one line
+  const [away, setAway] = useState<AwayKind | null>(null); // the out of office / focus time pop-up
   const [settings, setSettings] = useState(false);
   // The latest saved settings, so the Settings window shows them when it's opened again.
   const [stagesNow, setStagesNow] = useState(stages);
@@ -925,10 +929,25 @@ export function CalendarApp({
             }}
           />
         )}
+        {away && <AwayDialog key="away" kind={away} now={now} onClose={() => setAway(null)} onSaved={() => setGen((g) => g + 1)} />}
       </AnimatePresence>
 
       <FullScreenAlert onChanged={() => setGen((g) => g + 1)} />
 
+      {!showAssistant && (
+        <CreateMenu
+          canEdit={!!writable}
+          onNew={() => setQuick(true)}
+          onTodo={() => setTodos(true)}
+          onMeeting={() => {
+            if (!writable) return;
+            // Next half hour, 30 minutes, with a Meet link; guests are added in the form, which asks before inviting anyone.
+            const start = new Date(Math.ceil(Date.now() / 1_800_000) * 1_800_000);
+            setPanel({ form: { ...draftFromSlot(start, new Date(+start + 30 * 60_000), writable.id), addMeet: true } });
+          }}
+          onAway={setAway}
+        />
+      )}
       <Assistant open={showAssistant} onOpenChange={setShowAssistant} onChanged={() => setGen((g) => g + 1)} />
 
       <div role="status" aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-4 z-30 flex flex-col items-center gap-2 px-4">

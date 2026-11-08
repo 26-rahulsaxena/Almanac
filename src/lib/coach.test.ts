@@ -120,6 +120,12 @@ describe("morning clash check", () => {
     expect(clashFixes([meeting, shared, block], editable, now, IST)).toEqual([]);
   });
 
+  test("out of office stays put; the event clashing with it moves", () => {
+    const ooo = mine("Out of office", "2026-11-04T17:30", "2026-11-04T20:00", { away: "ooo" }); // starts later: the tie-break would move it
+    const review = mine("Project review", "2026-11-04T17:00", "2026-11-04T18:00");
+    expect(clashFixes([ooo, review], editable, now, IST).map((f) => f.event.title)).toEqual(["Project review"]);
+  });
+
   test("two fixes don't land on the same free time", () => {
     const events = [
       mine("Meeting", "2026-11-04T09:00", "2026-11-04T21:00", guests),

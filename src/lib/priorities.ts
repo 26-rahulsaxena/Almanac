@@ -67,7 +67,8 @@ export async function loadPriorities(userId: string, timeZone: string, hidden: s
       const item = { ...e, calendarName: calendarName.get(e.calendarId), guests: e.attendees?.filter((a) => !a.self).length };
       const declined = e.attendees?.find((a) => a.self)?.responseStatus === "declined";
       const due = dueAt(e, timeZone);
-      if (declined || due <= now || !isTracked(item, s?.is_deadline ?? null)) return [];
+      // Out of office and focus time are about your availability, not tasks to rank.
+      if (declined || e.away || due <= now || !isTracked(item, s?.is_deadline ?? null)) return [];
       const { severity, reason, category } = suggest(item, due, now);
       const chosen = ruleOf.get(titleKey(e.title)) ?? null;
       const status = s?.status ?? "open";

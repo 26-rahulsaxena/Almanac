@@ -188,6 +188,7 @@ async function remindUser(u: Settings, now: Date) {
   let sent = 0;
   for (const e of events) {
     if (e.attendees?.find((a) => a.self)?.responseStatus === "declined") continue;
+    if (e.away === "ooo") continue; // no reminders or start alarm for being out of office
     for (const due of dueReminders(e, defaults.get(e.calendarId) ?? [], now, timeZone, stages)) {
       const body = describe(e, now, timeZone);
       // The unique key makes each reminder fire once, even if two minute-jobs overlap.

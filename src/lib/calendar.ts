@@ -22,6 +22,7 @@ export type Ev = {
   isOrganizer: boolean; // only the organizer can change guests
   reminders?: Reminder[]; // missing = the calendar's default reminders
   plan?: string; // set on blocks the auto-planner booked: "todo:<id>" or "routine:<id>"
+  away?: "ooo" | "focus"; // out of office or focus time (Google's own kind, or Almanac's busy block on personal Gmail)
 };
 
 type GCal = {
@@ -50,6 +51,7 @@ type GEvent = {
   organizer?: { self?: boolean };
   reminders?: { useDefault?: boolean; overrides?: Reminder[] };
   extendedProperties?: { private?: Record<string, string> };
+  eventType?: string;
 };
 
 export async function listCalendars(userId: string): Promise<Cal[]> {
@@ -81,7 +83,7 @@ export async function listEvents(userId: string, calendarIds: string[], from: st
     maxResults: query ? "50" : "2500",
     fields:
       "items(id,summary,description,start,end,recurringEventId,originalStartTime,location,transparency,colorId," +
-      "attendees(email,displayName,responseStatus,self,organizer),hangoutLink,organizer(self),reminders,extendedProperties(private))",
+      "attendees(email,displayName,responseStatus,self,organizer),hangoutLink,organizer(self),reminders,extendedProperties(private),eventType)",
   });
   if (query) q.set("q", query);
   const lists = await Promise.all(
@@ -108,6 +110,7 @@ export async function listEvents(userId: string, calendarIds: string[], from: st
             isOrganizer: e.organizer?.self ?? true,
             reminders: e.reminders?.useDefault === false ? (e.reminders.overrides ?? []) : undefined,
             plan: e.extendedProperties?.private?.almanacPlan || undefined,
+            away: awayOf(e),
           }),
         );
       } catch (err) {
@@ -126,4 +129,11 @@ export function getMaster(userId: string, calendarId: string, id: string) {
     userId,
     `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(id)}?fields=start,end,recurrence,conferenceData`,
   );
+}
+
+// Out of office / focus time: Google's own kinds (work or school accounts), or the busy block Almanac makes on personal Gmail.
+function awayOf(e: GEvent): Ev["away"] {
+  const tag = e.extendedProperties?.private?.almanacAway;
+  if (e.eventType === "outOfOffice" || tag === "ooo") return "ooo";
+  if (e.eventType === "focusTime" || tag === "focus") return "focus";
 }
