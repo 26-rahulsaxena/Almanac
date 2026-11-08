@@ -32,9 +32,10 @@ export function deviceName() {
 
 export async function pushState(): Promise<PushState> {
   if (isAndroidApp()) {
-    // The app gets reminders through Firebase, not the browser. The first app version can't: it needs updating.
+    // The app gets reminders through Firebase, not the browser, and signs itself up each time it opens
+    // (android/.../Notify.register), so allowed notifications mean it's on. The first app version can't: it needs updating.
     if (!appHasReminders()) return "unsupported";
-    return (await (await almanacPlugin()).status()).notifications && localStorage.getItem(APP_TOKEN_KEY) ? "on" : "off";
+    return (await (await almanacPlugin()).status()).notifications ? "on" : "off";
   }
   if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
     // iPhone only offers push to apps added to the Home Screen.
@@ -46,14 +47,11 @@ export async function pushState(): Promise<PushState> {
 }
 
 // Asks for permission and signs this device up. Must run straight from a tap: iPhone refuses the prompt otherwise.
-// The Android app: asks for permission, then saves this phone's Firebase token. The last token sent is kept, so
-// signing out can remove it.
-const APP_TOKEN_KEY = "almanacAppToken";
+// The Android app: asks for permission, then saves this phone's Firebase token.
 async function enableAppPush(): Promise<PushState> {
   const { notifications, token } = await (await almanacPlugin()).enable();
   if (notifications && token) {
     if (!(await post("POST", { fcm: token, device: "Almanac app on Android" })).ok) throw new Error("Couldn't save this device");
-    localStorage.setItem(APP_TOKEN_KEY, token);
   }
   changed();
   return notifications && token ? "on" : "off";
@@ -75,11 +73,6 @@ export async function enablePush(): Promise<PushState> {
 }
 
 async function disablePush() {
-  if (isAndroidApp()) {
-    await forgetDevice();
-    changed();
-    return;
-  }
   const sub = await currentSub();
   if (sub) {
     await post("DELETE", { endpoint: sub.endpoint });
@@ -115,10 +108,9 @@ export async function syncPush() {
 // On sign out: this device stops getting the account's notifications (it stays switched on in the browser,
 // so it picks up the next account that signs in here).
 export async function forgetDevice() {
-  const token = isAndroidApp() ? localStorage.getItem(APP_TOKEN_KEY) : null;
-  if (token) {
-    localStorage.removeItem(APP_TOKEN_KEY);
-    await post("DELETE", { endpoint: `fcm:${token}` }).catch(() => {});
+  if (isAndroidApp()) {
+    const token = appHasReminders() ? await almanacPlugin().then((p) => p.token()).then((r) => r.token, () => undefined) : undefined;
+    if (token) await post("DELETE", { endpoint: `fcm:${token}` }).catch(() => {});
     return;
   }
   const sub = await currentSub().catch(() => null);
@@ -159,10 +151,16 @@ export function NotifySettings() {
           <p className="flex items-center gap-2">
             <span className="size-2 rounded-full bg-[var(--cat-2)]" aria-hidden /> On for this device
           </p>
-          <button type="button" onClick={() => disablePush()} className={`${button} text-muted hover:text-ink`}>
-            Turn off on this device
-          </button>
-          {isAndroidApp() && <FullScreenSetting />}
+          {isAndroidApp() ? (
+            <>
+              <p className="text-xs text-muted">To stop them, turn off notifications for Almanac in your phone&rsquo;s settings.</p>
+              <FullScreenSetting />
+            </>
+          ) : (
+            <button type="button" onClick={() => disablePush()} className={`${button} text-muted hover:text-ink`}>
+              Turn off on this device
+            </button>
+          )}
         </>
       )}
       {state === "off" && (

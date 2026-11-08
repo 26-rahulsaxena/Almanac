@@ -8,6 +8,7 @@ export const appHasReminders = () => Number(navigator.userAgent.match(/AlmanacAn
 type AlmanacPlugin = {
   status(): Promise<{ notifications: boolean; fullScreen: boolean }>;
   enable(): Promise<{ notifications: boolean; token?: string }>;
+  token(): Promise<{ token?: string }>;
   openFullScreenSettings(): Promise<void>;
 };
 export const almanacPlugin = async () => (await import("@capacitor/core")).registerPlugin<AlmanacPlugin>("Almanac");

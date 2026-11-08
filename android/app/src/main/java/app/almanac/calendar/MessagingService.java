@@ -19,6 +19,6 @@ public class MessagingService extends FirebaseMessagingService {
 
     @Override
     public void onNewToken(String token) {
-        // The app sends its current token to the server each time it opens (syncPush in the website).
+        Notify.register(this);
     }
 }

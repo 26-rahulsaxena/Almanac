@@ -10,8 +10,12 @@ import android.media.AudioAttributes;
 import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
+import android.util.Log;
+import android.webkit.CookieManager;
 import androidx.core.app.NotificationCompat;
+import androidx.core.app.NotificationManagerCompat;
 import com.getcapacitor.CapConfig;
+import com.google.firebase.messaging.FirebaseMessaging;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -121,20 +125,42 @@ public final class Notify {
     static void answer(Context c, String id, String kind, String action) {
         String path = kind.equals("checkin") ? "/api/priorities/answer" : "/api/reminders/ack";
         try {
-            HttpURLConnection con = (HttpURLConnection) new URL(server(c) + path).openConnection();
-            con.setRequestMethod("POST");
-            con.setConnectTimeout(10000);
-            con.setReadTimeout(10000);
-            con.setDoOutput(true);
-            con.setRequestProperty("Content-Type", "application/json");
-            byte[] json = new JSONObject().put("id", id).put("action", action).toString().getBytes(StandardCharsets.UTF_8);
-            try (OutputStream out = con.getOutputStream()) {
-                out.write(json);
-            }
-            con.getResponseCode();
-            con.disconnect();
+            post(c, path, new JSONObject().put("id", id).put("action", action), null);
         } catch (Exception e) {
             // Offline: the server re-sends unanswered reminders anyway.
         }
+    }
+
+    // Signs this phone up for the signed-in account's reminders: sends its Firebase token to the server with the
+    // app's own sign-in cookie. Runs each time the app opens, so it follows whoever is signed in. Does nothing
+    // until notifications are allowed and someone is signed in.
+    static void register(Context c) {
+        if (!NotificationManagerCompat.from(c).areNotificationsEnabled()) return;
+        String cookie = CookieManager.getInstance().getCookie(server(c));
+        if (cookie == null || !cookie.contains("session-token")) return;
+        FirebaseMessaging.getInstance().getToken().addOnSuccessListener(token -> new Thread(() -> {
+            try {
+                int status = post(c, "/api/push", new JSONObject().put("fcm", token).put("device", "Almanac app on Android"), cookie);
+                Log.i("Almanac", "Reminders sign-up: " + status);
+            } catch (Exception e) {
+                Log.w("Almanac", "Reminders sign-up failed", e);
+            }
+        }).start());
+    }
+
+    private static int post(Context c, String path, JSONObject body, String cookie) throws Exception {
+        HttpURLConnection con = (HttpURLConnection) new URL(server(c) + path).openConnection();
+        con.setRequestMethod("POST");
+        con.setConnectTimeout(10000);
+        con.setReadTimeout(10000);
+        con.setDoOutput(true);
+        con.setRequestProperty("Content-Type", "application/json");
+        if (cookie != null) con.setRequestProperty("Cookie", cookie);
+        try (OutputStream out = con.getOutputStream()) {
+            out.write(body.toString().getBytes(StandardCharsets.UTF_8));
+        }
+        int status = con.getResponseCode();
+        con.disconnect();
+        return status;
     }
 }

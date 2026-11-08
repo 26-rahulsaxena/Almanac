@@ -46,7 +46,7 @@ public class AlmanacPlugin extends Plugin {
             requestPermissionForAlias("notifications", call, "afterPermission");
             return;
         }
-        token(call);
+        sendToken(call);
     }
 
     @PermissionCallback
@@ -59,10 +59,10 @@ public class AlmanacPlugin extends Plugin {
             call.resolve(r);
             return;
         }
-        token(call);
+        sendToken(call);
     }
 
-    private void token(PluginCall call) {
+    private void sendToken(PluginCall call) {
         FirebaseMessaging.getInstance().getToken().addOnCompleteListener(task -> {
             if (!task.isSuccessful()) {
                 call.reject("Couldn't reach Firebase");
@@ -73,6 +73,12 @@ public class AlmanacPlugin extends Plugin {
             r.put("token", task.getResult());
             call.resolve(r);
         });
+    }
+
+    // This phone's token without asking anything (signing out removes it from the account).
+    @PluginMethod
+    public void token(PluginCall call) {
+        sendToken(call);
     }
 
     @PluginMethod
