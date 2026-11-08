@@ -40,7 +40,9 @@ jobs:
             echo "::error::Add the ANDROID_KEYSTORE and ANDROID_KEYSTORE_PASSWORD repository secrets first."
             exit 1
           fi
-          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/almanac.p12" || { echo "::error::The ANDROID_KEYSTORE secret isn't the text from ANDROID_KEYSTORE.txt."; exit 1; }
+          # Spaces or line breaks from copy-pasting are dropped; the length helps spot a paste that got cut short.
+          key=$(printf %s "$KEYSTORE_BASE64" | tr -d ' \r\n\t')
+          printf %s "$key" | base64 -d > "$RUNNER_TEMP/almanac.p12" || { echo "::error::The ANDROID_KEYSTORE secret isn't the whole text of ANDROID_KEYSTORE.txt (got ${#key} characters, expected 4632)."; exit 1; }
           export KEYSTORE_FILE="$RUNNER_TEMP/almanac.p12"
           cd android
           chmod +x gradlew
