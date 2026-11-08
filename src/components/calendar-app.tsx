@@ -928,8 +928,6 @@ export function CalendarApp({
               setPlanModeNow(m);
               setGen((g) => g + 1);
             }}
-            now={now}
-            onCalendarChange={() => setGen((g) => g + 1)}
             profile={profileNow}
             onEditProfile={() => {
               setSettings(false);

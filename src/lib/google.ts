@@ -64,7 +64,7 @@ async function accessToken(userId: string) {
 // Calls the Google Calendar REST API as this user.
 export const gcal = <T>(userId: string, path: string, init?: RequestInit) => google<T>(userId, `https://www.googleapis.com/calendar/v3${path}`, init);
 
-// Calls any Google REST API (Calendar, Sheets) as this user.
+// Calls a Google REST API as this user.
 export async function google<T>(userId: string, url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     signal: AbortSignal.timeout(20_000), // never hang on a dead connection (e.g. after the computer slept)

@@ -5,7 +5,6 @@ import { dayPlanText } from "@/lib/coach";
 import { coachToday, coachWeek } from "@/lib/coach-data";
 import { checkinText } from "@/lib/priorities";
 import { sendPush } from "@/lib/push";
-import { syncSheet } from "@/lib/sheet-sync";
 import { dueReminders, LOOKAHEAD_MS } from "@/lib/reminders";
 
 const DIGEST_HOUR = 8;
@@ -14,7 +13,7 @@ const REVIEW_HOUR = 18; // Sunday from 6 pm: the week-in-review notification
 
 // GET /api/cron — called every minute by the scheduler (Supabase pg_cron in production) with the shared secret.
 // Sends due reminders and deadline check-ins, re-sends snoozed reminders, sends the 8 am priorities summary,
-// syncs Google Sheets, runs the auto-planner, and deletes old records.
+// runs the auto-planner, and deletes old records.
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) return new Response("Unauthorized", { status: 401 });
@@ -64,25 +63,11 @@ export async function GET(req: Request) {
     }
   }
 
-  // Google Sheet: checked every minute, synced only when it was edited since last time. Claiming the slot first
-  // keeps two overlapping runs from syncing twice.
-  const sheets = await sql<{ id: string; timezone: string; hidden_calendars: string[]; sheet_id: string }[]>`
-    update users set sheet_synced_at = now()
-    where sheet_id is not null and (sheet_synced_at is null or sheet_synced_at < now() - interval '50 seconds')
-    returning id, timezone, hidden_calendars, sheet_id`;
-  for (const s of sheets) {
-    try {
-      await syncSheet(s, s.sheet_id, true);
-    } catch (err) {
-      console.error(`Sheet sync for user ${s.id} failed:`, err);
-    }
-  }
-
   const planned = await autoPlanUsers();
 
   await sql`delete from reminder_deliveries where fire_at < now() - interval '2 days'`;
   await sql`delete from deadline_states where due_at < now() - interval '7 days'`;
-  return Response.json({ users: users.length, sent, snoozed: snoozed.length, checkins, digests, sheets: sheets.length, planned });
+  return Response.json({ users: users.length, sent, snoozed: snoozed.length, checkins, digests, planned });
 }
 
 // Auto-planner, every 15 minutes per user: Almanac's blocks out of the way of new events, and from 9 pm (your time)

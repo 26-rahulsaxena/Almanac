@@ -147,12 +147,12 @@ create table if not exists plan_suggestions (
   unique (user_id, key)
 );
 
--- Google Sheet sync: which sheet feeds the calendar, and when it was last read. Events made from it are
--- marked inside Google Calendar itself (a private tag with the sheet id and row), so nothing else is stored.
+-- Google Sheet sync was removed (Almanac only asks for Google Calendar access now). These columns are empty and
+-- unused; drop them once the live site runs code without the sheet sync.
 alter table users add column if not exists sheet_id text;
-alter table users add column if not exists sheet_synced_at timestamptz; -- last checked
+alter table users add column if not exists sheet_synced_at timestamptz;
 alter table users add column if not exists sheet_name text;
-alter table users add column if not exists sheet_version text; -- fingerprint of the cells at the last sync, to skip unchanged sheets
+alter table users add column if not exists sheet_version text;
 
 -- Row Level Security with no policies blocks Supabase's public API from these tables.
 -- The app connects as the database owner, which is unaffected.

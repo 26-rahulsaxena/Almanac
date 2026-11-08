@@ -4,12 +4,11 @@ import { signOutNow, type AlertStages } from "@/app/actions";
 import { isAndroidApp } from "@/lib/android-app";
 import { Modal } from "./coach";
 import { AlertStageSettings, forgetDevice, NotifySettings } from "./notify-settings";
-import { SheetSync } from "./sheet-sync";
 import { PlanModeSetting, type PlanMode } from "./suggestions";
 import { ThemeToggle } from "./theme-toggle";
 import { profileLine, type Profile } from "@/lib/profile";
 
-const TABS = ["General", "Alerts", "Planning", "Sheet"] as const;
+const TABS = ["General", "Alerts", "Planning", "App"] as const;
 type Tab = (typeof TABS)[number];
 
 const KEYS: [string, string][] = [
@@ -31,8 +30,6 @@ export function Settings(props: {
   onStages: (s: AlertStages) => void;
   planMode: PlanMode;
   onPlanMode: (m: PlanMode) => void;
-  now: Date;
-  onCalendarChange: () => void;
   profile: Profile | null;
   onEditProfile: () => void;
 }) {
@@ -104,11 +101,6 @@ export function Settings(props: {
           <>
             <h3 className={h3}>This device</h3>
             <NotifySettings />
-            {!isAndroidApp() && (
-              <p className="mt-3 text-sm text-muted">
-                On Android? <a href="/download" className="text-ink underline">Get the Almanac app</a> (test version).
-              </p>
-            )}
             <AlertStageSettings initial={props.stages} onChange={props.onStages} />
           </>
         )}
@@ -118,10 +110,28 @@ export function Settings(props: {
             <PlanModeSetting initial={props.planMode} onChange={props.onPlanMode} />
           </>
         )}
-        {tab === "Sheet" && (
+        {tab === "App" && (
           <>
-            <h3 className={h3}>Google Sheet</h3>
-            <SheetSync now={props.now} onCalendarChange={props.onCalendarChange} />
+            <h3 className={h3}>Almanac for Android</h3>
+            {isAndroidApp() ? (
+              <p className="mt-2 text-sm">
+                You&rsquo;re using the app. When a new version is out, install it from the{" "}
+                <a href="/download" className="underline">download page</a>; it updates in place and you stay signed in.
+              </p>
+            ) : (
+              <>
+                <p className="mt-2 text-sm">
+                  A real app for your Android phone: reminders arrive even when it&rsquo;s closed, and when an event starts it rings full
+                  screen, like an alarm clock. Test version, not on the Play Store.
+                </p>
+                <a href="/download" className="mt-4 inline-block rounded-full bg-ink px-4 py-2 text-sm font-medium text-paper">
+                  Download the app
+                </a>
+                <p className="mt-3 text-xs text-muted">
+                  Open this on the Android phone itself. On iPhone: open Almanac in Safari, then Share → Add to Home Screen.
+                </p>
+              </>
+            )}
           </>
         )}
       </div>
