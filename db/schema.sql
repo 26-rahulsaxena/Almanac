@@ -147,12 +147,11 @@ create table if not exists plan_suggestions (
   unique (user_id, key)
 );
 
--- Google Sheet sync was removed (Almanac only asks for Google Calendar access now). These columns are empty and
--- unused; drop them once the live site runs code without the sheet sync.
-alter table users add column if not exists sheet_id text;
-alter table users add column if not exists sheet_synced_at timestamptz;
-alter table users add column if not exists sheet_name text;
-alter table users add column if not exists sheet_version text;
+-- Google Sheet sync was removed (Almanac only asks for Google Calendar access now).
+alter table users drop column if exists sheet_id;
+alter table users drop column if exists sheet_synced_at;
+alter table users drop column if exists sheet_name;
+alter table users drop column if exists sheet_version;
 
 -- Row Level Security with no policies blocks Supabase's public API from these tables.
 -- The app connects as the database owner, which is unaffected.
