@@ -696,8 +696,8 @@ export function CalendarApp({
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={(e) => e.key === "Escape" && (setQuery(""), e.currentTarget.blur())}
-                placeholder="Search   /"
-                className="w-36 rounded-full border border-line bg-surface px-4 py-1.5 text-sm placeholder:text-muted focus:w-56 focus:outline-none focus:ring-2 focus:ring-accent/50 sm:w-44 motion-safe:transition-[width]"
+                placeholder="Search"
+                className="w-24 rounded-full border border-line bg-surface px-3 py-1.5 text-sm placeholder:text-muted focus:w-40 focus:outline-none focus:ring-2 focus:ring-accent/50 sm:w-44 sm:px-4 sm:focus:w-56 motion-safe:transition-[width]"
               />
             </label>
             <div className="relative flex rounded-full border border-line bg-surface p-0.5" role="group" aria-label="View">
