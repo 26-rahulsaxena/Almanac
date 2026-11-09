@@ -2,6 +2,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { setHiddenCalendars, type AlertStages } from "@/app/actions";
+import { appHasWidget, saveAgenda } from "@/lib/android-app";
 import { GoogleSignIn } from "./google-sign-in";
 import type { Cal, Ev } from "@/lib/calendar";
 import { CATEGORIES, categoryHex } from "@/lib/categories";
@@ -239,6 +240,25 @@ export function CalendarApp({
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, []);
+
+  // The Android home-screen Agenda widget: the next two weeks of shown calendars, saved on the phone each time the
+  // calendar reloads (opening the app, coming back to it, any change).
+  useEffect(() => {
+    if (!mounted || !appHasWidget()) return;
+    const shown = calIds.filter((id) => !hidden.has(id));
+    if (shown.length === 0) return void saveAgenda([]).catch(() => {});
+    const now = new Date();
+    fetchEvents({ from: now.toISOString(), to: addDays(startOfDay(now), 14).toISOString() }, shown)
+      .then((events) =>
+        saveAgenda(
+          events
+            .map((e) => ({ title: e.title, start: +parseWhen(e.start, e.allDay), end: +parseWhen(e.end, e.allDay), allDay: e.allDay, color: color(e) }))
+            .sort((a, b) => a.start - b.start)
+            .slice(0, 80),
+        ),
+      )
+      .catch(() => {}); // the widget keeps what it had
+  }, [mounted, gen, calIds, hidden, color]);
 
   const q = query.trim();
   const searching = q.length >= 2;

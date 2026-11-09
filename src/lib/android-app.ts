@@ -4,9 +4,10 @@
 export const isAndroidApp = () => typeof navigator !== "undefined" && /AlmanacAndroid\//.test(navigator.userAgent);
 const appVersion = () => Number(navigator.userAgent.match(/AlmanacAndroid\/(\d+)/)?.[1] ?? 0);
 // What each app version can do (the "Almanac" plugin in android/.../AlmanacPlugin.java): 2 gets reminders,
-// 3 has voice typing.
+// 3 has voice typing, 4 has the home-screen Agenda widget.
 export const appHasReminders = () => appVersion() >= 2;
 export const appCanListen = () => appVersion() >= 3;
+export const appHasWidget = () => appVersion() >= 4;
 
 type AlmanacPlugin = {
   status(): Promise<{ notifications: boolean; fullScreen: boolean }>;
@@ -14,6 +15,7 @@ type AlmanacPlugin = {
   token(): Promise<{ token?: string }>;
   openFullScreenSettings(): Promise<void>;
   listen(): Promise<{ text: string }>;
+  setAgenda(o: { items: string }): Promise<void>;
 };
 export async function almanacPlugin(): Promise<AlmanacPlugin> {
   const p = (await import("@capacitor/core")).registerPlugin<AlmanacPlugin>("Almanac");
@@ -24,7 +26,14 @@ export async function almanacPlugin(): Promise<AlmanacPlugin> {
     token: () => p.token(),
     openFullScreenSettings: () => p.openFullScreenSettings(),
     listen: () => p.listen(),
+    setAgenda: (o) => p.setAgenda(o),
   };
+}
+
+export type AgendaItem = { title: string; start: number; end: number; allDay: boolean; color: string };
+// What the home-screen Agenda widget shows (saved on the phone only); [] empties it.
+export async function saveAgenda(items: AgendaItem[]) {
+  if (appHasWidget()) await (await almanacPlugin()).setAgenda({ items: JSON.stringify(items) });
 }
 
 const VERIFIER_KEY = "almanacAppVerifier";

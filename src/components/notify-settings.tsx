@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { setAlertStages, type AlertStages } from "@/app/actions";
-import { almanacPlugin, appHasReminders, isAndroidApp } from "@/lib/android-app";
+import { almanacPlugin, appHasReminders, isAndroidApp, saveAgenda } from "@/lib/android-app";
 import { SNOOZE_CHOICES } from "@/lib/reminders";
 
 // Whether this device gets reminders when Almanac is closed:
@@ -109,6 +109,7 @@ export async function syncPush() {
 // so it picks up the next account that signs in here).
 export async function forgetDevice() {
   if (isAndroidApp()) {
+    await saveAgenda([]).catch(() => {}); // the widget stops showing this account's events
     const token = appHasReminders() ? await almanacPlugin().then((p) => p.token()).then((r) => r.token, () => undefined) : undefined;
     if (token) await post("DELETE", { endpoint: `fcm:${token}` }).catch(() => {});
     return;

@@ -4,4 +4,5 @@
     <string name="title_activity_main">Almanac</string>
     <string name="package_name">app.almanac.calendar</string>
     <string name="custom_url_scheme">app.almanac.calendar</string>
+    <string name="widget_description">Your next two weeks at a glance</string>
 </resources>

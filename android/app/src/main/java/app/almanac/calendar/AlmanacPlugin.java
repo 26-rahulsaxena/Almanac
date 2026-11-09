@@ -109,6 +109,14 @@ public class AlmanacPlugin extends Plugin {
         call.resolve(r);
     }
 
+    // The next two weeks for the home-screen Agenda widget (a JSON list, see AgendaWidgetService), kept on this
+    // phone only. "[]" clears it, e.g. on signing out.
+    @PluginMethod
+    public void setAgenda(PluginCall call) {
+        AgendaWidget.save(getContext(), call.getString("items", "[]"));
+        call.resolve();
+    }
+
     @PluginMethod
     public void openFullScreenSettings(PluginCall call) {
         Intent i = Build.VERSION.SDK_INT >= 34
