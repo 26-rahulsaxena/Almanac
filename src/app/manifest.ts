@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Almanac",
     short_name: "Almanac",
-    description: "Your Google Calendar, on one page.",
+    description: "Never miss what matters. The calendar that won't let you forget.",
     start_url: "/",
     display: "standalone",
     background_color: "#f4f1ea",

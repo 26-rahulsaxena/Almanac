@@ -44,9 +44,9 @@ export function Landing({ error }: { error?: string }) {
             transition={{ duration: 0.7, delay: 0.08, ease }}
             className="mt-4 font-serif text-6xl leading-[0.95] sm:text-8xl"
           >
-            Your time,
+            Never miss
             <br />
-            <em className="text-accent">on one page.</em>
+            <em className="text-accent">what matters.</em>
           </motion.h1>
           <motion.div
             initial={{ opacity: 0, y: 12 }}
@@ -54,7 +54,8 @@ export function Landing({ error }: { error?: string }) {
             transition={{ duration: 0.6, delay: 0.2, ease }}
           >
             <p className="mt-6 max-w-md text-lg text-muted">
-              Every Google calendar you have, merged. Free time made obvious. Reminders that refuse to be ignored.
+              The calendar that won&rsquo;t let you forget. It plans your to&#8209;dos into free time, tells you what to do first, and keeps
+              reminding you until it&rsquo;s done.
             </p>
             {/* Stacked, the same width as the text above, so everything lines up on every screen size. */}
             <div className="mt-8 grid max-w-md gap-3">

@@ -15,7 +15,7 @@ const instrumentSerif = Instrument_Serif({
 
 export const metadata: Metadata = {
   title: "Almanac",
-  description: "Your Google Calendar, on one page.",
+  description: "Never miss what matters. The calendar that won't let you forget.",
   appleWebApp: { capable: true, title: "Almanac", statusBarStyle: "default" },
 };
 
