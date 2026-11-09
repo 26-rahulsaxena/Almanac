@@ -19,7 +19,7 @@ export function AddCalendarHelp({ email, onClose }: { email: string; onClose: ()
           On the left, under <b>Settings for my calendars</b>, click the calendar, then <b>Shared with</b>.
         </li>
         <li>
-          Click <b>Add people or groups</b> and type <span className="break-words">{email}</span>.
+          Click <b>Add people and groups</b> and type <span className="break-words">{email}</span>.
         </li>
         <li>
           For permission, pick <b>Make changes and see all event details</b>, then click <b>Send</b>.
