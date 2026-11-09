@@ -56,8 +56,8 @@ export function Landing({ error }: { error?: string }) {
             <p className="mt-6 max-w-md text-lg text-muted">
               Every Google calendar you have, merged. Free time made obvious. Reminders that refuse to be ignored.
             </p>
-            {/* Same size side by side; stacked and full width on a phone. */}
-            <div className="mt-8 grid max-w-md gap-3 sm:w-fit sm:max-w-none sm:auto-cols-fr sm:grid-flow-col">
+            {/* Stacked, the same width as the text above, so everything lines up on every screen size. */}
+            <div className="mt-8 grid max-w-md gap-3">
               <GoogleSignIn>
                 <motion.button
                   type="submit"
@@ -84,7 +84,7 @@ export function Landing({ error }: { error?: string }) {
                 </motion.a>
               )}
             </div>
-            <p className="mt-4 text-sm text-muted">Asks only to manage your Google Calendar. Never your email or files.</p>
+            <p className="mt-4 max-w-md text-sm text-muted">Asks only to manage your Google Calendar. Never your email or files.</p>
             {error && (
               <p role="alert" className="mt-6 max-w-md rounded-xl border border-accent/40 bg-accent/10 px-4 py-3 text-sm">
                 {errors[error] ?? `Sign-in failed (${error}). Try again.`}
