@@ -25,7 +25,6 @@ import { Modal, Review, TodayCard, WhatNow } from "./coach";
 import { Suggestions, type PlanMode } from "./suggestions";
 import { ThemeToggle } from "./theme-toggle";
 import { TodoDialog } from "./todo-dialog";
-import { TodoList } from "./todo-list";
 import { Agenda } from "./views/agenda";
 import { MonthGrid } from "./views/month-grid";
 import { TimeGrid, type TodoDrag } from "./views/time-grid";
@@ -567,7 +566,7 @@ export function CalendarApp({
               ref={menuButton}
               type="button"
               onClick={() => setMenu(true)}
-              aria-label="Open menu: calendars, to-do, categories"
+              aria-label="Open menu: view, calendars, categories"
               aria-expanded={menu}
               aria-controls="menu"
               title="Menu (\)"
@@ -682,8 +681,8 @@ export function CalendarApp({
       </header>
 
       <div className="w-full flex-1 px-3 py-4 sm:px-6">
-        {/* The side panel slides out over the calendar. It stays mounted while closed (inert), so the to-do list
-            and sheet panel keep their state and don't reload every time it opens. */}
+        {/* The side panel slides out over the calendar. It stays mounted while closed (inert), so its panels
+            keep their state and don't reload every time it opens. */}
         <AnimatePresence>
           {menu && (
             <motion.div
@@ -769,25 +768,13 @@ export function CalendarApp({
             })}
           </ul>
 
-          <h2 className="mt-6 font-mono text-xs uppercase tracking-[0.2em] text-muted">To-do</h2>
-          <TodoList
-            version={gen}
-            now={now}
-            onCalendarChange={() => setGen((g) => g + 1)}
-            onOpenDay={(d) => {
-              openDay(startOfDay(d));
-              setMenu(false);
-            }}
-            onDragStart={dragTodo}
-          />
-
           <button
             type="button"
             onClick={() => {
               setMenu(false);
               setReview(true);
             }}
-            className="mt-3 rounded-full border border-line px-3 py-1.5 text-sm hover:border-ink/40"
+            className="mt-6 rounded-full border border-line px-3 py-1.5 text-sm hover:border-ink/40"
           >
             Your week in review
           </button>
