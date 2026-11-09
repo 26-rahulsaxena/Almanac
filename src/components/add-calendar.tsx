@@ -16,7 +16,7 @@ export function AddCalendarHelp({ email, onClose }: { email: string; onClose: ()
           Under <b>My calendars</b>, point at the calendar, click <b>⋮</b>, then <b>Settings and sharing</b>.
         </li>
         <li>
-          Under <b>Share with specific people</b>, add <span className="break-words">{email}</span> and pick <b>Make changes to events</b>.
+          Under <b>Share with specific people</b>, add <span className="break-words">{email}</span> and pick <b>Make changes and see all event details</b>.
         </li>
         <li>
           Open Google&rsquo;s email in this account&rsquo;s inbox and click <b>Add this calendar</b>.
