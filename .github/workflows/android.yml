@@ -79,8 +79,7 @@ jobs:
         run: |
           cp android/app/build/outputs/apk/release/app-release.apk public/almanac.apk
           # The site compares this with the installed app (Settings → App) and tells phones about a new build.
-          printf '{ "build": %s }
-' "${{ github.run_number }}" > src/lib/android-build.json
+          echo '{ "build": ${{ github.run_number }} }' > src/lib/android-build.json
           git config user.name "rahulshakaya12310"
           git config user.email "rahulshakaya12310@gmail.com"
           git add public/almanac.apk src/lib/android-build.json
