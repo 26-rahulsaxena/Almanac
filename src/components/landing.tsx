@@ -56,13 +56,14 @@ export function Landing({ error }: { error?: string }) {
             <p className="mt-6 max-w-md text-lg text-muted">
               Every Google calendar you have, merged. Free time made obvious. Reminders that refuse to be ignored.
             </p>
-            <div className="mt-8 flex flex-wrap items-center gap-3">
+            {/* Same size side by side; stacked and full width on a phone. */}
+            <div className="mt-8 grid max-w-md gap-3 sm:w-fit sm:max-w-none sm:auto-cols-fr sm:grid-flow-col">
               <GoogleSignIn>
                 <motion.button
                   type="submit"
                   whileHover={{ y: -2 }}
                   whileTap={{ scale: 0.97 }}
-                  className="inline-flex items-center gap-3 rounded-full bg-ink px-6 py-3 text-base font-medium text-paper shadow-lg shadow-ink/10"
+                  className="flex h-12 w-full items-center justify-center gap-3 whitespace-nowrap rounded-full bg-ink px-6 text-base font-medium text-paper shadow-lg shadow-ink/10"
                 >
                   <GoogleMark />
                   Continue with Google
@@ -74,7 +75,7 @@ export function Landing({ error }: { error?: string }) {
                   href="/download"
                   whileHover={{ y: -2 }}
                   whileTap={{ scale: 0.97 }}
-                  className="inline-flex items-center gap-2 rounded-full border border-line bg-surface px-6 py-3 text-base font-medium hover:border-ink/40"
+                  className="flex h-12 items-center justify-center gap-2 whitespace-nowrap rounded-full border border-line bg-surface px-6 text-base font-medium hover:border-ink/40"
                 >
                   <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                     <path d="M12 4v11M7 10l5 5 5-5M5 20h14" />
