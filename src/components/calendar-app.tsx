@@ -589,7 +589,7 @@ export function CalendarApp({
               title="Today (T)"
               className="flex h-10 items-center gap-1.5 whitespace-nowrap rounded-full border border-line bg-surface px-2 text-sm hover:border-ink/40 sm:px-4"
             >
-              <span className="grid size-6 place-items-center rounded-md border-2 border-current text-[11px] font-semibold leading-none sm:hidden" aria-hidden>
+              <span className="grid size-6 place-items-center text-lg font-semibold leading-none sm:hidden" aria-hidden>
                 {mounted ? now.getDate() : ""}
               </span>
               <span className="hidden sm:inline">
