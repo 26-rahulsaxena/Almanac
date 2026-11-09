@@ -7,9 +7,9 @@ import { Modal } from "./coach";
 import { enablePush, PUSH_HELP, usePushState } from "./notify-settings";
 import { HowItWorks } from "./tour";
 
-// The first time it's kept short: how it works, your role (which picks what matters), reminders on this device.
-// From Settings it's "About you": role, title, what matters most, anything else.
-const FIRST = ["how", "role", "alerts"] as const;
+// The first time it's kept short: how it works, your role, what matters most (already picked for the role),
+// reminders on this device. From Settings it's "About you": role, title, what matters most, anything else.
+const FIRST = ["how", "role", "focus", "alerts"] as const;
 const EDIT = ["role", "title", "focus", "note"] as const;
 
 // Shown once after the first sign-in (skipping counts as answered) and again from Settings to edit.
