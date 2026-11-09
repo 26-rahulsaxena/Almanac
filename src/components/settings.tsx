@@ -37,6 +37,7 @@ export function Settings(props: {
   onPlanMode: (m: PlanMode) => void;
   profile: Profile | null;
   onEditProfile: () => void;
+  onAddAccount: () => void;
 }) {
   const [tab, setTab] = useState<Tab>("General");
   const [tour, setTour] = useState(false);
@@ -177,7 +178,16 @@ export function Settings(props: {
                 <p className="truncate text-sm text-muted">{props.email}</p>
               </div>
             </div>
-            <p className="mt-6 text-sm">Signing out stops notifications on this device. To use another Google account, sign out, then sign in with it.</p>
+            <div className="mt-6 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className={h3}>Other Google accounts</h3>
+                <p className="mt-1 text-sm">See their calendars here too, next to yours</p>
+              </div>
+              <button type="button" onClick={props.onAddAccount} className="shrink-0 rounded-full border border-line px-3 py-1.5 text-sm hover:border-ink/40">
+                Add
+              </button>
+            </div>
+            <p className="mt-6 text-sm">Signing out stops notifications on this device. To switch to another Google account, sign out, then sign in with it.</p>
             {/* This device stops getting the account's notifications before the session ends; a slow phone or
                 network never holds up signing out for more than 3 seconds. */}
             <form action={async () => { await Promise.race([forgetDevice(), new Promise((r) => setTimeout(r, 3000))]); await signOutNow(); }} className="mt-4">

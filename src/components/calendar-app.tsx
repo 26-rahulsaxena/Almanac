@@ -1054,6 +1054,10 @@ export function CalendarApp({
               setSettings(false);
               setAbout(true);
             }}
+            onAddAccount={() => {
+              setSettings(false);
+              setAddCal(true);
+            }}
           />
         )}
         {about && (
