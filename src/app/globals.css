@@ -71,6 +71,13 @@ body {
   transition: background-color 0.3s, color 0.3s;
 }
 
+/* Theme switch (src/components/theme-toggle.tsx): the new theme is revealed by a growing circle, not a fade. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;

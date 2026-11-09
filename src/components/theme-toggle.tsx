@@ -2,11 +2,27 @@
 import { motion } from "motion/react";
 
 export function ThemeToggle() {
-  function toggle() {
+  function apply() {
     const dark = document.documentElement.classList.toggle("dark");
     try {
       localStorage.theme = dark ? "dark" : "light";
     } catch {}
+  }
+
+  // The new theme spreads from this button as a growing circle until it covers the screen. Browsers without
+  // view transitions, and "reduce motion", switch at once.
+  function toggle(e: React.MouseEvent<HTMLButtonElement>) {
+    if (!document.startViewTransition || matchMedia("(prefers-reduced-motion: reduce)").matches) return apply();
+    const b = e.currentTarget.getBoundingClientRect();
+    const x = b.left + b.width / 2;
+    const y = b.top + b.height / 2;
+    const r = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y)); // to the farthest corner
+    document.startViewTransition(apply).ready.then(() =>
+      document.documentElement.animate(
+        { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${r}px at ${x}px ${y}px)`] },
+        { duration: 700, easing: "cubic-bezier(0.4, 0, 0.2, 1)", pseudoElement: "::view-transition-new(root)" },
+      ),
+    );
   }
 
   return (

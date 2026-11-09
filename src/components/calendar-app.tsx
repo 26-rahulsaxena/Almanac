@@ -577,7 +577,7 @@ export function CalendarApp({
                 <path d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             </button>
-            <span className="font-serif text-xl sm:text-2xl">Almanac</span>
+            <span className={`font-serif text-xl transition-opacity sm:text-2xl ${searchOpen ? "opacity-0" : ""}`}>Almanac</span>
           </div>
           <div className="flex items-center gap-1.5 sm:gap-2">
             <span className="hidden text-sm text-muted sm:inline">{name}</span>
@@ -596,22 +596,55 @@ export function CalendarApp({
                 Today{mounted && <span className="text-muted"> · {now.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>}
               </span>
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (searchOpen) setQuery("");
-                setSearchOpen(!searchOpen);
-              }}
-              aria-label={searchOpen ? "Close search" : "Search events"}
-              aria-expanded={searchOpen}
-              title="Search (/)"
-              className={`grid size-10 place-items-center rounded-full border bg-surface hover:border-ink/40 ${searchOpen ? "border-ink/40" : "border-line"}`}
-            >
-              <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
-                <circle cx="11" cy="11" r="7" />
-                <path d="m20 20-3.5-3.5" />
-              </svg>
-            </button>
+            {/* Search: the round button grows to the left into the search box (over the name and date while open). */}
+            <div className="relative size-10 shrink-0">
+              <div
+                className={`absolute right-0 top-0 z-10 flex h-10 items-center overflow-hidden rounded-full border bg-surface transition-[width,border-color] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                  searchOpen ? "w-[min(22rem,calc(100vw-10.5rem))] border-accent/60" : "w-10 border-line hover:border-ink/40"
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() => (searchOpen ? searchRef.current?.focus() : setSearchOpen(true))}
+                  aria-label="Search events"
+                  aria-expanded={searchOpen}
+                  title="Search (/)"
+                  className="grid size-10 shrink-0 place-items-center"
+                >
+                  <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
+                    <circle cx="11" cy="11" r="7" />
+                    <path d="m20 20-3.5-3.5" />
+                  </svg>
+                </button>
+                {searchOpen && (
+                  <>
+                    <input
+                      ref={searchRef}
+                      autoFocus
+                      type="search"
+                      aria-label="Search events"
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === "Escape" && (setQuery(""), setSearchOpen(false))}
+                      placeholder="Search events"
+                      style={{ outline: "none" }} // the pill's orange border already shows it's active
+                      className="min-w-0 flex-1 bg-transparent text-sm placeholder:text-muted [&::-webkit-search-cancel-button]:hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setQuery("");
+                        setSearchOpen(false);
+                      }}
+                      aria-label="Close search"
+                      className="grid size-9 shrink-0 place-items-center rounded-full text-muted hover:text-ink"
+                    >
+                      ✕
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
             <ThemeToggle />
             <button
               type="button"
@@ -628,23 +661,6 @@ export function CalendarApp({
             </button>
           </div>
         </div>
-        {searchOpen && (
-          <div className="px-3 pb-3 sm:px-6">
-            <label className="block">
-              <span className="sr-only">Search events</span>
-              <input
-                ref={searchRef}
-                autoFocus
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(e) => e.key === "Escape" && (setQuery(""), setSearchOpen(false))}
-                placeholder="Search events"
-                className="w-full rounded-full border border-line bg-surface px-4 py-2 text-sm placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent/50"
-              />
-            </label>
-          </div>
-        )}
       </header>
 
       <div className="w-full flex-1 px-3 py-4 sm:px-6">
