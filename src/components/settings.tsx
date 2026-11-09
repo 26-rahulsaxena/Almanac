@@ -91,7 +91,7 @@ export function Settings(props: {
               {/* This device stops getting the account's notifications before the session ends; a slow phone or
                   network never holds up signing out for more than 3 seconds. */}
               <form action={async () => { await Promise.race([forgetDevice(), new Promise((r) => setTimeout(r, 3000))]); await signOutNow(); }}>
-                <button type="submit" className="shrink-0 rounded-full border border-line px-4 py-1.5 text-sm hover:border-ink/40">
+                <button type="submit" className="shrink-0 whitespace-nowrap rounded-full border border-line px-4 py-1.5 text-sm hover:border-ink/40">
                   Sign out
                 </button>
               </form>

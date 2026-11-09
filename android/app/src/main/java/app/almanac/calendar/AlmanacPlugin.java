@@ -2,17 +2,22 @@ package app.almanac.calendar;
 
 import android.Manifest;
 import android.app.NotificationManager;
+import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.Settings;
+import android.speech.RecognizerIntent;
+import androidx.activity.result.ActivityResult;
 import androidx.core.app.NotificationManagerCompat;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import java.util.ArrayList;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
 import com.google.firebase.messaging.FirebaseMessaging;
@@ -79,6 +84,29 @@ public class AlmanacPlugin extends Plugin {
     @PluginMethod
     public void token(PluginCall call) {
         sendToken(call);
+    }
+
+    // Speak instead of typing. Web speech-to-text doesn't work inside an app, so this opens Android's own voice
+    // typing ("Speak now"), which handles the microphone itself, and returns the words heard ("" if nothing).
+    @PluginMethod
+    public void listen(PluginCall call) {
+        Intent i = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            .putExtra(RecognizerIntent.EXTRA_PROMPT, "Say what and when");
+        try {
+            startActivityForResult(call, i, "heard");
+        } catch (ActivityNotFoundException e) {
+            call.reject("This phone has no voice typing. Install or update the Google app, or type instead.");
+        }
+    }
+
+    @ActivityCallback
+    private void heard(PluginCall call, ActivityResult result) {
+        if (call == null) return;
+        ArrayList<String> words = result.getData() == null ? null : result.getData().getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
+        JSObject r = new JSObject();
+        r.put("text", words == null || words.isEmpty() ? "" : words.get(0));
+        call.resolve(r);
     }
 
     @PluginMethod

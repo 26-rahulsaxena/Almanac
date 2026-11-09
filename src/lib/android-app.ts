@@ -2,19 +2,29 @@
 // browser name. Sign-in goes through the phone's browser (Google refuses it inside apps): see src/lib/app-handoff.ts.
 
 export const isAndroidApp = () => typeof navigator !== "undefined" && /AlmanacAndroid\//.test(navigator.userAgent);
-// Version 2 and later can get reminders (the "Almanac" plugin in android/.../AlmanacPlugin.java).
-export const appHasReminders = () => Number(navigator.userAgent.match(/AlmanacAndroid\/(\d+)/)?.[1] ?? 0) >= 2;
+const appVersion = () => Number(navigator.userAgent.match(/AlmanacAndroid\/(\d+)/)?.[1] ?? 0);
+// What each app version can do (the "Almanac" plugin in android/.../AlmanacPlugin.java): 2 gets reminders,
+// 3 has voice typing.
+export const appHasReminders = () => appVersion() >= 2;
+export const appCanListen = () => appVersion() >= 3;
 
 type AlmanacPlugin = {
   status(): Promise<{ notifications: boolean; fullScreen: boolean }>;
   enable(): Promise<{ notifications: boolean; token?: string }>;
   token(): Promise<{ token?: string }>;
   openFullScreenSettings(): Promise<void>;
+  listen(): Promise<{ text: string }>;
 };
 export async function almanacPlugin(): Promise<AlmanacPlugin> {
   const p = (await import("@capacitor/core")).registerPlugin<AlmanacPlugin>("Almanac");
   // The plugin answers to every name, even "then", so returning it as-is from here would never resolve.
-  return { status: () => p.status(), enable: () => p.enable(), token: () => p.token(), openFullScreenSettings: () => p.openFullScreenSettings() };
+  return {
+    status: () => p.status(),
+    enable: () => p.enable(),
+    token: () => p.token(),
+    openFullScreenSettings: () => p.openFullScreenSettings(),
+    listen: () => p.listen(),
+  };
 }
 
 const VERIFIER_KEY = "almanacAppVerifier";

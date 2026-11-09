@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { almanacPlugin, appCanListen, isAndroidApp } from "@/lib/android-app";
 
 // The browser's speech-to-text (Chrome, Edge, Safari); not in TypeScript's built-in types.
 type Rec = {
@@ -16,16 +17,37 @@ const speech = () => {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition;
 };
 const noChanges = () => () => {};
+// Inside the Android app the browser's speech-to-text doesn't work: new versions use the phone's voice typing,
+// older ones hide the button.
+const canSpeakHere = () => (isAndroidApp() ? appCanListen() : !!speech());
 
 // Speak instead of typing. onText gets the words as they're heard; onEnd the final words once you stop.
 // Shows nothing in browsers without speech-to-text (e.g. Firefox).
 export function MicButton({ onText, onEnd, onError, onListening }: { onText: (t: string) => void; onEnd?: (t: string) => void; onError: (msg: string) => void; onListening?: (on: boolean) => void }) {
   const [listening, setListening] = useState(false);
   const rec = useRef<Rec | null>(null);
-  const canSpeak = useSyncExternalStore(noChanges, () => !!speech(), () => false);
+  const canSpeak = useSyncExternalStore(noChanges, canSpeakHere, () => false);
   useEffect(() => () => rec.current?.stop(), []);
 
+  async function listenInApp() {
+    setListening(true);
+    onListening?.(true);
+    try {
+      const { text } = await (await almanacPlugin()).listen();
+      if (text.trim()) {
+        onText(text.trim());
+        onEnd?.(text.trim());
+      }
+    } catch (e) {
+      onError((e as Error).message || "Didn't catch that. Try again, or type it.");
+    } finally {
+      setListening(false);
+      onListening?.(false);
+    }
+  }
+
   function toggle() {
+    if (isAndroidApp()) return listening ? undefined : listenInApp();
     if (rec.current) return rec.current.stop();
     const R = speech();
     if (!R) return;
