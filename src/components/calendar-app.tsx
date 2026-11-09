@@ -539,6 +539,12 @@ export function CalendarApp({
   );
   const found = results?.q === q ? results.events.filter(shown) : null;
   const openEvent = (e: Ev) => (e.calendarId === TODO_CAL ? setTodos(true) : setPanel({ form: draftFromEvent(e), event: e }));
+  const openPriorities = priorities?.filter((p) => p.status !== "done").length ?? 0;
+  const whatNow = (
+    <button type="button" onClick={() => setNowOpen(true)} className="rounded-full border border-accent/60 px-3 py-1.5 text-sm text-accent hover:border-accent">
+      What now?
+    </button>
+  );
   const foundDays = useMemo(() => {
     const seen = new Map<number, Date>();
     for (const e of found ?? []) {
@@ -723,9 +729,14 @@ export function CalendarApp({
               <button type="button" onClick={goToday} className="rounded-full border border-line px-4 py-1.5 text-sm hover:border-ink/40">
                 Today
               </button>
-              <button type="button" onClick={() => setNowOpen(true)} className="rounded-full border border-accent/60 px-3 py-1.5 text-sm text-accent hover:border-accent">
-                What now?
-              </button>
+              {/* Phones: Today's plan up here and What now? beside Priorities below. Wide screens show the plan in the side column. */}
+              {mounted && !wide ? (
+                <button type="button" onClick={() => setSheet("today")} className="rounded-full border border-line px-3 py-1.5 text-sm hover:border-ink/40">
+                  Today&rsquo;s plan
+                </button>
+              ) : (
+                whatNow
+              )}
             </div>
             <h1 className="order-last w-full font-serif text-3xl sm:order-none sm:mr-auto sm:w-auto sm:text-4xl" aria-live="polite">
               {mounted ? titleOf(view, anchor, days) : " "}
@@ -743,12 +754,21 @@ export function CalendarApp({
               />
             </label>
             {mounted && !wide && (
-              <div className="flex w-full gap-2">
-                <button type="button" onClick={() => setSheet("today")} className="flex-1 rounded-full border border-line bg-surface px-3 py-1.5 text-sm hover:border-ink/40">
-                  Today&rsquo;s plan
-                </button>
-                <button type="button" onClick={() => setSheet("priorities")} className="flex-1 rounded-full border border-line bg-surface px-3 py-1.5 text-sm hover:border-ink/40">
-                  Priorities{priorities?.length ? ` · ${priorities.filter((p) => p.status !== "done").length}` : ""}
+              <div className="flex w-full gap-2 *:flex-1">
+                {whatNow}
+                {/* Marked as important: red outline and a red count of what's still open. */}
+                <button
+                  type="button"
+                  onClick={() => setSheet("priorities")}
+                  className="flex items-center justify-center gap-2 rounded-full border bg-surface px-3 py-1.5 text-sm font-medium"
+                  style={{ borderColor: "color-mix(in srgb, var(--sev-critical) 60%, transparent)", color: "var(--sev-critical)" }}
+                >
+                  Priorities
+                  {openPriorities > 0 && (
+                    <span className="grid min-w-5 place-items-center rounded-full px-1.5 text-xs font-semibold text-white" style={{ background: "var(--sev-critical)" }}>
+                      {openPriorities}
+                    </span>
+                  )}
                 </button>
               </div>
             )}

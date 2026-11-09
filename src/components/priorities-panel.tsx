@@ -142,10 +142,11 @@ function Card({ p, onAction }: { p: Priority; onAction: (a: PriorityAction) => P
   const title = p.title.replace(/^(deadline|due)\s*[:–-]\s*/i, "").replace(/^./, (ch) => ch.toUpperCase());
 
   const btn = "rounded-full px-2.5 py-1 text-xs transition-colors disabled:opacity-50";
-  const big = "whitespace-nowrap rounded-full px-3 py-2 text-center text-xs transition-colors disabled:opacity-50";
+  // Tighter when the card is narrow (the side panel on a computer), so the three always fit.
+  const big = "whitespace-nowrap rounded-full px-2 py-2 text-center text-[11px] @[15rem]:px-3 @[15rem]:text-xs transition-colors disabled:opacity-50";
   return (
     <div className="relative overflow-hidden rounded-2xl border border-line bg-paper pl-3" style={{ boxShadow: `inset 4px 0 0 ${c}` }}>
-      <div className="p-3 pl-2">
+      <div className="@container p-3 pl-2">
         <div className="flex items-center justify-between gap-2">
           {/* Tap the level to change it; the four choices stay out of the way until then. */}
           <button
@@ -190,32 +191,41 @@ function Card({ p, onAction }: { p: Priority; onAction: (a: PriorityAction) => P
         ) : (
           <>
             {picking && (
-            <div role="radiogroup" aria-label={`Severity of ${p.title}`} className="mt-3 flex flex-wrap gap-1.5">
-              {[...SEVERITIES].reverse().map((s) => {
-                const on = p.severity === s;
-                return (
-                  <button
-                    key={s}
-                    type="button"
-                    role="radio"
-                    aria-checked={on}
-                    disabled={busy}
-                    onClick={() => act({ action: "severity", severity: s }).then(() => setPicking(false))}
-                    className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${on ? "border-transparent font-semibold" : "border-line hover:border-ink/30"}`}
-                    style={on ? { background: `color-mix(in srgb, ${sevColor(s)} 22%, transparent)`, boxShadow: `inset 0 0 0 1.5px ${sevColor(s)}` } : undefined}
-                  >
-                    <span className="size-2 rounded-full" style={{ background: sevColor(s) }} aria-hidden />
-                    {SEVERITY_LABEL[s]}
-                    {p.suggested === s && <span className="font-normal text-muted">· {p.ai ? "AI suggested" : "suggested"}</span>}
-                  </button>
-                );
-              })}
-              {p.chosen && (
-                <button type="button" disabled={busy} onClick={() => act({ action: "severity", severity: null }).then(() => setPicking(false))} className="px-1 text-xs text-muted underline">
-                  Use suggestion
-                </button>
-              )}
-            </div>
+              <div className="@container mt-3">
+                {/* One bar of four equal parts, so it never wraps; who suggested what goes on the line below. The dots
+                    go when the bar is too narrow for them (the narrow side panel on a computer). */}
+                <div role="radiogroup" aria-label={`Severity of ${p.title}`} className="grid grid-cols-4 rounded-full border border-line p-0.5">
+                  {[...SEVERITIES].reverse().map((s) => {
+                    const on = p.severity === s;
+                    return (
+                      <button
+                        key={s}
+                        type="button"
+                        role="radio"
+                        aria-checked={on}
+                        disabled={busy}
+                        onClick={() => act({ action: "severity", severity: s }).then(() => setPicking(false))}
+                        className={`flex min-w-0 items-center justify-center gap-1 rounded-full py-1.5 text-[11px] ${on ? "font-semibold" : "text-muted hover:text-ink"}`}
+                        style={on ? { background: `color-mix(in srgb, ${sevColor(s)} 22%, transparent)`, boxShadow: `inset 0 0 0 1.5px ${sevColor(s)}` } : undefined}
+                      >
+                        <span className="hidden size-1.5 shrink-0 rounded-full @[16rem]:block" style={{ background: sevColor(s) }} aria-hidden />
+                        {SEVERITY_LABEL[s]}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-1 text-center text-[11px] text-muted">
+                  {p.ai ? "AI" : "Almanac"} suggested {SEVERITY_LABEL[p.suggested]}
+                  {p.chosen && (
+                    <>
+                      {" · "}
+                      <button type="button" disabled={busy} onClick={() => act({ action: "severity", severity: null }).then(() => setPicking(false))} className="underline hover:text-ink">
+                        Use suggestion
+                      </button>
+                    </>
+                  )}
+                </p>
+              </div>
             )}
 
             {/* Three equal buttons that always fit on one line; the rarer actions as small links below. */}
