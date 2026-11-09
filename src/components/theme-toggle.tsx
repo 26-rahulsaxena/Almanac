@@ -25,10 +25,10 @@ export function ThemeToggle() {
     const t = document.startViewTransition(apply);
     t.ready.then(() =>
       html.animate(
-        { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${r}px at ${x}px ${y}px)`] },
-        // Speeds up gently: near the end most of the circle is off screen, so a steady radius would look like it
-        // slows down while it fills the last corner.
-        { duration: 650, easing: "cubic-bezier(0.35, 0, 0.75, 0.55)", pseudoElement: "::view-transition-new(root)" },
+        // Starts the size of the button and grows at one steady speed, so it's seen coming out of the button
+        // from the first moment (a slow start hid it behind the button).
+        { clipPath: [`circle(${b.width / 2}px at ${x}px ${y}px)`, `circle(${r}px at ${x}px ${y}px)`] },
+        { duration: 600, easing: "linear", pseudoElement: "::view-transition-new(root)" },
       ),
     );
     t.finished.finally(() => html.classList.remove("theme-switching"));
