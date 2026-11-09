@@ -1,13 +1,9 @@
-"use client";
-import { motion } from "motion/react";
-import { useState } from "react";
-
 const s = { fill: "none", stroke: "currentColor", strokeWidth: 1.6, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
 
-const CARDS = [
+const IDEAS = [
   {
     title: "Never miss what matters",
-    text: "Your Google Calendar and your to-dos, together in one place.",
+    text: "Your Google Calendar and to-dos, in one place.",
     art: (
       <>
         <rect x="8" y="10" width="48" height="46" rx="11" {...s} />
@@ -19,7 +15,7 @@ const CARDS = [
   },
   {
     title: "Just say it",
-    text: "Tap Ask Almanac and say “Dentist Friday 4 pm” or “Remind me to pay rent”. It adds it for you.",
+    text: "Tap Ask Almanac and say “Dentist Friday 4 pm”.",
     art: (
       <>
         <rect x="24" y="8" width="16" height="30" rx="8" {...s} />
@@ -30,7 +26,7 @@ const CARDS = [
   },
   {
     title: "It tells you what’s next",
-    text: "“What now?” picks the one thing to do right now. Priorities shows what’s due soonest, and Almanac fits your to-dos into free time.",
+    text: "“What now?” picks your next task and plans to-dos into free time.",
     art: (
       <>
         <rect x="8" y="12" width="48" height="10" rx="5" fill="var(--accent)" />
@@ -42,7 +38,7 @@ const CARDS = [
   },
   {
     title: "It won’t let you forget",
-    text: "Reminders keep coming, even when the app is closed, until you mark it done. Big things ring full screen, like an alarm.",
+    text: "Reminders keep coming until it’s done, even when the app is closed.",
     art: (
       <>
         <path d="M20 44V30a12 12 0 0 1 24 0v14l4 5H16Z" {...s} />
@@ -53,54 +49,23 @@ const CARDS = [
   },
 ];
 
-// "How it works": four cards, one idea each. Shown before the Welcome questions the first time, and again from
-// Settings → General. doneLabel is the last card's button; Skip ends it early.
-export function Tour({ doneLabel, onDone }: { doneLabel: string; onDone: () => void }) {
-  const [i, setI] = useState(0);
-  const c = CARDS[i];
-  const last = i === CARDS.length - 1;
+// "How it works": the four main ideas on one page. First screen of the Welcome, and in Settings → General.
+export function HowItWorks() {
   return (
-    <div>
-      <p className="text-sm text-muted">
-        How it works &middot; {i + 1} of {CARDS.length}
-      </p>
-      <motion.div
-        key={i}
-        initial={{ opacity: 0, x: 16 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.2 }}
-        aria-live="polite"
-        className="flex min-h-[17rem] flex-col items-center justify-center text-center"
-      >
-        <div className="grid size-32 place-items-center rounded-full bg-ink/5 text-ink" aria-hidden>
-          <svg viewBox="0 0 64 64" className="size-20">
-            {c.art}
-          </svg>
-        </div>
-        <h3 className="mt-6 font-serif text-2xl">{c.title}</h3>
-        <p className="mt-2 max-w-xs text-sm text-muted">{c.text}</p>
-      </motion.div>
-      <div className="mt-2 flex justify-center gap-1.5" aria-hidden>
-        {CARDS.map((_, n) => (
-          <span key={n} className={`h-1.5 rounded-full transition-all ${n === i ? "w-5 bg-ink" : "w-1.5 bg-ink/20"}`} />
-        ))}
-      </div>
-      <div className="mt-5 flex items-center gap-2">
-        {!last && (
-          <button type="button" onClick={onDone} className="rounded-full px-3 py-1.5 text-sm text-muted hover:text-ink">
-            Skip
-          </button>
-        )}
-        <span className="flex-1" />
-        {i > 0 && (
-          <button type="button" onClick={() => setI(i - 1)} className="rounded-full border border-line px-4 py-2 text-sm hover:border-ink/40">
-            Back
-          </button>
-        )}
-        <button type="button" onClick={() => (last ? onDone() : setI(i + 1))} className="rounded-full bg-ink px-5 py-2 text-sm font-medium text-paper hover:bg-ink/85">
-          {last ? doneLabel : "Next"}
-        </button>
-      </div>
-    </div>
+    <ul className="space-y-4">
+      {IDEAS.map((c) => (
+        <li key={c.title} className="flex items-start gap-3">
+          <span className="grid size-12 shrink-0 place-items-center rounded-full bg-ink/5 text-ink" aria-hidden>
+            <svg viewBox="0 0 64 64" className="size-7">
+              {c.art}
+            </svg>
+          </span>
+          <span>
+            <span className="block text-sm font-medium">{c.title}</span>
+            <span className="block text-sm text-muted">{c.text}</span>
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }

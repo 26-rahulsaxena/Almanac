@@ -5,15 +5,20 @@ import { saveProfile } from "@/app/actions";
 import { FOCUS, isRole, ROLES, type Profile } from "@/lib/profile";
 import { Modal } from "./coach";
 import { enablePush, PUSH_HELP, usePushState } from "./notify-settings";
-import { Tour } from "./tour";
+import { HowItWorks } from "./tour";
 
-// The first time there's one more step: getting reminders on this device.
+// The first time it's kept short: how it works, your role (which picks what matters), reminders on this device.
+// From Settings it's "About you": role, title, what matters most, anything else.
+const FIRST = ["how", "role", "alerts"] as const;
+const EDIT = ["role", "title", "focus", "note"] as const;
 
-// "About you", one question at a time: role, title, what matters most, anything else. Shown once after the
-// first sign-in (skipping counts as answered) and again from Settings to edit.
+// Shown once after the first sign-in (skipping counts as answered) and again from Settings to edit.
 export function Welcome({ initial, first, onDone }: { initial: Profile; first: boolean; onDone: (p: Profile) => void }) {
   const [p, setP] = useState(initial);
   const [step, setStep] = useState(0);
+  const steps: readonly string[] = first ? FIRST : EDIT;
+  const at = steps[step];
+  const next = () => setStep((s) => Math.min(s + 1, steps.length - 1));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,7 +34,7 @@ export function Welcome({ initial, first, onDone }: { initial: Profile; first: b
   }
   // Closing the first-time pop-up counts as "Skip for now" (on the reminders step the answers are already given, so
   // they're saved); closing an edit keeps what was saved.
-  const close = () => (first ? finish(step < 4) : onDone(initial));
+  const close = () => (first ? finish(at !== "alerts") : onDone(initial));
 
   // "Other": they type their own role, so it waits for Next instead of moving on.
   const [other, setOther] = useState(!!initial.role && !isRole(initial.role));
@@ -38,7 +43,7 @@ export function Welcome({ initial, first, onDone }: { initial: Profile; first: b
     // A new role brings its usual priorities; the same role keeps what was picked.
     setOther(false);
     setP((x) => (x.role === role ? x : { ...x, role, focus: [...(ROLES.find(([r]) => r === role)?.[1] ?? [])] }));
-    setStep(1);
+    next();
   }
   function pickOther() {
     setOther(true);
@@ -49,33 +54,30 @@ export function Welcome({ initial, first, onDone }: { initial: Profile; first: b
   const chip = (on: boolean) =>
     `rounded-full border px-3 py-1.5 text-sm transition ${on ? "border-ink bg-ink text-surface" : "border-line hover:border-ink/40"}`;
   const input = "mt-3 w-full rounded-xl border border-line bg-transparent px-3 py-2 text-sm outline-none focus:border-ink/40";
-  const STEPS = first ? 5 : 4;
-  const last = step === STEPS - 1;
-
-  // The first time, "How it works" comes before the questions.
-  const [tour, setTour] = useState(first);
-  if (tour)
-    return (
-      <Modal title="Welcome to Almanac" onClose={close}>
-        <Tour doneLabel="Set up my calendar" onDone={() => setTour(false)} />
-      </Modal>
-    );
+  const last = step === steps.length - 1;
 
   return (
     <Modal title={first ? "Welcome to Almanac" : "About you"} onClose={close}>
       <p className="text-sm text-muted">
-        {first ? "A few quick questions so priorities fit your work. " : ""}Step {step + 1} of {STEPS}
+        Step {step + 1} of {steps.length}
       </p>
       <div className="mt-2 flex gap-1" aria-hidden>
-        {Array.from({ length: STEPS }, (_, i) => (
+        {steps.map((_, i) => (
           <span key={i} className={`h-1 flex-1 rounded-full ${i <= step ? "bg-ink" : "bg-ink/10"}`} />
         ))}
       </div>
 
       <motion.div key={step} initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.15 }} className="mt-5 min-h-[13rem]">
-        {step === 0 && (
+        {at === "how" && (
+          <>
+            <p className="mb-4 font-serif text-xl">How it works</p>
+            <HowItWorks />
+          </>
+        )}
+        {at === "role" && (
           <fieldset>
             <legend className="font-serif text-xl">What best describes you?</legend>
+            {first && <p className="mt-1 text-sm text-muted">So Almanac knows what matters in your work.</p>}
             <div className="mt-3 flex flex-wrap gap-2">
               {ROLES.map(([r]) => (
                 <button key={r} type="button" aria-pressed={p.role === r} onClick={() => pickRole(r)} className={chip(p.role === r)}>
@@ -93,21 +95,21 @@ export function Welcome({ initial, first, onDone }: { initial: Profile; first: b
                 value={p.role}
                 maxLength={60}
                 onChange={(e) => setP({ ...p, role: e.target.value })}
-                onKeyDown={(e) => e.key === "Enter" && setStep(1)}
+                onKeyDown={(e) => e.key === "Enter" && next()}
                 placeholder="Type your role, e.g. Librarian"
                 className={input}
               />
             )}
           </fieldset>
         )}
-        {step === 1 && (
+        {at === "title" && (
           <label className="block">
             <span className="font-serif text-xl">What&rsquo;s your title?</span>
             <span className="ml-2 text-sm text-muted">optional</span>
-            <input autoFocus value={p.title} maxLength={80} onChange={(e) => setP({ ...p, title: e.target.value })} onKeyDown={(e) => e.key === "Enter" && setStep(2)} placeholder="Assistant Professor, Marketing" className={input} />
+            <input autoFocus value={p.title} maxLength={80} onChange={(e) => setP({ ...p, title: e.target.value })} onKeyDown={(e) => e.key === "Enter" && next()} placeholder="Assistant Professor, Marketing" className={input} />
           </label>
         )}
-        {step === 2 && (
+        {at === "focus" && (
           <fieldset>
             <legend className="font-serif text-xl">What matters most to you?</legend>
             <p className="mt-1 text-sm text-muted">{isRole(p.role) ? `Picked for ${p.role.toLowerCase()}. Tap to change.` : "Pick as many as you like."}</p>
@@ -120,7 +122,7 @@ export function Welcome({ initial, first, onDone }: { initial: Profile; first: b
             </div>
           </fieldset>
         )}
-        {step === 3 && (
+        {at === "note" && (
           <label className="block">
             <span className="font-serif text-xl">Anything else?</span>
             <span className="ml-2 text-sm text-muted">optional</span>
@@ -128,7 +130,12 @@ export function Welcome({ initial, first, onDone }: { initial: Profile; first: b
             <span className="mt-1 block text-xs text-muted">The AI reads this when it rates your priorities. Your name and email are never sent.</span>
           </label>
         )}
-        {step === 4 && <AlertsStep />}
+        {at === "alerts" && (
+          <>
+            <AlertsStep />
+            <p className="mt-6 text-xs text-muted">You can add your title and more in Settings → About you.</p>
+          </>
+        )}
       </motion.div>
 
       {error && <p className="mt-2 text-sm text-[var(--cat-1)]">{error}</p>}
@@ -148,7 +155,7 @@ export function Welcome({ initial, first, onDone }: { initial: Profile; first: b
           onClick={() => (last ? finish(false) : setStep(step + 1))}
           className="rounded-full bg-ink px-4 py-1.5 text-sm text-surface hover:bg-ink/85 disabled:opacity-60"
         >
-          {last ? (busy ? "Saving…" : "Save") : "Next"}
+          {last ? (busy ? "Saving…" : first ? "Done" : "Save") : at === "how" ? "Get started" : "Next"}
         </button>
       </div>
     </Modal>
