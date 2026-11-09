@@ -167,6 +167,7 @@ export function CalendarApp({
   const [gen, setGen] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false); // the search box under the top bar, opened from its icon
   const [results, setResults] = useState<{ q: string; events: Ev[] } | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const [panel, setPanel] = useState<{ form: Form; event?: Ev } | null>(null);
@@ -505,6 +506,7 @@ export function CalendarApp({
       else if (e.key === "ArrowRight") go(1);
       else if (e.key === "/") {
         e.preventDefault();
+        setSearchOpen(true);
         searchRef.current?.focus();
       }
     }
@@ -543,7 +545,7 @@ export function CalendarApp({
   const openEvent = (e: Ev) => (e.calendarId === TODO_CAL ? setTodos(true) : setPanel({ form: draftFromEvent(e), event: e }));
   const openPriorities = priorities?.filter((p) => p.status !== "done").length ?? 0;
   const whatNow = (
-    <button type="button" onClick={() => setNowOpen(true)} className="rounded-full border border-accent/60 px-3 py-1.5 text-sm text-accent hover:border-accent">
+    <button type="button" onClick={() => setNowOpen(true)} className="whitespace-nowrap rounded-full border border-accent/60 px-3 py-1.5 text-sm text-accent hover:border-accent">
       What now?
     </button>
   );
@@ -559,7 +561,7 @@ export function CalendarApp({
   return (
     <div className="flex flex-1 flex-col">
       <header className="sticky top-0 z-20 border-b border-line bg-paper/85 backdrop-blur">
-        <div className="flex w-full items-center justify-between gap-4 px-3 py-3 sm:px-6">
+        <div className="flex w-full items-center justify-between gap-2 px-3 py-3 sm:gap-4 sm:px-6">
           <div className="flex items-center gap-2">
             <button
               ref={menuButton}
@@ -575,10 +577,42 @@ export function CalendarApp({
                 <path d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             </button>
-            <span className="font-serif text-2xl">Almanac</span>
+            <span className="font-serif text-xl sm:text-2xl">Almanac</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <span className="hidden text-sm text-muted sm:inline">{name}</span>
+            {/* Today (with today's date), search, theme, settings. Phones: Today is a small calendar square with the day. */}
+            <button
+              type="button"
+              onClick={goToday}
+              aria-label={`Today, ${now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })}`}
+              title="Today (T)"
+              className="flex h-10 items-center gap-1.5 whitespace-nowrap rounded-full border border-line bg-surface px-2 text-sm hover:border-ink/40 sm:px-4"
+            >
+              <span className="grid size-6 place-items-center rounded-md border-2 border-current text-[11px] font-semibold leading-none sm:hidden" aria-hidden>
+                {mounted ? now.getDate() : ""}
+              </span>
+              <span className="hidden sm:inline">
+                Today{mounted && <span className="text-muted"> · {now.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (searchOpen) setQuery("");
+                setSearchOpen(!searchOpen);
+              }}
+              aria-label={searchOpen ? "Close search" : "Search events"}
+              aria-expanded={searchOpen}
+              title="Search (/)"
+              className={`grid size-10 place-items-center rounded-full border bg-surface hover:border-ink/40 ${searchOpen ? "border-ink/40" : "border-line"}`}
+            >
+              <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-3.5-3.5" />
+              </svg>
+            </button>
+            <ThemeToggle />
             <button
               type="button"
               onClick={() => setSettings(true)}
@@ -591,9 +625,25 @@ export function CalendarApp({
                 <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z" />
               </svg>
             </button>
-            <ThemeToggle />
           </div>
         </div>
+        {searchOpen && (
+          <div className="px-3 pb-3 sm:px-6">
+            <label className="block">
+              <span className="sr-only">Search events</span>
+              <input
+                ref={searchRef}
+                autoFocus
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Escape" && (setQuery(""), setSearchOpen(false))}
+                placeholder="Search events"
+                className="w-full rounded-full border border-line bg-surface px-4 py-2 text-sm placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent/50"
+              />
+            </label>
+          </div>
+        )}
       </header>
 
       <div className="w-full flex-1 px-3 py-4 sm:px-6">
@@ -726,43 +776,19 @@ export function CalendarApp({
         >
           <div className="flex min-w-0 flex-col lg:min-h-0">
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex flex-wrap items-center gap-1 *:whitespace-nowrap">
-              {/* New, To-do and the rest live in the round "+" above Ask Almanac. */}
-              <button type="button" onClick={goToday} className="rounded-full border border-line px-4 py-1.5 text-sm hover:border-ink/40">
-                Today
-              </button>
-              {/* Phones: Today's plan up here and What now? beside Priorities below. Wide screens show the plan in the side column. */}
-              {mounted && !wide ? (
-                <button type="button" onClick={() => setSheet("today")} className="rounded-full border border-line px-3 py-1.5 text-sm hover:border-ink/40">
+            {/* Phones: Today's plan, What now? and Priorities in one row. Wide screens show the plan and priorities
+                in the side column, so only What now? sits up here. */}
+            {mounted && !wide && (
+              <div className="grid w-full grid-cols-3 gap-2 *:min-w-0 *:whitespace-nowrap">
+                <button type="button" onClick={() => setSheet("today")} className="rounded-full border border-line bg-surface px-2 py-1.5 text-sm hover:border-ink/40">
                   Today&rsquo;s plan
                 </button>
-              ) : (
-                whatNow
-              )}
-            </div>
-            <h1 className="order-last w-full font-serif text-3xl sm:order-none sm:mr-auto sm:w-auto sm:text-4xl" aria-live="polite">
-              {mounted ? titleOf(view, anchor, days) : " "}
-            </h1>
-            <label className="ml-auto sm:ml-0">
-              <span className="sr-only">Search events</span>
-              <input
-                ref={searchRef}
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(e) => e.key === "Escape" && (setQuery(""), e.currentTarget.blur())}
-                placeholder="Search"
-                className="w-24 rounded-full border border-line bg-surface px-3 py-1.5 text-sm placeholder:text-muted focus:w-40 focus:outline-none focus:ring-2 focus:ring-accent/50 sm:w-44 sm:px-4 sm:focus:w-56 motion-safe:transition-[width]"
-              />
-            </label>
-            {mounted && !wide && (
-              <div className="flex w-full gap-2 *:flex-1">
                 {whatNow}
                 {/* Marked as important: red outline and a red count of what's still open. */}
                 <button
                   type="button"
                   onClick={() => setSheet("priorities")}
-                  className="flex items-center justify-center gap-2 rounded-full border bg-surface px-3 py-1.5 text-sm font-medium"
+                  className="flex items-center justify-center gap-1.5 rounded-full border bg-surface px-2 py-1.5 text-sm font-medium"
                   style={{ borderColor: "color-mix(in srgb, var(--sev-critical) 60%, transparent)", color: "var(--sev-critical)" }}
                 >
                   Priorities
@@ -774,6 +800,10 @@ export function CalendarApp({
                 </button>
               </div>
             )}
+            <h1 className="mr-auto font-serif text-3xl sm:text-4xl" aria-live="polite">
+              {mounted ? titleOf(view, anchor, days) : " "}
+            </h1>
+            {(!mounted || wide) && whatNow}
             <div className="relative flex rounded-full border border-line bg-surface p-0.5" role="group" aria-label="View">
               {VIEWS.map((v) => {
                 const on = mounted && view === v; // the saved view is only known in the browser
