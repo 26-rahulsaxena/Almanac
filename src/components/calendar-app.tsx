@@ -119,6 +119,7 @@ const slide = {
 
 export function CalendarApp({
   name,
+  email,
   calendars,
   hidden: initialHidden,
   stages,
@@ -126,6 +127,7 @@ export function CalendarApp({
   profile,
 }: {
   name: string;
+  email: string;
   calendars: Cal[];
   hidden: string[];
   stages: AlertStages;
@@ -967,6 +969,8 @@ export function CalendarApp({
         {settings && (
           <Settings
             key="settings"
+            name={name}
+            email={email}
             onClose={() => setSettings(false)}
             stages={stagesNow}
             onStages={setStagesNow}

@@ -35,6 +35,6 @@ async function Content({ searchParams }: PageProps<"/">) {
     select hidden_calendars, remind_popup, snooze_minutes, alarm_at_start, plan_mode, profile from users where id = ${session.user.id}`;
   const stages = { remind: user?.remind_popup ?? true, snooze: user?.snooze_minutes ?? 5, alarm: user?.alarm_at_start ?? true };
   return (
-    <CalendarApp name={session.user.name ?? ""} calendars={calendars} hidden={user?.hidden_calendars ?? []} stages={stages} planMode={user?.plan_mode ?? "ask"} profile={!user ? EMPTY_PROFILE : user.profile && cleanProfile(user.profile)} />
+    <CalendarApp name={session.user.name ?? ""} email={session.user.email ?? ""} calendars={calendars} hidden={user?.hidden_calendars ?? []} stages={stages} planMode={user?.plan_mode ?? "ask"} profile={!user ? EMPTY_PROFILE : user.profile && cleanProfile(user.profile)} />
   );
 }

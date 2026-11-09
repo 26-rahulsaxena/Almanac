@@ -8,7 +8,7 @@ import { PlanModeSetting, type PlanMode } from "./suggestions";
 import { ThemeToggle } from "./theme-toggle";
 import { profileLine, type Profile } from "@/lib/profile";
 
-const TABS = ["General", "Alerts", "Planning", "App"] as const;
+const TABS = ["General", "Alerts", "Planning", "App", "Account"] as const;
 type Tab = (typeof TABS)[number];
 
 const KEYS: [string, string][] = [
@@ -25,6 +25,8 @@ const KEYS: [string, string][] = [
 // Every setting in one place, one section at a time. Saved values come from the calendar page so they're still
 // right when the window is opened again.
 export function Settings(props: {
+  name: string;
+  email: string;
   onClose: () => void;
   stages: AlertStages;
   onStages: (s: AlertStages) => void;
@@ -38,7 +40,7 @@ export function Settings(props: {
 
   return (
     <Modal title="Settings" onClose={props.onClose}>
-      <div role="tablist" aria-label="Settings sections" className="grid grid-cols-4 gap-1 rounded-full bg-ink/5 p-1">
+      <div role="tablist" aria-label="Settings sections" className="grid grid-cols-5 gap-0.5 rounded-full bg-ink/5 p-1">
         {TABS.map((t) => (
           <button
             key={t}
@@ -48,14 +50,14 @@ export function Settings(props: {
             aria-selected={tab === t}
             aria-controls="settings-panel"
             onClick={() => setTab(t)}
-            className={`rounded-full px-2 py-1.5 text-sm transition ${tab === t ? "bg-surface font-medium shadow-sm" : "text-muted hover:text-ink"}`}
+            className={`min-w-0 rounded-full px-1 py-1.5 text-xs transition sm:text-sm ${tab === t ? "bg-surface font-medium shadow-sm" : "text-muted hover:text-ink"}`}
           >
             {t}
           </button>
         ))}
       </div>
 
-      <div role="tabpanel" id="settings-panel" aria-labelledby={`tab-${tab}`} className="mt-5 min-h-[22rem]">
+      <div role="tabpanel" id="settings-panel" aria-labelledby={`tab-${tab}`} className="-mx-1 mt-5 h-[min(24rem,calc(100dvh-13rem))] overflow-y-auto px-1">
         {tab === "General" && (
           <>
             <div className="flex items-start justify-between gap-3">
@@ -83,19 +85,6 @@ export function Settings(props: {
                 </div>
               ))}
             </dl>
-            <div className="mt-6 flex items-center justify-between gap-3 border-t border-line pt-4">
-              <div>
-                <h3 className={h3}>Account</h3>
-                <p className="mt-1 text-sm">Signing out stops notifications on this device.</p>
-              </div>
-              {/* This device stops getting the account's notifications before the session ends; a slow phone or
-                  network never holds up signing out for more than 3 seconds. */}
-              <form action={async () => { await Promise.race([forgetDevice(), new Promise((r) => setTimeout(r, 3000))]); await signOutNow(); }}>
-                <button type="submit" className="shrink-0 whitespace-nowrap rounded-full border border-line px-4 py-1.5 text-sm hover:border-ink/40">
-                  Sign out
-                </button>
-              </form>
-            </div>
           </>
         )}
         {tab === "Alerts" && (
@@ -133,6 +122,28 @@ export function Settings(props: {
                 </p>
               </>
             )}
+          </>
+        )}
+        {tab === "Account" && (
+          <>
+            <h3 className={h3}>Signed in as</h3>
+            <div className="mt-3 flex items-center gap-3">
+              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-ink text-sm font-medium uppercase text-paper" aria-hidden>
+                {(props.name || props.email)[0]}
+              </span>
+              <div className="min-w-0">
+                {props.name && <p className="truncate text-sm font-medium">{props.name}</p>}
+                <p className="truncate text-sm text-muted">{props.email}</p>
+              </div>
+            </div>
+            <p className="mt-6 text-sm">Signing out stops notifications on this device. To use another Google account, sign out, then sign in with it.</p>
+            {/* This device stops getting the account's notifications before the session ends; a slow phone or
+                network never holds up signing out for more than 3 seconds. */}
+            <form action={async () => { await Promise.race([forgetDevice(), new Promise((r) => setTimeout(r, 3000))]); await signOutNow(); }} className="mt-4">
+              <button type="submit" className="w-full whitespace-nowrap rounded-full border border-line px-4 py-2 text-sm font-medium hover:border-ink/40">
+                Sign out
+              </button>
+            </form>
           </>
         )}
       </div>
