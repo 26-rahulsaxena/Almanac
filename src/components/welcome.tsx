@@ -5,6 +5,7 @@ import { saveProfile } from "@/app/actions";
 import { FOCUS, isRole, ROLES, type Profile } from "@/lib/profile";
 import { Modal } from "./coach";
 import { enablePush, PUSH_HELP, usePushState } from "./notify-settings";
+import { Tour } from "./tour";
 
 // The first time there's one more step: getting reminders on this device.
 
@@ -50,6 +51,15 @@ export function Welcome({ initial, first, onDone }: { initial: Profile; first: b
   const input = "mt-3 w-full rounded-xl border border-line bg-transparent px-3 py-2 text-sm outline-none focus:border-ink/40";
   const STEPS = first ? 5 : 4;
   const last = step === STEPS - 1;
+
+  // The first time, "How it works" comes before the questions.
+  const [tour, setTour] = useState(first);
+  if (tour)
+    return (
+      <Modal title="Welcome to Almanac" onClose={close}>
+        <Tour doneLabel="Set up my calendar" onDone={() => setTour(false)} />
+      </Modal>
+    );
 
   return (
     <Modal title={first ? "Welcome to Almanac" : "About you"} onClose={close}>

@@ -6,6 +6,7 @@ import { isAndroidApp } from "@/lib/android-app";
 import { AlertStageSettings, forgetDevice, NotifySettings } from "./notify-settings";
 import { PlanModeSetting, type PlanMode } from "./suggestions";
 import { ThemeToggle } from "./theme-toggle";
+import { Tour } from "./tour";
 import { useDialog } from "./use-dialog";
 import { profileLine, type Profile } from "@/lib/profile";
 
@@ -38,6 +39,7 @@ export function Settings(props: {
   onEditProfile: () => void;
 }) {
   const [tab, setTab] = useState<Tab>("General");
+  const [tour, setTour] = useState(false);
   const ref = useDialog<HTMLElement>(props.onClose);
   const h3 = "font-mono text-xs uppercase tracking-[0.2em] text-muted";
 
@@ -83,6 +85,21 @@ export function Settings(props: {
       <div role="tabpanel" id="settings-panel" aria-labelledby={`tab-${tab}`} className="mt-5 min-h-0 flex-1 overflow-y-auto px-5 pb-8">
         {tab === "General" && (
           <>
+            {tour ? (
+              <div className="mb-6 rounded-2xl border border-line bg-surface p-4">
+                <Tour doneLabel="Got it" onDone={() => setTour(false)} />
+              </div>
+            ) : (
+              <div className="mb-6 flex items-center justify-between gap-3">
+                <div>
+                  <h3 className={h3}>How Almanac works</h3>
+                  <p className="mt-1 text-sm">A one-minute tour of the main ideas</p>
+                </div>
+                <button type="button" onClick={() => setTour(true)} className="shrink-0 rounded-full border border-line px-3 py-1.5 text-sm hover:border-ink/40">
+                  Show
+                </button>
+              </div>
+            )}
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <h3 className={h3}>About you</h3>
