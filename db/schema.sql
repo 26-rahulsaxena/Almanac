@@ -201,3 +201,11 @@ create table if not exists app_handoffs (
   expires_at timestamptz not null
 );
 alter table app_handoffs enable row level security;
+
+-- Small server notes. announced_build: the newest Android app build every phone with the app has been told about
+-- (the cron sends "New version of Almanac" once per build, see src/lib/android-build.json).
+create table if not exists app_meta (
+  key text primary key,
+  value text not null
+);
+alter table app_meta enable row level security;

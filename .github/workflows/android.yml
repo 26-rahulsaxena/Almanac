@@ -78,9 +78,12 @@ jobs:
       - name: Put it on the website
         run: |
           cp android/app/build/outputs/apk/release/app-release.apk public/almanac.apk
+          # The site compares this with the installed app (Settings → App) and tells phones about a new build.
+          printf '{ "build": %s }
+' "${{ github.run_number }}" > src/lib/android-build.json
           git config user.name "rahulshakaya12310"
           git config user.email "rahulshakaya12310@gmail.com"
-          git add public/almanac.apk
+          git add public/almanac.apk src/lib/android-build.json
           git commit -m "Android app build ${{ github.run_number }}"
           # --autostash: the build leaves generated files changed, which a plain pull refuses to work around.
           git pull --rebase --autostash || { echo "::error::Couldn't catch up with main before publishing."; exit 1; }

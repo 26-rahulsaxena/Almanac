@@ -4,6 +4,7 @@ import android.Manifest;
 import android.app.NotificationManager;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.Settings;
@@ -115,6 +116,18 @@ public class AlmanacPlugin extends Plugin {
     public void setAgenda(PluginCall call) {
         AgendaWidget.save(getContext(), call.getString("items", "[]"));
         call.resolve();
+    }
+
+    // This install's build number, to compare with the newest one on the site (Settings → App).
+    @PluginMethod
+    public void build(PluginCall call) {
+        JSObject r = new JSObject();
+        try {
+            r.put("build", getContext().getPackageManager().getPackageInfo(getContext().getPackageName(), 0).versionCode);
+        } catch (PackageManager.NameNotFoundException e) {
+            r.put("build", 0);
+        }
+        call.resolve(r);
     }
 
     @PluginMethod

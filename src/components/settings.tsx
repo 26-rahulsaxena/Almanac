@@ -1,8 +1,8 @@
 "use client";
 import { motion } from "motion/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { signOutNow, type AlertStages } from "@/app/actions";
-import { isAndroidApp } from "@/lib/android-app";
+import { appBuild, isAndroidApp, LATEST_BUILD } from "@/lib/android-app";
 import { AlertStageSettings, forgetDevice, NotifySettings } from "./notify-settings";
 import { PlanModeSetting, type PlanMode } from "./suggestions";
 import { ThemeToggle } from "./theme-toggle";
@@ -38,8 +38,9 @@ export function Settings(props: {
   profile: Profile | null;
   onEditProfile: () => void;
   onAddAccount: () => void;
+  startTab?: Tab;
 }) {
-  const [tab, setTab] = useState<Tab>("General");
+  const [tab, setTab] = useState<Tab>(props.startTab ?? "General");
   const [tour, setTour] = useState(false);
   const ref = useDialog<HTMLElement>(props.onClose);
   const h3 = "font-mono text-xs uppercase tracking-[0.2em] text-muted";
@@ -146,10 +147,7 @@ export function Settings(props: {
           <>
             <h3 className={h3}>Almanac for Android</h3>
             {isAndroidApp() ? (
-              <p className="mt-2 text-sm">
-                You&rsquo;re using the app. When a new version is out, install it from the{" "}
-                <a href="/download" className="underline">download page</a>; it updates in place and you stay signed in.
-              </p>
+              <AppUpdate />
             ) : (
               <>
                 <p className="mt-2 text-sm">
@@ -199,6 +197,51 @@ export function Settings(props: {
         )}
       </div>
       </motion.aside>
+    </>
+  );
+}
+
+// Inside the Android app: is this the newest version, and a button that downloads it in the phone's browser
+// (it installs over this one; you stay signed in). Phones are also notified when a new one is out (see the cron).
+function AppUpdate() {
+  const [build, setBuild] = useState<number | null>(null);
+  const [error, setError] = useState(false);
+  useEffect(() => {
+    appBuild().then(setBuild, () => setBuild(0));
+  }, []);
+  if (build === null) return <p className="mt-2 text-sm text-muted">Checking for updates…</p>;
+  const behind = build ? build < LATEST_BUILD : LATEST_BUILD > 14; // 14: the last build that can't tell its number
+  async function download() {
+    setError(false);
+    try {
+      const { Browser } = await import("@capacitor/browser");
+      await Browser.open({ url: `${location.origin}/almanac.apk` });
+    } catch {
+      setError(true);
+    }
+  }
+  return (
+    <>
+      <p className="mt-2 flex items-center gap-2 text-sm">
+        <span className={`size-2 rounded-full ${behind ? "bg-accent" : "bg-[var(--cat-2)]"}`} aria-hidden />
+        {behind ? "A new version is ready" : "You have the latest version"}
+      </p>
+      <p className="mt-1 text-xs text-muted">
+        {build || !behind ? `This phone: version ${build || LATEST_BUILD}` : "This phone: an older version"}
+        {behind && ` · Newest: version ${LATEST_BUILD}`}
+      </p>
+      <button
+        type="button"
+        onClick={download}
+        className={`mt-4 rounded-full px-4 py-2 text-sm font-medium ${behind ? "bg-ink text-paper" : "border border-line hover:border-ink/40"}`}
+      >
+        {behind ? "Download the new version" : "Download again"}
+      </button>
+      <p className="mt-3 text-xs text-muted">
+        It downloads in your browser. Open the file to install; it updates in place and you stay signed in. When a new
+        version is out, you&rsquo;ll get a notification.
+      </p>
+      {error && <p className="mt-2 text-sm text-[var(--cat-1)]">Couldn&rsquo;t open the download. Go to almanac-tau-orcin.vercel.app/download instead.</p>}
     </>
   );
 }

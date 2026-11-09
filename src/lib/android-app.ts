@@ -1,13 +1,19 @@
+import latest from "./android-build.json";
+
 // Runs in the browser. The Almanac Android app is the live site inside an app; it adds "AlmanacAndroid/<n>" to its
 // browser name. Sign-in goes through the phone's browser (Google refuses it inside apps): see src/lib/app-handoff.ts.
 
 export const isAndroidApp = () => typeof navigator !== "undefined" && /AlmanacAndroid\//.test(navigator.userAgent);
 const appVersion = () => Number(navigator.userAgent.match(/AlmanacAndroid\/(\d+)/)?.[1] ?? 0);
 // What each app version can do (the "Almanac" plugin in android/.../AlmanacPlugin.java): 2 gets reminders,
-// 3 has voice typing, 4 has the home-screen Agenda widget.
+// 3 has voice typing, 4 has the home-screen Agenda widget, 5 tells its build number.
 export const appHasReminders = () => appVersion() >= 2;
 export const appCanListen = () => appVersion() >= 3;
 export const appHasWidget = () => appVersion() >= 4;
+// The newest app on the site (written by the Android build), and this phone's (0 = older than version 5, so
+// older than any build that could say). An update is out when the site's is higher.
+export const LATEST_BUILD = latest.build;
+export const appBuild = async () => (appVersion() >= 5 ? (await (await almanacPlugin()).build()).build : 0);
 
 type AlmanacPlugin = {
   status(): Promise<{ notifications: boolean; fullScreen: boolean }>;
@@ -16,6 +22,7 @@ type AlmanacPlugin = {
   openFullScreenSettings(): Promise<void>;
   listen(): Promise<{ text: string }>;
   setAgenda(o: { items: string }): Promise<void>;
+  build(): Promise<{ build: number }>;
 };
 export async function almanacPlugin(): Promise<AlmanacPlugin> {
   const p = (await import("@capacitor/core")).registerPlugin<AlmanacPlugin>("Almanac");
@@ -27,6 +34,7 @@ export async function almanacPlugin(): Promise<AlmanacPlugin> {
     openFullScreenSettings: () => p.openFullScreenSettings(),
     listen: () => p.listen(),
     setAgenda: (o) => p.setAgenda(o),
+    build: () => p.build(),
   };
 }
 

@@ -4,7 +4,8 @@ import { morningCheck, replan } from "@/lib/planner";
 import { dayPlanText } from "@/lib/coach";
 import { coachToday, coachWeek } from "@/lib/coach-data";
 import { checkinText } from "@/lib/priorities";
-import { sendPush } from "@/lib/push";
+import latest from "@/lib/android-build.json";
+import { appOrigin, FCM_PREFIX, sendPush } from "@/lib/push";
 import { dueReminders, LOOKAHEAD_MS } from "@/lib/reminders";
 
 const DIGEST_HOUR = 8;
@@ -64,10 +65,32 @@ export async function GET(req: Request) {
   }
 
   const planned = await autoPlanUsers();
+  const updates = await announceAppUpdate();
 
   await sql`delete from reminder_deliveries where fire_at < now() - interval '2 days'`;
   await sql`delete from deadline_states where due_at < now() - interval '7 days'`;
-  return Response.json({ users: users.length, sent, snoozed: snoozed.length, checkins, digests, planned });
+  return Response.json({ users: users.length, sent, snoozed: snoozed.length, checkins, digests, planned, updates });
+}
+
+// A new Android app build is live (the build writes src/lib/android-build.json, and the site redeploys with it):
+// tell every phone with the app, once per build. Returns how many phones were reached.
+async function announceAppUpdate() {
+  const [fresh] = await sql`
+    insert into app_meta (key, value) values ('announced_build', ${String(latest.build)})
+    on conflict (key) do update set value = excluded.value where app_meta.value::int < ${latest.build}
+    returning value`;
+  if (!fresh) return 0;
+  const owners = await sql<{ user_id: string }[]>`
+    select distinct user_id from push_subscriptions where endpoint like ${FCM_PREFIX + "%"} and origin = ${appOrigin()}`;
+  let reached = 0;
+  for (const o of owners) {
+    reached += await sendPush(
+      o.user_id,
+      { kind: "update", title: "New version of Almanac", body: "Install it from Settings → App. It updates in place and you stay signed in." },
+      (endpoint) => endpoint.startsWith(FCM_PREFIX),
+    ).catch(() => 0);
+  }
+  return reached;
 }
 
 // Auto-planner, every 15 minutes per user: Almanac's blocks out of the way of new events, and from 9 pm (your time)

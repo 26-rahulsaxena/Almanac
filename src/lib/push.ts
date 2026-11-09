@@ -9,8 +9,9 @@ export const isFcmToken = (t: unknown): t is string => typeof t === "string" && 
 // kind "reminder" (default): id = reminder delivery, buttons Snooze / Done.
 // kind "checkin": id = deadline, ask "start" (buttons Doing it now / Open) or "finished" (Yes, done / Need 30 more min).
 // kind "digest": morning priorities summary, opens the priorities list.
+// kind "update": a new version of the Android app is out; opens Settings → App.
 // alarm: the event is starting; the Android app rings full screen until answered.
-export type PushPayload = { title: string; body: string; id?: string; kind?: "reminder" | "checkin" | "digest" | "review"; ask?: "start" | "finished"; snooze?: number; alarm?: boolean };
+export type PushPayload = { title: string; body: string; id?: string; kind?: "reminder" | "checkin" | "digest" | "review" | "update"; ask?: "start" | "finished"; snooze?: number; alarm?: boolean };
 
 // Push services run by browser makers. Only these may receive subscriptions, so nobody can make
 // the server post to an arbitrary address.

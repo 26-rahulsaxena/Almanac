@@ -206,6 +206,7 @@ export function CalendarApp({
   const swipe = useRef<{ x: number; y: number; t: number } | null>(null);
   const wheel = useRef({ dx: 0, last: 0, until: 0 });
   const [settings, setSettings] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<"App">(); // opened from the "new version" notification
   // The latest saved settings, so the Settings window shows them when it's opened again.
   const [stagesNow, setStagesNow] = useState(stages);
   const [planModeNow, setPlanModeNow] = useState(planMode);
@@ -467,8 +468,16 @@ export function CalendarApp({
     };
     navigator.serviceWorker?.addEventListener("message", onMessage);
     syncPush();
-    // Opened from the Sunday notification (?review=1): show the week in review.
-    const t = setTimeout(() => new URLSearchParams(location.search).has("review") && setReview(true));
+    // Opened from the Sunday notification (?review=1): show the week in review. From "New version of Almanac"
+    // (?update=1): Settings → App, where it downloads.
+    const t = setTimeout(() => {
+      const q = new URLSearchParams(location.search);
+      if (q.has("review")) setReview(true);
+      if (q.has("update")) {
+        setSettingsTab("App");
+        setSettings(true);
+      }
+    });
     return () => {
       navigator.serviceWorker?.removeEventListener("message", onMessage);
       clearTimeout(t);
@@ -1061,7 +1070,11 @@ export function CalendarApp({
             key="settings"
             name={name}
             email={email}
-            onClose={() => setSettings(false)}
+            onClose={() => {
+              setSettings(false);
+              setSettingsTab(undefined);
+            }}
+            startTab={settingsTab}
             stages={stagesNow}
             onStages={setStagesNow}
             planMode={planModeNow}
