@@ -57,6 +57,12 @@ jobs:
           set +e
           ./gradlew assembleRelease --no-daemon 2>&1 | tee "$RUNNER_TEMP/gradle.log"
           status=${PIPESTATUS[0]}
+          # Downloading the build tools sometimes times out on GitHub's side; one more try usually works.
+          if [ "$status" -ne 0 ] && grep -q "Server returned HTTP response code: 5" "$RUNNER_TEMP/gradle.log"; then
+            sleep 30
+            ./gradlew assembleRelease --no-daemon 2>&1 | tee "$RUNNER_TEMP/gradle.log"
+            status=${PIPESTATUS[0]}
+          fi
           set -e
           rm "$KEYSTORE_FILE"
           if [ "$status" -ne 0 ]; then
