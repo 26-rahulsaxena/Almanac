@@ -684,7 +684,31 @@ export function CalendarApp({
               ✕
             </button>
           </div>
-          <h2 className="font-mono text-xs uppercase tracking-[0.2em] text-muted">Calendars</h2>
+          {/* Agenda, day, week or month (also the A, D, W and M keys). */}
+          <h2 className="font-mono text-xs uppercase tracking-[0.2em] text-muted">View</h2>
+          <div className="relative mt-3 grid grid-cols-4 rounded-full border border-line bg-surface p-0.5" role="group" aria-label="View">
+            {VIEWS.map((v) => {
+              const on = mounted && view === v; // the saved view is only known in the browser
+              return (
+                <button
+                  key={v}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => {
+                    changeView(v);
+                    setMenu(false);
+                  }}
+                  title={`${v} (${v[0].toUpperCase()})`}
+                  className="relative rounded-full px-3 py-1 text-sm capitalize"
+                >
+                  {on && <span className="absolute inset-0 rounded-full bg-ink" />}
+                  <span className={`relative ${on ? "text-paper" : ""}`}>{v}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <h2 className="mt-6 font-mono text-xs uppercase tracking-[0.2em] text-muted">Calendars</h2>
           <ul className="mt-3 flex flex-col gap-0.5">
             {calendars.map((c, i) => {
               const on = !hidden.has(c.id);
@@ -776,6 +800,11 @@ export function CalendarApp({
         >
           <div className="flex min-w-0 flex-col lg:min-h-0">
           <div className="flex flex-wrap items-center gap-2">
+            {/* The date first; on phones the plan, What now? and Priorities row below it. */}
+            <h1 className="mr-auto font-serif text-3xl sm:text-4xl" aria-live="polite">
+              {mounted ? titleOf(view, anchor, days) : " "}
+            </h1>
+            {(!mounted || wide) && whatNow}
             {/* Phones: Today's plan, What now? and Priorities in one row. Wide screens show the plan and priorities
                 in the side column, so only What now? sits up here. */}
             {mounted && !wide && (
@@ -800,30 +829,6 @@ export function CalendarApp({
                 </button>
               </div>
             )}
-            <h1 className="mr-auto font-serif text-3xl sm:text-4xl" aria-live="polite">
-              {mounted ? titleOf(view, anchor, days) : " "}
-            </h1>
-            {(!mounted || wide) && whatNow}
-            <div className="relative flex rounded-full border border-line bg-surface p-0.5" role="group" aria-label="View">
-              {VIEWS.map((v) => {
-                const on = mounted && view === v; // the saved view is only known in the browser
-                return (
-                  <button
-                    key={v}
-                    type="button"
-                    aria-pressed={on}
-                    onClick={() => changeView(v)}
-                    title={`${v} (${v[0].toUpperCase()})`}
-                    className="relative rounded-full px-3 py-1 text-sm capitalize"
-                  >
-                    {on && (
-                      <motion.span layoutId="view-pill" className="absolute inset-0 rounded-full bg-ink" transition={{ type: "spring", bounce: 0.2, duration: 0.4 }} />
-                    )}
-                    <span className={`relative ${on ? "text-paper" : ""}`}>{v}</span>
-                  </button>
-                );
-              })}
-            </div>
           </div>
 
           {error === "reauth" ? (
