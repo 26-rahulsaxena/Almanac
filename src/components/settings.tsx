@@ -1,11 +1,12 @@
 "use client";
+import { motion } from "motion/react";
 import { useState } from "react";
 import { signOutNow, type AlertStages } from "@/app/actions";
 import { isAndroidApp } from "@/lib/android-app";
-import { Modal } from "./coach";
 import { AlertStageSettings, forgetDevice, NotifySettings } from "./notify-settings";
 import { PlanModeSetting, type PlanMode } from "./suggestions";
 import { ThemeToggle } from "./theme-toggle";
+import { useDialog } from "./use-dialog";
 import { profileLine, type Profile } from "@/lib/profile";
 
 const TABS = ["General", "Alerts", "Planning", "App", "Account"] as const;
@@ -22,7 +23,8 @@ const KEYS: [string, string][] = [
   ["\\", "Menu"],
 ];
 
-// Every setting in one place, one section at a time. Saved values come from the calendar page so they're still
+// Every setting in one place, one section at a time, in a panel that slides in from the right (the menu drawer
+// slides in from the left). Saved values come from the calendar page so they're still
 // right when the window is opened again.
 export function Settings(props: {
   name: string;
@@ -36,11 +38,32 @@ export function Settings(props: {
   onEditProfile: () => void;
 }) {
   const [tab, setTab] = useState<Tab>("General");
+  const ref = useDialog<HTMLElement>(props.onClose);
   const h3 = "font-mono text-xs uppercase tracking-[0.2em] text-muted";
 
   return (
-    <Modal title="Settings" onClose={props.onClose}>
-      <div role="tablist" aria-label="Settings sections" className="grid grid-cols-5 gap-0.5 rounded-full bg-ink/5 p-1">
+    <>
+      <motion.div className="fixed inset-0 z-40 bg-ink/25" onClick={props.onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} aria-hidden />
+      <motion.aside
+        ref={ref}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settings-title"
+        initial={{ x: "105%" }}
+        animate={{ x: 0 }}
+        exit={{ x: "105%" }}
+        transition={{ type: "spring", damping: 32, stiffness: 340 }}
+        className="fixed inset-y-0 right-0 z-50 flex w-[min(26rem,92vw)] flex-col border-l border-line bg-paper shadow-2xl"
+      >
+      <div className="flex items-center justify-between px-5 pb-4 pt-3">
+        <h2 id="settings-title" className="font-serif text-2xl">
+          Settings
+        </h2>
+        <button type="button" onClick={props.onClose} aria-label="Close settings" className="grid size-10 place-items-center rounded-full text-muted hover:bg-ink/5 hover:text-ink">
+          ✕
+        </button>
+      </div>
+      <div role="tablist" aria-label="Settings sections" className="mx-5 grid grid-cols-5 gap-0.5 rounded-full bg-ink/5 p-1">
         {TABS.map((t) => (
           <button
             key={t}
@@ -57,7 +80,7 @@ export function Settings(props: {
         ))}
       </div>
 
-      <div role="tabpanel" id="settings-panel" aria-labelledby={`tab-${tab}`} className="-mx-1 mt-5 h-[min(24rem,calc(100dvh-13rem))] overflow-y-auto px-1">
+      <div role="tabpanel" id="settings-panel" aria-labelledby={`tab-${tab}`} className="mt-5 min-h-0 flex-1 overflow-y-auto px-5 pb-8">
         {tab === "General" && (
           <>
             <div className="flex items-start justify-between gap-3">
@@ -147,6 +170,7 @@ export function Settings(props: {
           </>
         )}
       </div>
-    </Modal>
+      </motion.aside>
+    </>
   );
 }
