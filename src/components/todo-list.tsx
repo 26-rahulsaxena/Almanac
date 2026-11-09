@@ -160,14 +160,11 @@ export function TodoList({
             className={field}
           />
         </label>
-        {draft.title.trim() && (
-          <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="space-y-1.5">
-            <Details d={draft} set={setDraft} splittable />
-            <button type="submit" disabled={busy === "new"} className="rounded-full bg-ink px-3 py-1.5 font-medium text-paper disabled:opacity-50">
-              {busy === "new" ? (draft.auto ? "Adding and planning…" : "Adding…") : "Add"}
-            </button>
-          </motion.div>
-        )}
+        {/* Always shown, so due date, length and planning can be set before or after the name. */}
+        <Details d={draft} set={setDraft} splittable />
+        <button type="submit" disabled={busy === "new" || !draft.title.trim()} className="rounded-full bg-ink px-3 py-1.5 font-medium text-paper disabled:opacity-50">
+          {busy === "new" ? (draft.auto ? "Adding and planning…" : "Adding…") : "Add"}
+        </button>
       </form>
 
       {todos?.length === 0 && <p className="text-xs text-muted">Nothing to do. Add things here, or ask the assistant.</p>}
