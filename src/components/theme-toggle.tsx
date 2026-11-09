@@ -9,22 +9,26 @@ export function ThemeToggle() {
     } catch {}
   }
 
-  // The new theme spreads from this button as a growing circle until it covers the screen. Browsers without
-  // view transitions, and "reduce motion", switch at once.
+  // The new theme spreads as a growing circle from the theme button in the top bar (even when switched from
+  // Settings) until it covers the screen. Browsers without view transitions, and "reduce motion", switch at once.
   function toggle(e: React.MouseEvent<HTMLButtonElement>) {
+    const html = document.documentElement;
+    if (html.classList.contains("theme-switching")) return; // a second tap mid-sweep would cut the first one short
     if (!document.startViewTransition || matchMedia("(prefers-reduced-motion: reduce)").matches) return apply();
-    const b = e.currentTarget.getBoundingClientRect();
+    const from = document.querySelector("header [data-theme-toggle]") ?? e.currentTarget;
+    const b = from.getBoundingClientRect();
     const x = b.left + b.width / 2;
     const y = b.top + b.height / 2;
     const r = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y)); // to the farthest corner
-    // Colour fades are paused while the circle runs, so the new theme lands in one steady sweep.
-    const html = document.documentElement;
+    // Colour fades are paused while the circle runs, so the new theme lands in one sweep.
     html.classList.add("theme-switching");
     const t = document.startViewTransition(apply);
     t.ready.then(() =>
       html.animate(
         { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${r}px at ${x}px ${y}px)`] },
-        { duration: 600, easing: "linear", pseudoElement: "::view-transition-new(root)" },
+        // Speeds up gently: near the end most of the circle is off screen, so a steady radius would look like it
+        // slows down while it fills the last corner.
+        { duration: 650, easing: "cubic-bezier(0.35, 0, 0.75, 0.55)", pseudoElement: "::view-transition-new(root)" },
       ),
     );
     t.finished.finally(() => html.classList.remove("theme-switching"));
@@ -36,6 +40,7 @@ export function ThemeToggle() {
       onClick={toggle}
       whileTap={{ rotate: 90, scale: 0.9 }}
       aria-label="Switch between light and dark mode"
+      data-theme-toggle
       className="grid size-10 place-items-center rounded-full border border-line bg-surface text-ink hover:border-ink/40"
     >
       {/* Moon in light mode, sun in dark mode. */}
