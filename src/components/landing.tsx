@@ -1,6 +1,7 @@
 "use client";
 import { motion } from "motion/react";
 import { useEffect, useState, useSyncExternalStore } from "react";
+import { isAndroidApp } from "@/lib/android-app";
 import { GoogleSignIn } from "./google-sign-in";
 import { ThemeToggle } from "./theme-toggle";
 
@@ -19,6 +20,7 @@ const browserToday = () => new Date().toLocaleDateString("en-IN", { weekday: "lo
 
 export function Landing({ error }: { error?: string }) {
   const today = useSyncExternalStore(noChanges, browserToday, () => "");
+  const inApp = useSyncExternalStore(noChanges, isAndroidApp, () => false);
   return (
     <div className="flex flex-1 flex-col">
       <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4 sm:px-8">
@@ -54,17 +56,33 @@ export function Landing({ error }: { error?: string }) {
             <p className="mt-6 max-w-md text-lg text-muted">
               Every Google calendar you have, merged. Free time made obvious. Reminders that refuse to be ignored.
             </p>
-            <GoogleSignIn className="mt-8">
-              <motion.button
-                type="submit"
-                whileHover={{ y: -2 }}
-                whileTap={{ scale: 0.97 }}
-                className="inline-flex items-center gap-3 rounded-full bg-ink px-6 py-3 text-base font-medium text-paper shadow-lg shadow-ink/10"
-              >
-                <GoogleMark />
-                Continue with Google
-              </motion.button>
-            </GoogleSignIn>
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              <GoogleSignIn>
+                <motion.button
+                  type="submit"
+                  whileHover={{ y: -2 }}
+                  whileTap={{ scale: 0.97 }}
+                  className="inline-flex items-center gap-3 rounded-full bg-ink px-6 py-3 text-base font-medium text-paper shadow-lg shadow-ink/10"
+                >
+                  <GoogleMark />
+                  Continue with Google
+                </motion.button>
+              </GoogleSignIn>
+              {/* No sign-in needed to get the app; not shown inside the app itself. */}
+              {!inApp && (
+                <motion.a
+                  href="/download"
+                  whileHover={{ y: -2 }}
+                  whileTap={{ scale: 0.97 }}
+                  className="inline-flex items-center gap-2 rounded-full border border-line bg-surface px-6 py-3 text-base font-medium hover:border-ink/40"
+                >
+                  <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <path d="M12 4v11M7 10l5 5 5-5M5 20h14" />
+                  </svg>
+                  Download the Android app
+                </motion.a>
+              )}
+            </div>
             <p className="mt-4 text-sm text-muted">Asks only to manage your Google Calendar. Never your email or files.</p>
             {error && (
               <p role="alert" className="mt-6 max-w-md rounded-xl border border-accent/40 bg-accent/10 px-4 py-3 text-sm">
