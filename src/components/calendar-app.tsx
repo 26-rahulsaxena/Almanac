@@ -581,7 +581,7 @@ export function CalendarApp({
           </div>
           <div className="flex items-center gap-1 sm:gap-2">
             <span className="hidden text-sm text-muted sm:inline">{name}</span>
-            {/* Today, To-do, search, theme, settings. Phones: Today is a calendar outline with the day in it, and the
+            {/* Today, To-do, search, theme, settings. Phones: Today is a rounded square with the day in it, and the
                 round buttons are a little smaller so all five fit. */}
             <button
               type="button"
@@ -590,12 +590,13 @@ export function CalendarApp({
               title="Today (T)"
               className="grid size-9 shrink-0 place-items-center whitespace-nowrap rounded-full text-sm hover:bg-ink/5 sm:flex sm:h-10 sm:w-auto sm:items-center sm:border sm:border-line sm:bg-surface sm:px-4 sm:hover:border-ink/40"
             >
-              <svg className="size-8 sm:hidden" viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
-                <rect x="4" y="6.5" width="24" height="22" rx="4" />
-                <path d="M4 12.5h24M11 3.5v5M21 3.5v5" />
-                <text x="16" y="25" textAnchor="middle" fontSize="11" fontWeight="700" fill="currentColor" stroke="none">
+              {/* A rounded square with the date, and Almanac's orange "now" dot in the corner. */}
+              <svg className="size-[1.6rem] sm:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+                <rect x="3" y="3" width="18" height="18" rx="4.5" />
+                <text x="12" y="16.3" textAnchor="middle" fontSize="10" fontWeight="700" fill="currentColor" stroke="none">
                   {mounted ? now.getDate() : ""}
                 </text>
+                <circle cx="17.6" cy="6.4" r="2.3" fill="var(--accent)" stroke="var(--paper)" strokeWidth="1" />
               </svg>
               <span className="hidden sm:inline">
                 Today{mounted && <span className="text-muted"> · {now.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>}
@@ -608,10 +609,9 @@ export function CalendarApp({
               title="To-dos"
               className="grid size-9 shrink-0 place-items-center rounded-full border border-line bg-surface hover:border-ink/40 sm:size-10"
             >
-              {/* A calendar with a tick. */}
+              {/* A checklist: two ticks and two lines. */}
               <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <rect x="3" y="5" width="18" height="16" rx="3" />
-                <path d="M3 10h18M8 3v4M16 3v4M9 15.5l2 2 4-4" />
+                <path d="m3.5 7 1.8 1.8L8.5 5.5M3.5 15.5l1.8 1.8 3.2-3.3M12 7h8.5M12 16h8.5" />
               </svg>
             </button>
             {/* Search: the round button grows to the left into the search box (over the name and date while open). */}
