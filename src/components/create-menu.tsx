@@ -33,7 +33,7 @@ export function CreateMenu({
   }, [open]);
 
   const items: [string, string, () => void, boolean][] = [
-    ["New event", "Type or say what and when", onNew, canEdit],
+    ["New event", "Title, time, guests and more", onNew, canEdit],
     ["To-do", "Something to get done", onTodo, true],
     ["New meeting", "With guests and a Meet link", onMeeting, canEdit],
     ["Out of office", "Show you're away", () => onAway("ooo"), canEdit],

@@ -22,7 +22,6 @@ import type { AwayKind } from "@/lib/away";
 import { EMPTY_PROFILE, type Profile } from "@/lib/profile";
 import { PrioritiesPanel, type PriorityAction } from "./priorities-panel";
 import { Modal, Review, TodayCard, WhatNow } from "./coach";
-import { QuickAdd } from "./quick-add";
 import { Suggestions, type PlanMode } from "./suggestions";
 import { ThemeToggle } from "./theme-toggle";
 import { TodoDialog } from "./todo-dialog";
@@ -188,7 +187,6 @@ export function CalendarApp({
   const [todos, setTodos] = useState(false); // the to-do pop-up (from the "+" menu)
   const [nowOpen, setNowOpen] = useState(false); // "What now?"
   const [review, setReview] = useState(false); // the week in review
-  const [quick, setQuick] = useState(false); // "New": add by typing or saying one line
   const [away, setAway] = useState<AwayKind | null>(null); // the out of office / focus time pop-up
   const wide = useWide();
   const [sheet, setSheet] = useState<"today" | "priorities" | null>(null); // phones: Today's plan / Priorities
@@ -492,8 +490,8 @@ export function CalendarApp({
       if (KEYS[e.key]) changeView(KEYS[e.key]);
       else if (e.key === "t") goToday();
       else if (e.key === "n") {
-        e.preventDefault(); // keep the "n" out of the box that opens
-        setQuick(true);
+        e.preventDefault(); // keep the "n" out of the title box that opens
+        newEvent();
       }
       else if (e.key === "p") showPriorities();
       else if (e.key === "\\") setMenu(true);
@@ -977,24 +975,6 @@ export function CalendarApp({
             }}
           />
         )}
-        {quick && writable && (
-          <QuickAdd
-            key="quick"
-            onClose={() => setQuick(false)}
-            onForm={() => {
-              setQuick(false);
-              newEvent();
-            }}
-            onEvent={(p) => {
-              setQuick(false);
-              // The event form is the confirmation: nothing is saved until Save is pressed there.
-              const start = p.kind === "event" ? new Date(p.start) : new Date(`${p.date}T09:00`);
-              const end = p.kind === "event" ? new Date(p.end) : new Date(+start + 3_600_000);
-              const form = { ...draftFromSlot(start, end, writable.id), title: p.title, location: p.location };
-              setPanel({ form: p.kind === "allday" ? { ...form, allDay: true, date: p.date, endDate: p.date } : form });
-            }}
-          />
-        )}
         {away && <AwayDialog key="away" kind={away} now={now} onClose={() => setAway(null)} onSaved={() => setGen((g) => g + 1)} />}
         {sheet && !wide && (
           <Modal key="sheet" title={sheet === "today" ? "Today" : "Your priorities"} onClose={() => setSheet(null)}>
@@ -1015,7 +995,7 @@ export function CalendarApp({
       {!showAssistant && (
         <CreateMenu
           canEdit={!!writable}
-          onNew={() => setQuick(true)}
+          onNew={newEvent}
           onTodo={() => setTodos(true)}
           onMeeting={() => {
             if (!writable) return;
