@@ -20,8 +20,13 @@ type Props = {
 };
 
 const ease = [0.22, 1, 0.36, 1] as const;
-const when = (iso: string) => new Date(iso).toLocaleString("en-IN", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
-const time = (iso: string | Date) => new Date(iso).toLocaleString("en-IN", { weekday: "short", hour: "numeric", minute: "2-digit" });
+const clock = (d: Date) => d.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
+// "today", "tomorrow", else "Wed, 11 Nov".
+function day(d: Date, now: Date) {
+  const n = Math.round((new Date(d).setHours(0, 0, 0, 0) - new Date(now).setHours(0, 0, 0, 0)) / 86_400_000);
+  return n === 0 ? "today" : n === 1 ? "tomorrow" : d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
+}
+const time =(iso: string | Date) => new Date(iso).toLocaleString("en-IN", { weekday: "short", hour: "numeric", minute: "2-digit" });
 
 export function SeverityChip({ severity }: { severity: Severity }) {
   const c = sevColor(severity);
@@ -97,6 +102,7 @@ export function PrioritiesPanel({ items, onAction }: Props) {
 
 function Card({ p, onAction }: { p: Priority; onAction: (a: PriorityAction) => Promise<void> }) {
   const [mode, setMode] = useState<"doing" | "later" | "done" | null>(null);
+  const [picking, setPicking] = useState(false); // the four severity choices, opened from the chip
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const c = sevColor(p.severity);
@@ -127,18 +133,50 @@ function Card({ p, onAction }: { p: Priority; onAction: (a: PriorityAction) => P
             ? "Done ✓"
             : null;
 
+  // The reason always ends in " · in <time left>": that part goes in the corner, the rest under the title.
+  const cut = p.reason.lastIndexOf(" · in ");
+  const why = cut >= 0 ? p.reason.slice(0, cut) : p.reason;
+  const left = cut >= 0 ? p.reason.slice(cut + 3) : null;
+  const soon = +due - +now < 3 * 3_600_000;
+  // "Deadline: submit…" → "Submit…": the chip and "Due" already say it's a deadline.
+  const title = p.title.replace(/^(deadline|due)\s*[:–-]\s*/i, "").replace(/^./, (ch) => ch.toUpperCase());
+
   const btn = "rounded-full px-2.5 py-1 text-xs transition-colors disabled:opacity-50";
+  const big = "whitespace-nowrap rounded-full px-3 py-2 text-center text-xs transition-colors disabled:opacity-50";
   return (
     <div className="relative overflow-hidden rounded-2xl border border-line bg-paper pl-3" style={{ boxShadow: `inset 4px 0 0 ${c}` }}>
       <div className="p-3 pl-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <SeverityChip severity={p.severity} />
-          <h3 className={`min-w-0 flex-1 text-sm font-medium leading-tight ${p.status === "done" ? "line-through" : ""}`}>{p.title}</h3>
+        <div className="flex items-center justify-between gap-2">
+          {/* Tap the level to change it; the four choices stay out of the way until then. */}
+          <button
+            type="button"
+            disabled={busy || p.status === "done"}
+            onClick={() => setPicking(!picking)}
+            aria-expanded={picking}
+            aria-label={`Severity: ${SEVERITY_LABEL[p.severity]}. Change`}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold"
+            style={{ background: `color-mix(in srgb, ${c} 18%, transparent)` }}
+          >
+            <span className="size-2 rounded-full" style={{ background: c }} aria-hidden />
+            {SEVERITY_LABEL[p.severity]}
+            {!p.chosen && p.suggested === p.severity && <span className="font-normal opacity-70">· {p.ai ? "AI" : "suggested"}</span>}
+            {p.status !== "done" && (
+              <svg className={`size-3 transition-transform ${picking ? "rotate-180" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden>
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            )}
+          </button>
+          {left && p.status !== "done" && (
+            <span className="shrink-0 text-xs font-medium" style={{ color: soon ? "var(--sev-critical)" : "var(--muted)" }}>
+              {left}
+            </span>
+          )}
         </div>
+        <h3 className={`mt-2 text-[15px] font-medium leading-snug ${p.status === "done" ? "line-through" : ""}`}>{title}</h3>
         <p className="mt-1 text-xs text-muted">
-          {p.category === "deadline" ? "Due" : "Starts"}{" "}
-          {p.allDay ? `${new Date(p.due).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })} · all day` : when(p.due)} · {p.reason}
+          {p.category === "deadline" ? "Due" : "Starts"} {p.allDay ? `${day(due, now)}, all day` : `${day(due, now)}, ${clock(due)}`}
         </p>
+        {why && <p className="mt-0.5 text-xs text-muted/80">{why}</p>}
         {status && (
           <p className="mt-1 text-xs font-medium" style={{ color: p.status === "stuck" ? "var(--sev-critical)" : undefined }}>
             {status}
@@ -151,6 +189,7 @@ function Card({ p, onAction }: { p: Priority; onAction: (a: PriorityAction) => P
           </button>
         ) : (
           <>
+            {picking && (
             <div role="radiogroup" aria-label={`Severity of ${p.title}`} className="mt-3 flex flex-wrap gap-1.5">
               {[...SEVERITIES].reverse().map((s) => {
                 const on = p.severity === s;
@@ -161,7 +200,7 @@ function Card({ p, onAction }: { p: Priority; onAction: (a: PriorityAction) => P
                     role="radio"
                     aria-checked={on}
                     disabled={busy}
-                    onClick={() => act({ action: "severity", severity: s })}
+                    onClick={() => act({ action: "severity", severity: s }).then(() => setPicking(false))}
                     className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${on ? "border-transparent font-semibold" : "border-line hover:border-ink/30"}`}
                     style={on ? { background: `color-mix(in srgb, ${sevColor(s)} 22%, transparent)`, boxShadow: `inset 0 0 0 1.5px ${sevColor(s)}` } : undefined}
                   >
@@ -172,23 +211,26 @@ function Card({ p, onAction }: { p: Priority; onAction: (a: PriorityAction) => P
                 );
               })}
               {p.chosen && (
-                <button type="button" disabled={busy} onClick={() => act({ action: "severity", severity: null })} className="px-1 text-xs text-muted underline">
+                <button type="button" disabled={busy} onClick={() => act({ action: "severity", severity: null }).then(() => setPicking(false))} className="px-1 text-xs text-muted underline">
                   Use suggestion
                 </button>
               )}
             </div>
+            )}
 
-            <div className="mt-3 flex flex-wrap items-center gap-1.5">
-              <button type="button" disabled={busy} onClick={() => setMode(mode === "doing" ? null : "doing")} aria-expanded={mode === "doing"} className={`${btn} bg-ink font-medium text-paper`}>
-                ▶ Doing it now
+            {/* Three equal buttons that always fit on one line; the rarer actions as small links below. */}
+            <div className="mt-3 grid grid-cols-[auto_1fr_1fr] gap-1.5">
+              <button type="button" disabled={busy} onClick={() => setMode(mode === "doing" ? null : "doing")} aria-expanded={mode === "doing"} className={`${big} bg-ink font-medium text-paper`}>
+                Doing it now
               </button>
-              <button type="button" disabled={busy} onClick={() => setMode(mode === "later" ? null : "later")} aria-expanded={mode === "later"} className={`${btn} border border-line hover:border-ink/40`}>
-                ⏰ Later
+              <button type="button" disabled={busy} onClick={() => setMode(mode === "later" ? null : "later")} aria-expanded={mode === "later"} className={`${big} border border-line bg-surface hover:border-ink/40`}>
+                Later
               </button>
-              <button type="button" disabled={busy} onClick={() => setMode(mode === "done" ? null : "done")} aria-expanded={mode === "done"} className={`${btn} border border-line hover:border-ink/40`}>
-                ✓ Done
+              <button type="button" disabled={busy} onClick={() => setMode(mode === "done" ? null : "done")} aria-expanded={mode === "done"} className={`${big} border border-line bg-surface hover:border-ink/40`}>
+                Done
               </button>
-              <span className="flex-1" />
+            </div>
+            <div className="mt-1.5 flex justify-center gap-4">
               {p.status !== "stuck" && (
                 <button type="button" disabled={busy} onClick={() => act({ action: "stuck" })} className={`${btn} text-muted hover:text-ink`}>
                   I&apos;m stuck
