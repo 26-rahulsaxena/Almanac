@@ -17,12 +17,17 @@ export function ThemeToggle() {
     const x = b.left + b.width / 2;
     const y = b.top + b.height / 2;
     const r = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y)); // to the farthest corner
-    document.startViewTransition(apply).ready.then(() =>
-      document.documentElement.animate(
+    // Colour fades are paused while the circle runs, so the new theme lands in one steady sweep.
+    const html = document.documentElement;
+    html.classList.add("theme-switching");
+    const t = document.startViewTransition(apply);
+    t.ready.then(() =>
+      html.animate(
         { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${r}px at ${x}px ${y}px)`] },
-        { duration: 700, easing: "cubic-bezier(0.4, 0, 0.2, 1)", pseudoElement: "::view-transition-new(root)" },
+        { duration: 600, easing: "linear", pseudoElement: "::view-transition-new(root)" },
       ),
     );
+    t.finished.finally(() => html.classList.remove("theme-switching"));
   }
 
   return (
