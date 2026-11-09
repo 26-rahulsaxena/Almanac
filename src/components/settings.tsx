@@ -12,7 +12,7 @@ const TABS = ["General", "Alerts", "Planning", "App"] as const;
 type Tab = (typeof TABS)[number];
 
 const KEYS: [string, string][] = [
-  ["N", "New event or to-do"],
+  ["N", "New event"],
   ["K", "Ask Almanac"],
   ["P", "Priorities"],
   ["D W M A", "Day, week, month, agenda"],

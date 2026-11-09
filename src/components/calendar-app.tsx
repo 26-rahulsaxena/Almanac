@@ -985,7 +985,6 @@ export function CalendarApp({
               setQuick(false);
               newEvent();
             }}
-            onTodoAdded={() => setGen((g) => g + 1)}
             onEvent={(p) => {
               setQuick(false);
               // The event form is the confirmation: nothing is saved until Save is pressed there.

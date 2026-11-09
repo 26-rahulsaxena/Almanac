@@ -10,8 +10,14 @@ describe("quick add", () => {
     expect(p).toEqual({ kind: "event", title: "Lunch with Riya", start: "2026-11-06T07:30:00.000Z", end: "2026-11-06T08:30:00.000Z", location: "the cafe" });
   });
 
-  test("odd lengths fall back to an hour; a to-do's bad due date is dropped", () => {
-    expect(toProposal({ kind: "todo", title: "Submit report", due: "next week", minutes: 9999 }, now, IST)).toEqual({ kind: "todo", title: "Submit report", due: null, minutes: 60 });
+  test("odd lengths fall back to an hour", () => {
+    const p = toProposal({ kind: "event", title: "Call", start: "2026-11-06T13:00", minutes: 9999 }, now, IST);
+    expect(p).toMatchObject({ end: "2026-11-06T08:30:00.000Z" });
+  });
+
+  test("always an event: no time is all day, and no day is today", () => {
+    expect(toProposal({ kind: "allday", title: "Diwali", date: "2026-11-08", location: "" }, now, IST)).toEqual({ kind: "allday", title: "Diwali", date: "2026-11-08", location: "" });
+    expect(toProposal({ kind: "todo", title: "Submit report", due: null }, now, IST)).toEqual({ kind: "allday", title: "Submit report", date: "2026-11-04", location: "" });
   });
 
   test("refuses no title, bad times and dates far away", () => {

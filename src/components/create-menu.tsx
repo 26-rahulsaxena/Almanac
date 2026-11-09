@@ -33,7 +33,7 @@ export function CreateMenu({
   }, [open]);
 
   const items: [string, string, () => void, boolean][] = [
-    ["New", "Event or to-do, typed or spoken", onNew, canEdit],
+    ["New event", "Type or say what and when", onNew, canEdit],
     ["To-do", "Something to get done", onTodo, true],
     ["New meeting", "With guests and a Meet link", onMeeting, canEdit],
     ["Out of office", "Show you're away", () => onAway("ooo"), canEdit],
@@ -77,7 +77,7 @@ export function CreateMenu({
         whileTap={{ scale: 0.92 }}
         aria-expanded={open}
         aria-controls="create-menu"
-        aria-label={open ? "Close the add menu" : "Add: new, to-do, meeting, out of office, focus time"}
+        aria-label={open ? "Close the add menu" : "Add: new event, to-do, meeting, out of office, focus time"}
         className="grid size-12 place-items-center rounded-full bg-ink text-paper shadow-xl"
       >
         <motion.svg animate={{ rotate: open ? 45 : 0 }} className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>

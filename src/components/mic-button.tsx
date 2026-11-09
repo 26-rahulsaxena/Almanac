@@ -17,9 +17,9 @@ const speech = () => {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition;
 };
 const noChanges = () => () => {};
-// Inside the Android app the browser's speech-to-text doesn't work: new versions use the phone's voice typing,
-// older ones hide the button.
-const canSpeakHere = () => (isAndroidApp() ? appCanListen() : !!speech());
+// Inside the Android app the browser's speech-to-text doesn't work: new versions use the phone's voice typing, and
+// older ones show the button with a note to update.
+const canSpeakHere = () => isAndroidApp() || !!speech();
 
 // Speak instead of typing. onText gets the words as they're heard; onEnd the final words once you stop.
 // Shows nothing in browsers without speech-to-text (e.g. Firefox).
@@ -47,6 +47,7 @@ export function MicButton({ onText, onEnd, onError, onListening }: { onText: (t:
   }
 
   function toggle() {
+    if (isAndroidApp() && !appCanListen()) return onError("To talk instead of typing, install the new version of the app from almanac-tau-orcin.vercel.app/download.");
     if (isAndroidApp()) return listening ? undefined : listenInApp();
     if (rec.current) return rec.current.stop();
     const R = speech();
