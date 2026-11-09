@@ -579,28 +579,46 @@ export function CalendarApp({
             </button>
             <span className={`font-serif text-xl transition-opacity sm:text-2xl ${searchOpen ? "opacity-0" : ""}`}>Almanac</span>
           </div>
-          <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className="flex items-center gap-1 sm:gap-2">
             <span className="hidden text-sm text-muted sm:inline">{name}</span>
-            {/* Today (with today's date), search, theme, settings. Phones: Today is a small calendar square with the day. */}
+            {/* Today, To-do, search, theme, settings. Phones: Today is a calendar outline with the day in it, and the
+                round buttons are a little smaller so all five fit. */}
             <button
               type="button"
               onClick={goToday}
               aria-label={`Today, ${now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })}`}
               title="Today (T)"
-              className="flex h-10 items-center gap-1.5 whitespace-nowrap rounded-full border border-line bg-surface px-2 text-sm hover:border-ink/40 sm:px-4"
+              className="grid size-9 shrink-0 place-items-center whitespace-nowrap rounded-full text-sm hover:bg-ink/5 sm:flex sm:h-10 sm:w-auto sm:items-center sm:border sm:border-line sm:bg-surface sm:px-4 sm:hover:border-ink/40"
             >
-              <span className="grid size-6 place-items-center text-lg font-semibold leading-none sm:hidden" aria-hidden>
-                {mounted ? now.getDate() : ""}
-              </span>
+              <svg className="size-8 sm:hidden" viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
+                <rect x="4" y="6.5" width="24" height="22" rx="4" />
+                <path d="M4 12.5h24M11 3.5v5M21 3.5v5" />
+                <text x="16" y="25" textAnchor="middle" fontSize="11" fontWeight="700" fill="currentColor" stroke="none">
+                  {mounted ? now.getDate() : ""}
+                </text>
+              </svg>
               <span className="hidden sm:inline">
                 Today{mounted && <span className="text-muted"> · {now.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>}
               </span>
             </button>
+            <button
+              type="button"
+              onClick={() => setTodos(true)}
+              aria-label="To-dos"
+              title="To-dos"
+              className="grid size-9 shrink-0 place-items-center rounded-full border border-line bg-surface hover:border-ink/40 sm:size-10"
+            >
+              {/* A calendar with a tick. */}
+              <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <rect x="3" y="5" width="18" height="16" rx="3" />
+                <path d="M3 10h18M8 3v4M16 3v4M9 15.5l2 2 4-4" />
+              </svg>
+            </button>
             {/* Search: the round button grows to the left into the search box (over the name and date while open). */}
-            <div className="relative size-10 shrink-0">
+            <div className="relative size-9 shrink-0 sm:size-10">
               <div
-                className={`absolute right-0 top-0 z-10 flex h-10 items-center overflow-hidden rounded-full border bg-surface transition-[width,border-color] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-                  searchOpen ? "w-[min(22rem,calc(100vw-10.5rem))] border-accent/60" : "w-10 border-line hover:border-ink/40"
+                className={`absolute right-0 top-0 z-10 flex h-9 items-center sm:h-10 overflow-hidden rounded-full border bg-surface transition-[width,border-color] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                  searchOpen ? "w-[min(22rem,calc(100vw-10.5rem))] border-accent/60" : "w-9 border-line hover:border-ink/40 sm:w-10"
                 }`}
               >
                 <button
@@ -609,7 +627,7 @@ export function CalendarApp({
                   aria-label="Search events"
                   aria-expanded={searchOpen}
                   title="Search (/)"
-                  className="grid size-10 shrink-0 place-items-center"
+                  className="grid size-9 shrink-0 place-items-center sm:size-10"
                 >
                   <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
                     <circle cx="11" cy="11" r="7" />
@@ -645,13 +663,13 @@ export function CalendarApp({
                 )}
               </div>
             </div>
-            <ThemeToggle />
+            <ThemeToggle className="size-9 sm:size-10" />
             <button
               type="button"
               onClick={() => setSettings(true)}
               aria-label="Settings"
               title="Settings"
-              className="grid size-10 place-items-center rounded-full border border-line bg-surface hover:border-ink/40"
+              className="grid size-9 place-items-center rounded-full border border-line bg-surface hover:border-ink/40 sm:size-10"
             >
               {/* The gear turns as the settings panel opens, and back as it closes. */}
               <motion.svg animate={{ rotate: settings ? 180 : 0 }} transition={{ type: "spring", damping: 14, stiffness: 120 }} className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>

@@ -1,7 +1,8 @@
 "use client";
 import { motion } from "motion/react";
 
-export function ThemeToggle() {
+// className: its size (the top bar makes it a little smaller on phones); 40 px otherwise.
+export function ThemeToggle({ className = "size-10" }: { className?: string }) {
   function apply() {
     const dark = document.documentElement.classList.toggle("dark");
     try {
@@ -41,7 +42,7 @@ export function ThemeToggle() {
       whileTap={{ rotate: 90, scale: 0.9 }}
       aria-label="Switch between light and dark mode"
       data-theme-toggle
-      className="grid size-10 place-items-center rounded-full border border-line bg-surface text-ink hover:border-ink/40"
+      className={`grid place-items-center rounded-full border border-line bg-surface text-ink hover:border-ink/40 ${className}`}
     >
       {/* Moon in light mode, sun in dark mode. */}
       <svg className="size-5 dark:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
