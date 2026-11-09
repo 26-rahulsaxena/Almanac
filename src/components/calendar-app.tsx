@@ -21,6 +21,7 @@ import { AwayDialog } from "./away-dialog";
 import type { AwayKind } from "@/lib/away";
 import { EMPTY_PROFILE, type Profile } from "@/lib/profile";
 import { PrioritiesPanel, type PriorityAction } from "./priorities-panel";
+import { AddCalendarHelp } from "./add-calendar";
 import { Modal, Review, TodayCard, WhatNow } from "./coach";
 import { Suggestions, type PlanMode } from "./suggestions";
 import { ThemeToggle } from "./theme-toggle";
@@ -189,6 +190,7 @@ export function CalendarApp({
   const [todos, setTodos] = useState(false); // the to-do pop-up (from the "+" menu)
   const [nowOpen, setNowOpen] = useState(false); // "What now?"
   const [review, setReview] = useState(false); // the week in review
+  const [addCal, setAddCal] = useState(false); // how to add a calendar from another Google account
   const [away, setAway] = useState<AwayKind | null>(null); // the out of office / focus time pop-up
   const wide = useWide();
   const [sheet, setSheet] = useState<"today" | "priorities" | null>(null); // phones: Today's plan / Priorities
@@ -767,6 +769,16 @@ export function CalendarApp({
               );
             })}
           </ul>
+          <button
+            type="button"
+            onClick={() => {
+              setMenu(false);
+              setAddCal(true);
+            }}
+            className="mt-1 px-3 py-1.5 text-left text-sm text-muted hover:text-ink"
+          >
+            + Add from another Google account
+          </button>
 
           <button
             type="button"
@@ -1023,6 +1035,7 @@ export function CalendarApp({
       <AnimatePresence>
         {nowOpen && <WhatNow key="now" onClose={() => setNowOpen(false)} onCalendarChange={() => setGen((g) => g + 1)} />}
         {review && <Review key="review" onClose={() => setReview(false)} />}
+        {addCal && <AddCalendarHelp key="addcal" email={email} onClose={() => setAddCal(false)} />}
         {settings && (
           <Settings
             key="settings"
