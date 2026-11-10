@@ -4,6 +4,7 @@ import { AWAY_TITLE, type AwayKind, type Decline } from "@/lib/away";
 import { shiftDate, ymd } from "@/lib/recurrence";
 import { Modal } from "./coach";
 import { Select } from "./select";
+import { TimeWheel } from "./time-wheel";
 
 const hhmm = (d: Date) => d.toTimeString().slice(0, 5);
 const MESSAGE: Record<AwayKind, string> = {
@@ -106,11 +107,11 @@ export function AwayDialog({ kind, now, onClose, onSaved }: { kind: AwayKind; no
             <>
               <label className={label}>
                 Starts
-                <input type="time" value={fromTime} onChange={(e) => setFromTime(e.target.value)} className={`${field} mt-1 w-full`} />
+                <TimeWheel aria-label="Starts" value={fromTime} onChange={setFromTime} className={`${field} mt-1 w-full`} />
               </label>
               <label className={label}>
                 Ends
-                <input type="time" value={toTime} onChange={(e) => setToTime(e.target.value)} className={`${field} mt-1 w-full`} />
+                <TimeWheel aria-label="Ends" value={toTime} onChange={setToTime} className={`${field} mt-1 w-full`} />
               </label>
             </>
           )}

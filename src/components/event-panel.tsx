@@ -25,6 +25,7 @@ import { SeverityChip } from "./priorities-panel";
 import { addDays, parseWhen } from "@/lib/time";
 import { useDialog } from "./use-dialog";
 import { Select } from "./select";
+import { TimeWheel } from "./time-wheel";
 
 export type Form = {
   calendarId: string;
@@ -275,9 +276,9 @@ export function EventPanel({ initial, event, calendars, priority, onDeadline, on
               </div>
               <div className="grid grid-cols-[1fr_auto] gap-2">
                 <input type="date" aria-label="Start date" value={f.date} onChange={(e) => setF((x) => ({ ...x, date: e.target.value, endDate: e.target.value > x.endDate ? e.target.value : x.endDate }))} className={field} required />
-                {!f.allDay && <input type="time" aria-label="Start time" value={f.startTime} onChange={(e) => set("startTime", e.target.value)} className={field} required />}
+                {!f.allDay && <TimeWheel aria-label="Start time" value={f.startTime} onChange={(v) => set("startTime", v)} className={field} />}
                 <input type="date" aria-label="End date" value={f.endDate} min={f.date} onChange={(e) => set("endDate", e.target.value)} className={field} required />
-                {!f.allDay && <input type="time" aria-label="End time" value={f.endTime} onChange={(e) => set("endTime", e.target.value)} className={field} required />}
+                {!f.allDay && <TimeWheel aria-label="End time" value={f.endTime} onChange={(v) => set("endTime", v)} className={field} />}
               </div>
             </div>
 
