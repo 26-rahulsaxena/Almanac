@@ -31,10 +31,10 @@ async function Content({ searchParams }: PageProps<"/">) {
   });
   if (!calendars) return <Landing error="Reauth" />;
 
-  const [user] = await sql<{ hidden_calendars: string[]; remind_popup: boolean; snooze_minutes: number; alarm_at_start: boolean; plan_mode: "ask" | "auto"; profile: Profile | null }[]>`
-    select hidden_calendars, remind_popup, snooze_minutes, alarm_at_start, plan_mode, profile from users where id = ${session.user.id}`;
+  const [user] = await sql<{ hidden_calendars: string[]; calendar_colors: Record<string, string>; removed_calendars: string[]; remind_popup: boolean; snooze_minutes: number; alarm_at_start: boolean; plan_mode: "ask" | "auto"; profile: Profile | null }[]>`
+    select hidden_calendars, calendar_colors, removed_calendars, remind_popup, snooze_minutes, alarm_at_start, plan_mode, profile from users where id = ${session.user.id}`;
   const stages = { remind: user?.remind_popup ?? true, snooze: user?.snooze_minutes ?? 5, alarm: user?.alarm_at_start ?? true };
   return (
-    <CalendarApp name={session.user.name ?? ""} email={session.user.email ?? ""} calendars={calendars} hidden={user?.hidden_calendars ?? []} stages={stages} planMode={user?.plan_mode ?? "ask"} profile={!user ? EMPTY_PROFILE : user.profile && cleanProfile(user.profile)} />
+    <CalendarApp name={session.user.name ?? ""} email={session.user.email ?? ""} calendars={calendars} hidden={user?.hidden_calendars ?? []} colors={user?.calendar_colors ?? {}} removed={user?.removed_calendars ?? []} stages={stages} planMode={user?.plan_mode ?? "ask"} profile={!user ? EMPTY_PROFILE : user.profile && cleanProfile(user.profile)} />
   );
 }

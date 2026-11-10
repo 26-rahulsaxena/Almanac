@@ -209,3 +209,8 @@ create table if not exists app_meta (
   value text not null
 );
 alter table app_meta enable row level security;
+
+-- Your own colour for a calendar in Almanac ({calendar id: "#rrggbb"}; Google Calendar keeps its colours), and
+-- calendars taken off the menu list (they're also in hidden_calendars, so their events and reminders stop).
+alter table users add column if not exists calendar_colors jsonb not null default '{}';
+alter table users add column if not exists removed_calendars text[] not null default '{}';

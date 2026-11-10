@@ -1,7 +1,7 @@
 "use client";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { setHiddenCalendars, type AlertStages } from "@/app/actions";
+import { setCalendarColor, setHiddenCalendars, setRemovedCalendars, type AlertStages } from "@/app/actions";
 import { appHasWidget, saveAgenda } from "@/lib/android-app";
 import { GoogleSignIn } from "./google-sign-in";
 import type { Cal, Ev } from "@/lib/calendar";
@@ -121,8 +121,10 @@ const slide = {
 export function CalendarApp({
   name,
   email,
-  calendars,
+  calendars: googleCalendars,
   hidden: initialHidden,
+  colors: initialColors,
+  removed: initialRemoved,
   stages,
   planMode,
   profile,
@@ -131,6 +133,8 @@ export function CalendarApp({
   email: string;
   calendars: Cal[];
   hidden: string[];
+  colors: Record<string, string>;
+  removed: string[];
   stages: AlertStages;
   planMode: PlanMode;
   profile: Profile | null; // null: not asked yet, so the welcome pop-up shows
@@ -138,6 +142,12 @@ export function CalendarApp({
   const mounted = useMounted();
   const now = useNow();
   const [hidden, setHidden] = useState(() => new Set(initialHidden));
+  // Your own calendar colours and the calendars taken off the menu list (Almanac only; Google keeps its own).
+  const [colors, setColors] = useState(initialColors);
+  const [removed, setRemoved] = useState(() => new Set(initialRemoved));
+  const [editCal, setEditCal] = useState<string | null>(null); // the calendar whose ⋯ panel is open
+  const [showRemoved, setShowRemoved] = useState(false);
+  const calendars = useMemo(() => googleCalendars.map((c) => (colors[c.id] ? { ...c, color: colors[c.id] } : c)), [googleCalendars, colors]);
   const [view, setView] = useState<View>(() => {
     try {
       if (VIEWS.includes(localStorage.view)) return localStorage.view;
@@ -552,6 +562,33 @@ export function CalendarApp({
     setHiddenCalendars([...next]).catch(() => setError("Couldn't save which calendars are shown."));
   }
 
+  function recolor(id: string, color: string | null) {
+    setColors((all) => {
+      const next = { ...all };
+      if (color) next[id] = color;
+      else delete next[id];
+      return next;
+    });
+    setCalendarColor(id, color).catch(() => setError("Couldn't save the colour."));
+  }
+
+  // Removing also hides it (so its events and reminders stop); putting it back shows it again.
+  function setOnList(id: string, on: boolean) {
+    const r = new Set(removed);
+    const h = new Set(hidden);
+    if (on) {
+      r.delete(id);
+      h.delete(id);
+    } else {
+      r.add(id);
+      h.add(id);
+    }
+    setRemoved(r);
+    setHidden(h);
+    setEditCal(null);
+    Promise.all([setRemovedCalendars([...r]), setHiddenCalendars([...h])]).catch(() => setError("Couldn't save your calendar list."));
+  }
+
   function toggleCat(id: string) {
     const next = new Set(cats);
     if (next.has(id)) next.delete(id);
@@ -775,15 +812,17 @@ export function CalendarApp({
 
           <h2 className="mt-6 font-mono text-xs uppercase tracking-[0.2em] text-muted">Calendars</h2>
           <ul className="mt-3 flex flex-col gap-0.5">
-            {calendars.map((c, i) => {
+            {calendars.filter((c) => !removed.has(c.id)).map((c, i) => {
               const on = !hidden.has(c.id);
+              const editing = editCal === c.id;
               return (
                 <motion.li key={c.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04, ease }}>
+                  <div className="flex items-center">
                   <button
                     type="button"
                     aria-pressed={on}
                     onClick={() => toggle(c.id)}
-                    className="flex w-full items-center gap-2.5 rounded-lg px-3 py-1.5 text-left text-sm hover:bg-ink/5"
+                    className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-3 py-1.5 text-left text-sm hover:bg-ink/5"
                   >
                     <span
                       className="grid size-4 shrink-0 place-items-center rounded-[5px] border-2 text-[10px] text-white transition-colors"
@@ -794,10 +833,69 @@ export function CalendarApp({
                     </span>
                     <span className={`truncate transition-opacity ${on ? "" : "opacity-50"}`}>{c.name}</span>
                   </button>
+                  <button
+                    type="button"
+                    aria-expanded={editing}
+                    aria-label={`Colour and options for ${c.name}`}
+                    onClick={() => setEditCal(editing ? null : c.id)}
+                    className="grid size-8 shrink-0 place-items-center rounded-full text-muted hover:bg-ink/5 hover:text-ink"
+                  >
+                    ⋯
+                  </button>
+                  </div>
+                  {editing && (
+                    <div className="mx-3 mb-2 mt-1 rounded-xl border border-line bg-surface p-3">
+                      <div role="group" aria-label={`Colour for ${c.name}`} className="flex flex-wrap gap-2">
+                        {CATEGORIES.map((k) => (
+                          <button
+                            key={k.id}
+                            type="button"
+                            aria-label={k.name}
+                            aria-pressed={c.color.toLowerCase() === k.hex}
+                            onClick={() => recolor(c.id, k.hex)}
+                            className={`size-6 rounded-full ${c.color.toLowerCase() === k.hex ? "ring-2 ring-ink ring-offset-2 ring-offset-surface" : ""}`}
+                            style={{ background: k.hex }}
+                          />
+                        ))}
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                        {colors[c.id] && (
+                          <button type="button" onClick={() => recolor(c.id, null)} className="text-muted hover:text-ink">
+                            Google&rsquo;s colour
+                          </button>
+                        )}
+                        {!c.primary && (
+                          <button type="button" onClick={() => setOnList(c.id, false)} className="text-muted hover:text-ink">
+                            Remove from this list
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </motion.li>
               );
             })}
           </ul>
+          {calendars.some((c) => removed.has(c.id)) && (
+            <div className="mt-1 px-3">
+              <button type="button" aria-expanded={showRemoved} onClick={() => setShowRemoved(!showRemoved)} className="py-1.5 text-sm text-muted hover:text-ink">
+                Removed ({calendars.filter((c) => removed.has(c.id)).length}) · {showRemoved ? "Hide" : "Show"}
+              </button>
+              {showRemoved && (
+                <ul className="mb-1 flex flex-col gap-0.5">
+                  {calendars.filter((c) => removed.has(c.id)).map((c) => (
+                    <li key={c.id} className="flex items-center gap-2.5 py-1 text-sm">
+                      <span className="size-3 shrink-0 rounded-full opacity-50" style={{ background: c.color }} aria-hidden />
+                      <span className="min-w-0 flex-1 truncate text-muted">{c.name}</span>
+                      <button type="button" onClick={() => setOnList(c.id, true)} className="shrink-0 rounded-full border border-line px-2.5 py-0.5 text-xs hover:border-ink/40">
+                        Put back
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
           <button
             type="button"
             onClick={() => {

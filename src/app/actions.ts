@@ -21,6 +21,27 @@ export async function setHiddenCalendars(ids: unknown) {
   await sql`update users set hidden_calendars = ${ids} where id = ${session.user.id}`;
 }
 
+// Almanac's own colour for a calendar ("#rrggbb"), or null for its Google colour again.
+export async function setCalendarColor(id: unknown, color: unknown) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Not signed in");
+  if (typeof id !== "string" || id.length > 300 || (color !== null && (typeof color !== "string" || !/^#[0-9a-f]{6}$/i.test(color)))) {
+    throw new Error("Invalid colour");
+  }
+  if (color === null) await sql`update users set calendar_colors = calendar_colors - ${id}::text where id = ${session.user.id}`;
+  else await sql`update users set calendar_colors = calendar_colors || jsonb_build_object(${id}::text, ${color}::text) where id = ${session.user.id}`;
+}
+
+// Calendars taken off the menu list (Almanac only; Google keeps them). The app hides them too.
+export async function setRemovedCalendars(ids: unknown) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Not signed in");
+  if (!Array.isArray(ids) || ids.length > 200 || !ids.every((i) => typeof i === "string" && i.length <= 300)) {
+    throw new Error("Invalid calendar list");
+  }
+  await sql`update users set removed_calendars = ${ids} where id = ${session.user.id}`;
+}
+
 // "ask": the auto-planner only suggests and you approve each change; "auto": it books and moves by itself.
 export async function setPlanMode(mode: unknown) {
   const session = await auth();
