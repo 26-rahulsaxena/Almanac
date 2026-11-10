@@ -24,6 +24,7 @@ import { describeReminder } from "@/lib/reminders";
 import { SeverityChip } from "./priorities-panel";
 import { addDays, parseWhen } from "@/lib/time";
 import { useDialog } from "./use-dialog";
+import { Select } from "./select";
 
 export type Form = {
   calendarId: string;
@@ -306,24 +307,25 @@ export function EventPanel({ initial, event, calendars, priority, onDeadline, on
               <label htmlFor="repeat" className={label}>
                 Repeat
               </label>
-              <select
+              <Select
                 id="repeat"
                 value={f.preset}
                 disabled={originalRule === undefined}
-                onChange={(e) => {
-                  const p = e.target.value as Preset;
+                onChange={(v) => {
+                  const p = v as Preset;
                   setF((x) => ({ ...x, preset: p, custom: p === "custom" && !x.custom.freq ? fromPreset("weekly", startDate, x.custom) : x.custom }));
                 }}
                 className={field}
-              >
-                <option value="none">Does not repeat</option>
-                <option value="daily">Every day</option>
-                <option value="weekly">Every week on {startDate.toLocaleDateString("en-IN", { weekday: "long" })}</option>
-                <option value="weekdays">Every weekday (Mon–Fri)</option>
-                <option value="monthly">Every month on day {startDate.getDate()}</option>
-                <option value="yearly">Every year on {startDate.toLocaleDateString("en-IN", { day: "numeric", month: "long" })}</option>
-                <option value="custom">Custom…</option>
-              </select>
+                options={[
+                  ["none", "Does not repeat"],
+                  ["daily", "Every day"],
+                  ["weekly", `Every week on ${startDate.toLocaleDateString("en-IN", { weekday: "long" })}`],
+                  ["weekdays", "Every weekday (Mon–Fri)"],
+                  ["monthly", `Every month on day ${startDate.getDate()}`],
+                  ["yearly", `Every year on ${startDate.toLocaleDateString("en-IN", { day: "numeric", month: "long" })}`],
+                  ["custom", "Custom…"],
+                ]}
+              />
               {f.preset === "custom" && <CustomRepeat value={f.custom} onChange={(r) => set("custom", r)} />}
             </div>
 
@@ -374,25 +376,20 @@ export function EventPanel({ initial, event, calendars, priority, onDeadline, on
                   </ul>
                   <div className="flex items-center gap-3">
                     {f.reminders.length < 5 && (
-                      <select
+                      <Select
                         aria-label="Add reminder"
                         value=""
-                        onChange={(e) => {
+                        placeholder="+ Add reminder…"
+                        onChange={(v) => {
                           const list = f.reminders as Exclude<Reminders, "default">;
-                          const minutes = Number(e.target.value);
+                          const minutes = Number(v);
                           set("reminders", [...list, { method: "popup" as const, minutes }].sort((a, b) => a.minutes - b.minutes));
                         }}
-                        className={`${field} w-auto`}
-                      >
-                        <option value="">+ Add reminder…</option>
-                        {(f.allDay ? ALL_DAY_REMINDERS : TIMED_REMINDERS)
+                        className={`${field.replace("w-full", "")} w-auto`}
+                        options={(f.allDay ? ALL_DAY_REMINDERS : TIMED_REMINDERS)
                           .filter((m) => !(f.reminders as Exclude<Reminders, "default">).some((r) => r.method === "popup" && r.minutes === m))
-                          .map((m) => (
-                            <option key={m} value={m}>
-                              {describeReminder(m, f.allDay)}
-                            </option>
-                          ))}
-                      </select>
+                          .map((m) => [String(m), describeReminder(m, f.allDay)])}
+                      />
                     )}
                     <button type="button" onClick={() => set("reminders", "default")} className="text-xs text-muted underline hover:text-ink">
                       Use calendar default
@@ -529,15 +526,13 @@ export function EventPanel({ initial, event, calendars, priority, onDeadline, on
                   {readOnly && <span className="text-muted">· read-only</span>}
                 </p>
               ) : (
-                <select id="cal" value={f.calendarId} onChange={(e) => set("calendarId", e.target.value)} className={field}>
-                  {calendars
-                    .filter((c) => c.canEdit)
-                    .map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                </select>
+                <Select
+                  id="cal"
+                  value={f.calendarId}
+                  onChange={(v) => set("calendarId", v)}
+                  className={field}
+                  options={calendars.filter((c) => c.canEdit).map((c) => [c.id, c.name])}
+                />
               )}
             </div>
 
@@ -670,13 +665,7 @@ function CustomRepeat({ value: r, onChange }: { value: Repeat; onChange: (r: Rep
           onChange={(e) => onChange({ ...r, interval: Math.min(99, Math.max(1, Number(e.target.value) || 1)) })}
           className={`${small} w-16`}
         />
-        <select aria-label="Repeat unit" value={r.freq ?? "WEEKLY"} onChange={(e) => onChange({ ...r, freq: e.target.value as Freq })} className={small}>
-          {FREQS.map(([v, l]) => (
-            <option key={v} value={v}>
-              {l}
-            </option>
-          ))}
-        </select>
+        <Select aria-label="Repeat unit" value={r.freq ?? "WEEKLY"} onChange={(v) => onChange({ ...r, freq: v as Freq })} className={small} options={FREQS} />
       </div>
       {r.freq === "WEEKLY" && (
         <div role="group" aria-label="On days" className="flex gap-1">
@@ -699,11 +688,17 @@ function CustomRepeat({ value: r, onChange }: { value: Repeat; onChange: (r: Rep
       )}
       <div className="flex flex-wrap items-center gap-2">
         Ends
-        <select aria-label="Ends" value={r.ends} onChange={(e) => onChange({ ...r, ends: e.target.value as Repeat["ends"] })} className={small}>
-          <option value="never">never</option>
-          <option value="until">on</option>
-          <option value="count">after</option>
-        </select>
+        <Select
+          aria-label="Ends"
+          value={r.ends}
+          onChange={(v) => onChange({ ...r, ends: v as Repeat["ends"] })}
+          className={small}
+          options={[
+            ["never", "never"],
+            ["until", "on"],
+            ["count", "after"],
+          ]}
+        />
         {r.ends === "until" && <input type="date" aria-label="End repeat on" value={r.until} onChange={(e) => onChange({ ...r, until: e.target.value })} className={small} required />}
         {r.ends === "count" && (
           <>

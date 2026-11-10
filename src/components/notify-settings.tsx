@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { setAlertStages, type AlertStages } from "@/app/actions";
 import { almanacPlugin, appHasReminders, isAndroidApp, saveAgenda } from "@/lib/android-app";
 import { SNOOZE_CHOICES } from "@/lib/reminders";
+import { Select } from "./select";
 
 // Whether this device gets reminders when Almanac is closed:
 // on · off (not asked yet, or turned off) · denied (blocked in the browser) · ios-install (iPhone: add to Home Screen
@@ -288,18 +289,13 @@ export function AlertStageSettings({ initial, onChange }: { initial: AlertStages
       <div className="flex items-start gap-2 pl-5">
         <span>
           <b className="font-medium">2. Again after </b>
-          <select
+          <Select
             aria-label="Snooze length in minutes"
-            value={s.snooze}
-            onChange={(e) => change({ ...s, snooze: +e.target.value })}
-            className="rounded-md border border-line bg-paper px-1 py-0.5"
-          >
-            {SNOOZE_CHOICES.map((m) => (
-              <option key={m} value={m}>
-                {m} min
-              </option>
-            ))}
-          </select>
+            value={String(s.snooze)}
+            onChange={(v) => change({ ...s, snooze: +v })}
+            className="rounded-md border border-line bg-paper px-1.5 py-0.5"
+            options={SNOOZE_CHOICES.map((m) => [String(m), `${m} min`])}
+          />
           <span className="block text-xs text-muted">If you snooze it or don&apos;t answer it. Not after the event has started.</span>
         </span>
       </div>

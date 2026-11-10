@@ -3,6 +3,7 @@ import { useState } from "react";
 import { AWAY_TITLE, type AwayKind, type Decline } from "@/lib/away";
 import { shiftDate, ymd } from "@/lib/recurrence";
 import { Modal } from "./coach";
+import { Select } from "./select";
 
 const hhmm = (d: Date) => d.toTimeString().slice(0, 5);
 const MESSAGE: Record<AwayKind, string> = {
@@ -117,11 +118,16 @@ export function AwayDialog({ kind, now, onClose, onSaved }: { kind: AwayKind; no
 
         <label className={label}>
           Invitations during this time
-          <select value={decline} onChange={(e) => setDecline(e.target.value as Decline)} className={`${field} mt-1 w-full`}>
-            <option value="new">Decline new invitations</option>
-            <option value="all">Decline new and existing meetings</option>
-            <option value="none">Don&rsquo;t decline anything</option>
-          </select>
+          <Select
+            value={decline}
+            onChange={(v) => setDecline(v as Decline)}
+            className={`${field} mt-1 w-full`}
+            options={[
+              ["new", "Decline new invitations"],
+              ["all", "Decline new and existing meetings"],
+              ["none", "Don’t decline anything"],
+            ]}
+          />
         </label>
         {decline !== "none" && (
           <label className={label}>

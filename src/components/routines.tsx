@@ -2,6 +2,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { length } from "@/lib/time";
+import { Select } from "./select";
 
 type TimeOfDay = "morning" | "afternoon" | "evening" | "any";
 type Routine = { id: string; title: string; minutes: number; per_week: number; time_of_day: TimeOfDay };
@@ -25,33 +26,20 @@ function Fields({ d, set }: { d: Draft; set: (d: Draft) => void }) {
     <div className="grid grid-cols-3 gap-1.5">
       <label className="text-xs text-muted">
         How long
-        <select value={d.minutes} onChange={(e) => set({ ...d, minutes: +e.target.value })} className={`${field} mt-0.5`}>
-          {LENGTHS.map((m) => (
-            <option key={m} value={m}>
-              {length(m)}
-            </option>
-          ))}
-        </select>
+        <Select value={String(d.minutes)} onChange={(v) => set({ ...d, minutes: +v })} className={`${field} mt-0.5`} options={LENGTHS.map((m) => [String(m), length(m)])} />
       </label>
       <label className="text-xs text-muted">
         How often
-        <select value={d.perWeek} onChange={(e) => set({ ...d, perWeek: +e.target.value })} className={`${field} mt-0.5`}>
-          {[1, 2, 3, 4, 5, 6, 7].map((n) => (
-            <option key={n} value={n}>
-              {often(n)}
-            </option>
-          ))}
-        </select>
+        <Select value={String(d.perWeek)} onChange={(v) => set({ ...d, perWeek: +v })} className={`${field} mt-0.5`} options={[1, 2, 3, 4, 5, 6, 7].map((n) => [String(n), often(n)])} />
       </label>
       <label className="text-xs text-muted">
         When
-        <select value={d.timeOfDay} onChange={(e) => set({ ...d, timeOfDay: e.target.value as TimeOfDay })} className={`${field} mt-0.5`}>
-          {(Object.keys(TIMES) as TimeOfDay[]).map((t) => (
-            <option key={t} value={t}>
-              {TIMES[t]}
-            </option>
-          ))}
-        </select>
+        <Select
+          value={d.timeOfDay}
+          onChange={(v) => set({ ...d, timeOfDay: v as TimeOfDay })}
+          className={`${field} mt-0.5`}
+          options={(Object.keys(TIMES) as TimeOfDay[]).map((t) => [t, TIMES[t]])}
+        />
       </label>
     </div>
   );

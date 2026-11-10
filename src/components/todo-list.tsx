@@ -2,6 +2,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { length } from "@/lib/time";
+import { Select } from "./select";
 
 type Todo = {
   id: string;
@@ -46,25 +47,25 @@ function Details({ d, set, splittable }: { d: Draft; set: (d: Draft) => void; sp
       </label>
       <label className="block text-xs text-muted">
         Takes
-        <select value={d.minutes} onChange={(e) => set({ ...d, minutes: +e.target.value, split: null })} className={`${field} mt-0.5`}>
-          {[...new Set([...LENGTHS, d.minutes])].sort((a, b) => a - b).map((m) => (
-            <option key={m} value={m}>
-              {length(m)}
-            </option>
-          ))}
-        </select>
+        <Select
+          value={String(d.minutes)}
+          onChange={(v) => set({ ...d, minutes: +v, split: null })}
+          className={`${field} mt-0.5`}
+          options={[...new Set([...LENGTHS, d.minutes])].sort((a, b) => a - b).map((m) => [String(m), length(m)])}
+        />
       </label>
       {splittable && d.minutes >= 120 && (
         <label className="block text-xs text-muted">
           Split into sessions
-          <select value={d.split ?? ""} onChange={(e) => set({ ...d, split: e.target.value ? +e.target.value : null })} className={`${field} mt-0.5`}>
-            <option value="">No, one block</option>
-            {SESSIONS.filter((s) => s < d.minutes).map((s) => (
-              <option key={s} value={s}>
-                {Math.ceil(d.minutes / s)} sessions of up to {length(s)}, on different days
-              </option>
-            ))}
-          </select>
+          <Select
+            value={String(d.split ?? "")}
+            onChange={(v) => set({ ...d, split: v ? +v : null })}
+            className={`${field} mt-0.5`}
+            options={[
+              ["", "No, one block"],
+              ...SESSIONS.filter((s) => s < d.minutes).map((s): [string, string] => [String(s), `${Math.ceil(d.minutes / s)} sessions of up to ${length(s)}, on different days`]),
+            ]}
+          />
         </label>
       )}
       <label className="flex items-start gap-2 text-xs">

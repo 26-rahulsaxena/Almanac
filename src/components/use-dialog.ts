@@ -21,6 +21,7 @@ export function useDialog<T extends HTMLElement>(onClose: () => void) {
 
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
+        if ((e.target as Element).closest?.('[aria-haspopup="listbox"][aria-expanded="true"]')) return; // an open dropdown (select.tsx) closes first
         e.stopPropagation();
         close.current();
       } else if (e.key === "Tab") {
