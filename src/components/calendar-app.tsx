@@ -858,14 +858,14 @@ export function CalendarApp({
                           />
                         ))}
                       </div>
-                      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                      <div className="mt-3 flex flex-wrap gap-2 text-sm">
                         {colors[c.id] && (
-                          <button type="button" onClick={() => recolor(c.id, null)} className="text-muted hover:text-ink">
+                          <button type="button" onClick={() => recolor(c.id, null)} className="rounded-full border border-line px-3 py-1.5 hover:border-ink/40">
                             Google&rsquo;s colour
                           </button>
                         )}
                         {!c.primary && (
-                          <button type="button" onClick={() => setOnList(c.id, false)} className="text-muted hover:text-ink">
+                          <button type="button" onClick={() => setOnList(c.id, false)} className="rounded-full border border-line px-3 py-1.5 hover:border-ink/40">
                             Remove from this list
                           </button>
                         )}
