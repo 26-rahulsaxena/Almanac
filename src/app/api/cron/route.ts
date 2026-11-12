@@ -1,6 +1,7 @@
 import { healthCheck, sql } from "@/lib/db";
 import { listCalendars, listEvents, type Ev } from "@/lib/calendar";
 import { ReauthError } from "@/lib/google";
+import { scanAll } from "@/lib/mail";
 import { morningCheck, replan } from "@/lib/planner";
 import { dayPlanText } from "@/lib/coach";
 import { coachToday, coachWeek } from "@/lib/coach-data";
@@ -15,7 +16,7 @@ const REVIEW_HOUR = 18; // Sunday from 6 pm: the week-in-review notification
 
 // GET /api/cron — called every minute by the scheduler (Supabase pg_cron in production) with the shared secret.
 // Sends due reminders and deadline check-ins, re-sends snoozed reminders, sends the 8 am priorities summary,
-// runs the auto-planner, and deletes old records.
+// runs the auto-planner, reads new email for meetings, calls and deadlines (if switched on), and deletes old records.
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) return new Response("Unauthorized", { status: 401 });
@@ -70,10 +71,11 @@ export async function GET(req: Request) {
 
   const planned = await autoPlanUsers();
   const updates = await announceAppUpdate();
+  const mail = await scanAll(now).catch((err) => (console.error("Reading mail failed:", err), 0));
 
   await sql`delete from reminder_deliveries where fire_at < now() - interval '2 days'`;
   await sql`delete from deadline_states where due_at < now() - interval '7 days'`;
-  return Response.json({ users: users.length, sent, snoozed: snoozed.length, checkins, digests, planned, updates });
+  return Response.json({ users: users.length, sent, snoozed: snoozed.length, checkins, digests, planned, updates, mail });
 }
 
 // Google no longer accepts the saved sign-in (in Google's testing mode it expires every 7 days), so the calendar

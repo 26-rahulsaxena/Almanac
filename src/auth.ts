@@ -13,11 +13,16 @@ const scope = [
   "https://www.googleapis.com/auth/calendar.events",
 ].join(" ");
 
+// Reading Gmail is asked for only when someone switches on "Read my email" in Settings (pass this to signIn).
+export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+export const withGmail = { scope: `${scope} ${GMAIL_SCOPE}` };
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     Google({
       // offline + consent makes Google return a refresh token, so reminders work while you're away.
-      authorization: { params: { scope, access_type: "offline", prompt: "consent" } },
+      // include_granted_scopes keeps Gmail (if it was allowed) when signing in again later.
+      authorization: { params: { scope, access_type: "offline", prompt: "consent", include_granted_scopes: "true" } },
     }),
   ],
   pages: { signIn: "/", error: "/" },

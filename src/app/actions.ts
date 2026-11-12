@@ -1,11 +1,27 @@
 "use server";
-import { auth, signIn, signOut } from "@/auth";
+import { auth, signIn, signOut, withGmail } from "@/auth";
 import { sql } from "@/lib/db";
 import { cleanProfile, EMPTY_PROFILE } from "@/lib/profile";
 import { SNOOZE_CHOICES } from "@/lib/reminders";
 
 export async function signInWithGoogle() {
   await signIn("google", { redirectTo: "/" });
+}
+
+// "Read my email": switched on here, then Google asks to allow Gmail (website; the Android app goes through the
+// phone's browser instead, see startAppSignIn).
+export async function connectGmail() {
+  await setMailOn(true);
+  await signIn("google", { redirectTo: "/?mail=1" }, withGmail); // back to Settings → Planning
+}
+
+// Switching it off stops reading mail at once; what was found and is still waiting for an answer goes too.
+export async function setMailOn(on: unknown) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Not signed in");
+  if (typeof on !== "boolean") throw new Error("Invalid setting");
+  await sql`update users set mail_on = ${on} where id = ${session.user.id}`;
+  if (!on) await sql`delete from mail_finds where user_id = ${session.user.id} and status = 'waiting'`;
 }
 
 export async function signOutNow() {

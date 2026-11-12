@@ -7,6 +7,7 @@ import { AlertStageSettings, forgetDevice, NotifySettings } from "./notify-setti
 import { PlanModeSetting, type PlanMode } from "./suggestions";
 import { ThemeToggle } from "./theme-toggle";
 import { HowItWorks } from "./tour";
+import { MailSetting } from "./mail-finds";
 import { useDialog } from "./use-dialog";
 import { profileLine, type Profile } from "@/lib/profile";
 
@@ -35,6 +36,8 @@ export function Settings(props: {
   onStages: (s: AlertStages) => void;
   planMode: PlanMode;
   onPlanMode: (m: PlanMode) => void;
+  mail: { gmail: boolean; on: boolean };
+  onMail: (on: boolean) => void;
   profile: Profile | null;
   onEditProfile: () => void;
   onAddAccount: () => void;
@@ -141,6 +144,8 @@ export function Settings(props: {
           <>
             <h3 className={h3}>Planning mode</h3>
             <PlanModeSetting initial={props.planMode} onChange={props.onPlanMode} />
+            <h3 className={`${h3} mt-6`}>Read my email</h3>
+            <MailSetting gmail={props.mail.gmail} on={props.mail.on} onChange={props.onMail} />
           </>
         )}
         {tab === "App" && (

@@ -217,3 +217,24 @@ alter table users add column if not exists removed_calendars text[] not null def
 
 -- The day the "Sign in to Almanac again" notification last went out (once a day while Google refuses the saved sign-in).
 alter table users add column if not exists reauth_warned_on date;
+
+-- Reading email for meetings, calls and deadlines (only when switched on in Settings and Gmail was allowed).
+-- mail_checked_at: up to when new mail has been read. Email text is never stored: only what was found in it,
+-- with a short quote of the words that asked for it, kept 30 days.
+alter table users add column if not exists mail_on boolean not null default false;
+alter table users add column if not exists mail_checked_at timestamptz;
+create table if not exists mail_finds (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id) on delete cascade,
+  message_id text not null,
+  kind text not null check (kind in ('meeting', 'call', 'deadline')),
+  title text not null,
+  start_at timestamptz not null, -- the meeting or call's start, or the deadline
+  end_at timestamptz,            -- null for a deadline
+  quote text not null,
+  sender text not null,
+  status text not null default 'waiting' check (status in ('waiting', 'added', 'dismissed')),
+  created_at timestamptz not null default now(),
+  unique (user_id, message_id, title)
+);
+alter table mail_finds enable row level security;

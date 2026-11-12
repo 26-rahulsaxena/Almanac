@@ -47,13 +47,13 @@ export async function saveAgenda(items: AgendaItem[]) {
 const VERIFIER_KEY = "almanacAppVerifier";
 const b64url = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
-// Opens Google sign-in in the phone's browser, with a challenge only this app can answer.
-export async function startAppSignIn() {
+// Opens Google sign-in in the phone's browser, with a challenge only this app can answer. gmail: also ask to read Gmail.
+export async function startAppSignIn(gmail = false) {
   const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
   localStorage.setItem(VERIFIER_KEY, verifier);
   const challenge = b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))));
   const { Browser } = await import("@capacitor/browser");
-  await Browser.open({ url: `${location.origin}/api/android/sign-in?c=${challenge}` });
+  await Browser.open({ url: `${location.origin}/api/android/sign-in?c=${challenge}${gmail ? "&gmail=1" : ""}` });
 }
 
 // Waits for the browser to hand back (almanac://signed-in?code=...), whether the app was open or had been closed,

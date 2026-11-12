@@ -23,6 +23,7 @@ import type { AwayKind } from "@/lib/away";
 import { EMPTY_PROFILE, type Profile } from "@/lib/profile";
 import { PrioritiesPanel, type PriorityAction } from "./priorities-panel";
 import { AddCalendarHelp } from "./add-calendar";
+import { MailFinds } from "./mail-finds";
 import { Review, TodayCard, WhatNow, WhatNowBody } from "./coach";
 import { BottomBar, DateButton, MonthPanel, TAB_TITLE, WeekStrip, type Tab } from "./phone";
 import { Suggestions, type PlanMode } from "./suggestions";
@@ -128,6 +129,7 @@ export function CalendarApp({
   removed: initialRemoved,
   stages,
   planMode,
+  mail,
   profile,
 }: {
   name: string;
@@ -138,6 +140,7 @@ export function CalendarApp({
   removed: string[];
   stages: AlertStages;
   planMode: PlanMode;
+  mail: { gmail: boolean; on: boolean }; // "Read my email": Gmail allowed, switched on
   profile: Profile | null; // null: not asked yet, so the welcome pop-up shows
 }) {
   const mounted = useMounted();
@@ -222,10 +225,11 @@ export function CalendarApp({
   const swipe = useRef<{ x: number; y: number; t: number } | null>(null);
   const wheel = useRef({ dx: 0, last: 0, until: 0 });
   const [settings, setSettings] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<"App">(); // opened from the "new version" notification
+  const [settingsTab, setSettingsTab] = useState<"App" | "Planning">(); // from the "new version" notification, or back from allowing Gmail
   // The latest saved settings, so the Settings window shows them when it's opened again.
   const [stagesNow, setStagesNow] = useState(stages);
   const [planModeNow, setPlanModeNow] = useState(planMode);
+  const [mailNow, setMailNow] = useState(mail);
   const [profileNow, setProfileNow] = useState(profile);
   const [about, setAbout] = useState(profile === null);
   // Focus moves into the menu when it opens and back to ☰ when it closes.
@@ -500,8 +504,8 @@ export function CalendarApp({
     const t = setTimeout(() => {
       const q = new URLSearchParams(location.search);
       if (q.has("review")) setReview(true);
-      if (q.has("update")) {
-        setSettingsTab("App");
+      if (q.has("update") || q.has("mail")) {
+        setSettingsTab(q.has("mail") ? "Planning" : "App");
         setSettings(true);
       }
     });
@@ -1039,6 +1043,7 @@ export function CalendarApp({
               {tab === "today" ? (
                 <div className="space-y-4">
                   <TodayCard version={gen} onCalendarChange={() => setGen((g) => g + 1)} waiting />
+                  <MailFinds version={gen} onCalendarChange={() => setGen((g) => g + 1)} />
                   <Suggestions version={gen} onCalendarChange={() => setGen((g) => g + 1)} />
                 </div>
               ) : tab === "priorities" ? (
@@ -1178,6 +1183,7 @@ export function CalendarApp({
           {wide && (
             <div className="min-w-0 space-y-4 lg:flex lg:min-h-0 lg:flex-col lg:gap-4 lg:space-y-0 lg:overflow-y-auto">
               <TodayCard version={gen} onCalendarChange={() => setGen((g) => g + 1)} />
+              <MailFinds version={gen} onCalendarChange={() => setGen((g) => g + 1)} />
               <Suggestions version={gen} onCalendarChange={() => setGen((g) => g + 1)} />
               <PrioritiesPanel items={priorities} onAction={priorityAction} />
             </div>
@@ -1235,6 +1241,8 @@ export function CalendarApp({
             stages={stagesNow}
             onStages={setStagesNow}
             planMode={planModeNow}
+            mail={mailNow}
+            onMail={(on) => setMailNow({ ...mailNow, on })}
             onPlanMode={(m) => {
               setPlanModeNow(m);
               setGen((g) => g + 1);
