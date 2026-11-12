@@ -70,7 +70,7 @@ export function Assistant({ open, onOpenChange, onChanged }: { open: boolean; on
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 16, scale: 0.9 }}
             whileTap={{ scale: 0.94 }}
-            className="fixed bottom-5 right-5 z-30 flex items-center gap-2 rounded-full bg-ink px-5 py-3 text-sm font-medium text-paper shadow-xl"
+            className="fixed bottom-5 right-5 z-30 flex items-center gap-2 rounded-full max-lg:bottom-[calc(6.25rem+env(safe-area-inset-bottom))] bg-ink px-5 py-3 text-sm font-medium text-paper shadow-xl"
             title="Assistant (K)"
           >
             <span className="size-2 rounded-full bg-accent" aria-hidden />

@@ -33,15 +33,24 @@ export function TodoDialog({ onClose, ...list }: Omit<ComponentProps<typeof Todo
             </button>
           </header>
           <div className="overflow-y-auto px-5 pb-5">
-            <div className="mt-3 empty:hidden">
-              <Suggestions version={list.version} onCalendarChange={list.onCalendarChange} />
-            </div>
-            <TodoList {...list} autoFocus />
-            <h3 className="mt-6 font-mono text-xs uppercase tracking-[0.2em] text-muted">Focus time &amp; habits</h3>
-            <Routines onCalendarChange={list.onCalendarChange} />
+            <TodoBody {...list} autoFocus />
           </div>
         </motion.div>
       </div>
+    </>
+  );
+}
+
+// What's inside it, also the phone's "To-do" tab.
+export function TodoBody(list: ComponentProps<typeof TodoList>) {
+  return (
+    <>
+      <div className="mt-3 empty:hidden">
+        <Suggestions version={list.version} onCalendarChange={list.onCalendarChange} />
+      </div>
+      <TodoList {...list} />
+      <h3 className="mt-6 font-mono text-xs uppercase tracking-[0.2em] text-muted">Focus time &amp; habits</h3>
+      <Routines onCalendarChange={list.onCalendarChange} />
     </>
   );
 }

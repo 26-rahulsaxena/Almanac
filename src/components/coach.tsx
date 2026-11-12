@@ -59,6 +59,15 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
 
 // "What should I do now?": one answer, with the next best one behind "Something else".
 export function WhatNow({ onClose, onCalendarChange }: { onClose: () => void; onCalendarChange: () => void }) {
+  return (
+    <Modal title="What now?" onClose={onClose}>
+      <WhatNowBody onCalendarChange={onCalendarChange} />
+    </Modal>
+  );
+}
+
+// The same, without the pop-up around it (the phone's "What now?" tab).
+export function WhatNowBody({ onCalendarChange }: { onCalendarChange: () => void }) {
   const [answer, setAnswer] = useState<NowAnswer | null>(null);
   const [i, setI] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -87,7 +96,7 @@ export function WhatNow({ onClose, onCalendarChange }: { onClose: () => void; on
   }
 
   return (
-    <Modal title="What now?" onClose={onClose}>
+    <>
       {!answer && !error && <p className="text-sm text-muted">Looking at your day…</p>}
       {answer && (
         <div aria-live="polite">
@@ -124,12 +133,12 @@ export function WhatNow({ onClose, onCalendarChange }: { onClose: () => void; on
           {error}
         </p>
       )}
-    </Modal>
+    </>
   );
 }
 
 // Today at a glance, above Priorities: events, free time, and the most important work for each free stretch.
-export function TodayCard({ version, onCalendarChange }: { version: number; onCalendarChange: () => void }) {
+export function TodayCard({ version, onCalendarChange, waiting }: { version: number; onCalendarChange: () => void; waiting?: boolean }) {
   const [plan, setPlan] = useState<DayPlan | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -151,7 +160,7 @@ export function TodayCard({ version, onCalendarChange }: { version: number; onCa
     }
   }
 
-  if (!plan) return null;
+  if (!plan) return waiting ? <p className="text-sm text-muted">Looking at your day…</p> : null;
   return (
     <section aria-labelledby="today-title" className="rounded-2xl border border-line bg-surface p-4">
       <h2 id="today-title" className="font-serif text-xl">

@@ -1,0 +1,210 @@
+"use client";
+import { motion } from "motion/react";
+import { useEffect, useState, type ReactNode } from "react";
+import type { Ev } from "@/lib/calendar";
+import { addDays, parseWhen, startOfDay, startOfMonth, startOfWeek } from "@/lib/time";
+
+// Phones and tablets (below the wide layout): a bar of five pages at the bottom, the day you're on at the top
+// (tap it for the month), and the week as a strip of days above the calendar.
+
+export type Tab = "today" | "priorities" | "now" | "todo" | "calendar";
+
+export const TAB_TITLE: Record<Exclude<Tab, "calendar">, string> = { today: "Today's plan", priorities: "Priorities", now: "What now?", todo: "To-do" };
+
+const icon = (children: ReactNode) => (
+  <svg className="size-[21px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    {children}
+  </svg>
+);
+
+const TABS: [Tab, string, ReactNode][] = [
+  ["today", "Today", icon(<><rect x="4" y="4" width="16" height="16" rx="5" /><circle cx="17" cy="7" r="2.2" fill="currentColor" stroke="none" /></>)],
+  ["priorities", "Priorities", icon(<path d="M5 21V4M5 4h11l-2 4 2 4H5" />)],
+  ["now", "What now?", icon(<><circle cx="12" cy="12" r="9" /><path d="M10 8l4 4-4 4" /></>)],
+  ["todo", "To-do", icon(<path d="m4 7 2 2 3-3M4 15l2 2 3-3M12 8h8M12 16h8" />)],
+  ["calendar", "Calendar", icon(<><rect x="3.5" y="5" width="17" height="15" rx="3" /><path d="M3.5 10h17M8 3v4M16 3v4" /></>)],
+];
+
+export function BottomBar({ tab, onTab, open }: { tab: Tab; onTab: (t: Tab) => void; open: number }) {
+  return (
+    <nav
+      aria-label="Main"
+      className="fixed inset-x-4 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-20 flex h-[4.25rem] items-center justify-around rounded-[1.6rem] border border-line bg-surface px-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.14)] lg:hidden"
+    >
+      {TABS.map(([id, label, svg]) => {
+        const on = tab === id;
+        return (
+          <button
+            key={id}
+            type="button"
+            aria-current={on ? "page" : undefined}
+            onClick={() => onTab(id)}
+            className={`relative flex h-14 min-w-0 flex-1 flex-col items-center justify-center gap-1 ${on ? "text-accent" : "text-muted"}`}
+          >
+            {svg}
+            <span className={`whitespace-nowrap text-[11px] ${on ? "font-semibold" : ""}`}>{label}</span>
+            {/* What's still open in Priorities, in red. */}
+            {id === "priorities" && open > 0 && (
+              <span className="absolute left-1/2 top-1 ml-1.5 grid min-w-4 place-items-center rounded-full px-1 text-[10px] font-semibold text-white" style={{ background: "var(--sev-critical)" }}>
+                {open}
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
+const DAY = 86_400_000;
+const fmt = (d: Date, o: Intl.DateTimeFormatOptions) => d.toLocaleDateString("en-IN", o);
+
+// "Tomorrow / 13 Nov Friday ⌄": the day being shown. Tapping it opens the month.
+export function DateButton({ day, now, open, onToggle }: { day: Date; now: Date; open: boolean; onToggle: () => void }) {
+  const diff = Math.round((+startOfDay(day) - +startOfDay(now)) / DAY);
+  const rel = diff === 0 ? "Today" : diff === 1 ? "Tomorrow" : diff === -1 ? "Yesterday" : diff > 0 ? `In ${diff} days` : `${-diff} days ago`;
+  const year = day.getFullYear() !== now.getFullYear() ? ` ${day.getFullYear()}` : "";
+  return (
+    <button type="button" aria-expanded={open} onClick={onToggle} aria-label={`${rel}, ${fmt(day, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}. Show the month`} className="min-w-0 flex-1 py-1 text-left">
+      <span className="block text-xs text-muted">{rel}</span>
+      <span className="mt-0.5 flex items-center gap-1.5">
+        <span className="shrink-0 font-serif text-[1.85rem] leading-none">{fmt(day, { day: "numeric", month: "short" })}</span>
+        <span className="truncate text-[15px] text-muted">
+          {fmt(day, { weekday: "long" })}
+          {year}
+        </span>
+        <svg className={`size-[18px] shrink-0 text-muted transition-transform ${open ? "rotate-180" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </span>
+    </button>
+  );
+}
+
+// Mon to Sun of the week being shown; tap a day to go to it.
+export function WeekStrip({ day, now, onPick }: { day: Date; now: Date; onPick: (d: Date) => void }) {
+  const first = startOfWeek(day);
+  return (
+    <div className="-mx-1 mb-2 grid grid-cols-7">
+      {Array.from({ length: 7 }, (_, i) => addDays(first, i)).map((d) => {
+        const here = +d === +startOfDay(day);
+        const today = +d === +startOfDay(now);
+        return (
+          <button key={+d} type="button" onClick={() => onPick(d)} aria-pressed={here} aria-label={fmt(d, { weekday: "long", day: "numeric", month: "long" }) + (today ? ", today" : "")} className="flex flex-col items-center gap-1.5 pb-1">
+            <span className={`border-b-2 pb-1 text-xs ${here ? "border-ink font-semibold" : "border-transparent text-muted"}`}>{fmt(d, { weekday: "short" })}</span>
+            <span className={`grid h-[34px] w-[38px] place-items-center rounded-[11px] text-[15px] ${here ? "bg-ink font-medium text-paper" : today ? "font-semibold text-accent" : ""}`}>{d.getDate()}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// The whole month, dropped down from the top. A dot under each day with something on, in its calendar's colours.
+export function MonthPopup({
+  day,
+  now,
+  onPick,
+  onClose,
+  load,
+  color,
+}: {
+  day: Date;
+  now: Date;
+  onPick: (d: Date) => void;
+  onClose: () => void;
+  load: (from: Date, to: Date) => Promise<Ev[]>;
+  color: (e: Ev) => string;
+}) {
+  const [month, setMonth] = useState(() => startOfMonth(day));
+  const [dots, setDots] = useState<Map<number, string[]>>(new Map());
+  const next = new Date(month.getFullYear(), month.getMonth() + 1, 1);
+
+  useEffect(() => {
+    let live = true;
+    load(month, next)
+      .then((events) => {
+        const m = new Map<number, string[]>();
+        for (const e of events) {
+          const k = +startOfDay(parseWhen(e.start, e.allDay));
+          const c = color(e);
+          const list = m.get(k) ?? [];
+          if (list.length < 3 && !list.includes(c)) m.set(k, [...list, c]);
+        }
+        if (live) setDots(m);
+      })
+      .catch(() => {}); // no dots, the month still works
+    return () => void (live = false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per month shown
+  }, [+month]);
+
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [onClose]);
+
+  const lead = (month.getDay() + 6) % 7; // weeks start on Monday
+  const count = new Date(next.getTime() - DAY).getDate();
+  const arrow = "grid size-11 place-items-center rounded-full text-muted hover:bg-ink/5 hover:text-ink";
+
+  return (
+    <div className="fixed inset-0 z-40 flex flex-col lg:hidden">
+      <motion.div
+        initial={{ y: -24, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: -24, opacity: 0 }}
+        transition={{ type: "spring", damping: 30, stiffness: 380 }}
+        role="dialog"
+        aria-label="Pick a day"
+        className="rounded-b-[28px] bg-paper px-3.5 pb-4 pt-[calc(1.5rem+env(safe-area-inset-top))] shadow-[0_18px_40px_rgba(0,0,0,0.18)]"
+      >
+        <div className="flex items-center justify-between px-1.5">
+          <p className="font-serif text-[1.85rem] leading-none" aria-live="polite">
+            {fmt(month, { month: "long", year: "numeric" })}
+          </p>
+          <div className="flex gap-0.5">
+            <button type="button" aria-label="Previous month" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))} className={arrow}>
+              <svg className="size-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+                <path d="m15 6-6 6 6 6" />
+              </svg>
+            </button>
+            <button type="button" aria-label="Next month" onClick={() => setMonth(next)} className={arrow}>
+              <svg className="size-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+                <path d="m9 6 6 6-6 6" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div className="mt-2 grid grid-cols-7 gap-y-0.5">
+          {["M", "T", "W", "T", "F", "S", "S"].map((w, i) => (
+            <span key={i} className="py-1.5 text-center text-xs text-muted" aria-hidden>
+              {w}
+            </span>
+          ))}
+          {Array.from({ length: lead }, (_, i) => (
+            <span key={`e${i}`} />
+          ))}
+          {Array.from({ length: count }, (_, i) => new Date(month.getFullYear(), month.getMonth(), i + 1)).map((d) => {
+            const here = +d === +startOfDay(day);
+            const today = +d === +startOfDay(now);
+            return (
+              <button key={+d} type="button" onClick={() => onPick(d)} aria-pressed={here} aria-label={fmt(d, { weekday: "long", day: "numeric", month: "long" }) + (today ? ", today" : "")} className="flex h-[46px] flex-col items-center justify-center gap-[3px]">
+                <span className={`grid size-[34px] place-items-center text-[15px] ${here ? "rounded-[11px] bg-ink font-medium text-paper" : today ? "font-semibold text-accent" : ""}`}>{d.getDate()}</span>
+                <span className="flex h-[5px] gap-[3px]">
+                  {!here && dots.get(+d)?.map((c) => <span key={c} className="size-[5px] rounded-full" style={{ background: c }} />)}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="mt-2.5 flex justify-end px-1.5">
+          <button type="button" onClick={() => onPick(startOfDay(now))} className="rounded-full border border-line px-3.5 py-1.5 text-sm hover:border-ink/40">
+            Today
+          </button>
+        </div>
+      </motion.div>
+      <motion.button type="button" aria-label="Close the month" onClick={onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 bg-ink/25" />
+    </div>
+  );
+}

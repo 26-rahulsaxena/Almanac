@@ -23,10 +23,11 @@ import type { AwayKind } from "@/lib/away";
 import { EMPTY_PROFILE, type Profile } from "@/lib/profile";
 import { PrioritiesPanel, type PriorityAction } from "./priorities-panel";
 import { AddCalendarHelp } from "./add-calendar";
-import { Modal, Review, TodayCard, WhatNow } from "./coach";
+import { Review, TodayCard, WhatNow, WhatNowBody } from "./coach";
+import { BottomBar, DateButton, MonthPopup, TAB_TITLE, WeekStrip, type Tab } from "./phone";
 import { Suggestions, type PlanMode } from "./suggestions";
 import { ThemeToggle } from "./theme-toggle";
-import { TodoDialog } from "./todo-dialog";
+import { TodoBody, TodoDialog } from "./todo-dialog";
 import { Agenda } from "./views/agenda";
 import { MonthGrid } from "./views/month-grid";
 import { TimeGrid, type TodoDrag } from "./views/time-grid";
@@ -205,10 +206,14 @@ export function CalendarApp({
   const [addCal, setAddCal] = useState(false); // how to add a calendar from another Google account
   const [away, setAway] = useState<AwayKind | null>(null); // the out of office / focus time pop-up
   const wide = useWide();
-  const [sheet, setSheet] = useState<"today" | "priorities" | null>(null); // phones: Today's plan / Priorities
-  // Priorities sit beside the calendar on wide screens (scroll to them) and open as a sheet on phones.
+  // Phones: the page picked in the bottom bar, and the month dropped down from the date at the top.
+  const [tab, setTab] = useState<Tab>("calendar");
+  const [monthOpen, setMonthOpen] = useState(false);
+  const phone = mounted && !wide;
+  const openTodos = () => (matchMedia(WIDE).matches ? setTodos(true) : setTab("todo"));
+  // Priorities sit beside the calendar on wide screens (scroll to them) and are a page of their own on phones.
   const showPriorities = useCallback(() => {
-    if (!matchMedia(WIDE).matches) return setSheet("priorities");
+    if (!matchMedia(WIDE).matches) return setTab("priorities");
     const el = document.getElementById("priorities");
     el?.scrollIntoView({ behavior: "smooth", block: "start" });
     el?.focus({ preventScroll: true });
@@ -419,6 +424,7 @@ export function CalendarApp({
   function dragTodo(t: { id: string; title: string; minutes: number }, x: number, y: number) {
     setMenu(false);
     setTodos(false);
+    setTab("calendar");
     setQuery("");
     if (view !== "day" && view !== "week") changeView("week");
     setTodoDrag({ ...t, x, y });
@@ -618,7 +624,7 @@ export function CalendarApp({
     [entry, todoEvents, shown],
   );
   const found = results?.q === q ? results.events.filter(shown) : null;
-  const openEvent = (e: Ev) => (e.calendarId === TODO_CAL ? setTodos(true) : setPanel({ form: draftFromEvent(e), event: e }));
+  const openEvent = (e: Ev) => (e.calendarId === TODO_CAL ? openTodos() : setPanel({ form: draftFromEvent(e), event: e }));
   const openPriorities = priorities?.filter((p) => p.status !== "done").length ?? 0;
   const whatNow = (
     <button type="button" onClick={() => setNowOpen(true)} className="whitespace-nowrap rounded-full border border-accent/60 px-3 py-1.5 text-sm text-accent hover:border-accent">
@@ -638,7 +644,7 @@ export function CalendarApp({
     <div className="flex flex-1 flex-col">
       <header className="sticky top-0 z-20 border-b border-line bg-paper/85 backdrop-blur">
         <div className="flex w-full items-center justify-between gap-2 px-3 py-3 sm:gap-4 sm:px-6">
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-1 lg:flex-none lg:gap-2">
             <button
               ref={menuButton}
               type="button"
@@ -653,37 +659,36 @@ export function CalendarApp({
                 <path d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             </button>
-            <span className={`font-serif text-xl transition-opacity sm:text-2xl ${searchOpen ? "opacity-0" : ""}`}>Almanac</span>
+            <span className={`font-serif text-2xl transition-opacity max-lg:hidden ${searchOpen ? "opacity-0" : ""}`}>Almanac</span>
+            {/* Phones: the day being shown (tap for the month), or the name of the page picked in the bottom bar. */}
+            {phone &&
+              (tab === "calendar" ? (
+                <DateButton day={anchor} now={now} open={monthOpen} onToggle={() => setMonthOpen(!monthOpen)} />
+              ) : (
+                <div className="min-w-0 flex-1 py-1">
+                  <span className="block text-xs text-muted">{now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short" })}</span>
+                  <h1 className="mt-0.5 truncate font-serif text-[1.85rem] leading-none">{TAB_TITLE[tab]}</h1>
+                </div>
+              ))}
           </div>
-          <div className="flex items-center gap-1 sm:gap-2">
-            <span className="hidden text-sm text-muted sm:inline">{name}</span>
-            {/* Today, To-do, search, theme, settings. Phones: Today is a rounded square with the day in it, and the
-                round buttons are a little smaller so all five fit. */}
+          <div className="flex shrink-0 items-center gap-1 lg:gap-2">
+            <span className="hidden text-sm text-muted lg:inline">{name}</span>
+            {/* Wide screens: Today, To-do, search, theme, settings. Phones have Today and To-do in the bottom bar. */}
             <button
               type="button"
               onClick={goToday}
               aria-label={`Today, ${now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })}`}
               title="Today (T)"
-              className="grid size-9 shrink-0 place-items-center whitespace-nowrap rounded-full text-sm hover:bg-ink/5 sm:flex sm:h-10 sm:w-auto sm:items-center sm:border sm:border-line sm:bg-surface sm:px-4 sm:hover:border-ink/40"
+              className="hidden h-10 shrink-0 items-center whitespace-nowrap rounded-full border border-line bg-surface px-4 text-sm hover:border-ink/40 lg:flex"
             >
-              {/* A rounded square with the date, and Almanac's orange "now" dot in the corner. */}
-              <svg className="size-[1.6rem] sm:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
-                <rect x="3" y="3" width="18" height="18" rx="4.5" />
-                <text x="12" y="16.3" textAnchor="middle" fontSize="10" fontWeight="700" fill="currentColor" stroke="none">
-                  {mounted ? now.getDate() : ""}
-                </text>
-                <circle cx="17.6" cy="6.4" r="2.3" fill="var(--accent)" stroke="var(--paper)" strokeWidth="1" />
-              </svg>
-              <span className="hidden sm:inline">
-                Today{mounted && <span className="text-muted"> · {now.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>}
-              </span>
+              Today{mounted && <span className="text-muted"> · {now.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>}
             </button>
             <button
               type="button"
               onClick={() => setTodos(true)}
               aria-label="To-dos"
               title="To-dos"
-              className="grid size-9 shrink-0 place-items-center rounded-full border border-line bg-surface hover:border-ink/40 sm:size-10"
+              className="hidden size-10 shrink-0 place-items-center rounded-full border border-line bg-surface hover:border-ink/40 lg:grid"
             >
               {/* A checklist: two ticks and two lines. */}
               <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -757,7 +762,8 @@ export function CalendarApp({
         </div>
       </header>
 
-      <div className="w-full flex-1 px-3 py-4 sm:px-6">
+      {/* Phones: room at the bottom so nothing ends up under the bottom bar and the + / Ask Almanac buttons. */}
+      <div className={`w-full flex-1 px-3 py-4 sm:px-6 ${tab === "calendar" ? "max-lg:pb-24" : "max-lg:pb-48"}`}>
         {/* The side panel slides out over the calendar. It stays mounted while closed (inert), so its panels
             keep their state and don't reload every time it opens. */}
         <AnimatePresence>
@@ -969,37 +975,15 @@ export function CalendarApp({
           style={{ "--l": `${shownSplit}fr`, "--r": `${100 - shownSplit}fr` } as React.CSSProperties}
         >
           <div className="flex min-w-0 flex-col lg:min-h-0">
-          <div className="flex flex-wrap items-center gap-2">
-            {/* The date first; on phones the plan, What now? and Priorities row below it. */}
-            <h1 className="mr-auto font-serif text-3xl sm:text-4xl" aria-live="polite">
+          {/* Wide screens: the dates shown and What now? (phones have the date at the top and What now? in the bar). */}
+          <div className="flex flex-wrap items-center gap-2 max-lg:hidden">
+            <h1 className="mr-auto font-serif text-4xl" aria-live="polite">
               {mounted ? titleOf(view, anchor, days) : " "}
             </h1>
-            {(!mounted || wide) && whatNow}
-            {/* Phones: Today's plan, What now? and Priorities in one row. Wide screens show the plan and priorities
-                in the side column, so only What now? sits up here. */}
-            {mounted && !wide && (
-              <div className="grid w-full grid-cols-3 gap-2 *:min-w-0 *:whitespace-nowrap">
-                <button type="button" onClick={() => setSheet("today")} className="rounded-full border border-line bg-surface px-2 py-1.5 text-sm hover:border-ink/40">
-                  Today&rsquo;s plan
-                </button>
-                {whatNow}
-                {/* Marked as important: red outline and a red count of what's still open. */}
-                <button
-                  type="button"
-                  onClick={() => setSheet("priorities")}
-                  className="flex items-center justify-center gap-1.5 rounded-full border bg-surface px-2 py-1.5 text-sm font-medium"
-                  style={{ borderColor: "color-mix(in srgb, var(--sev-critical) 60%, transparent)", color: "var(--sev-critical)" }}
-                >
-                  Priorities
-                  {openPriorities > 0 && (
-                    <span className="grid min-w-5 place-items-center rounded-full px-1.5 text-xs font-semibold text-white" style={{ background: "var(--sev-critical)" }}>
-                      {openPriorities}
-                    </span>
-                  )}
-                </button>
-              </div>
-            )}
+            {whatNow}
           </div>
+          {/* Phones, on the day view: the week as a strip of days. */}
+          {phone && tab === "calendar" && view === "day" && !searching && <WeekStrip day={anchor} now={now} onPick={(d) => (setDir(0), setAnchor(d))} />}
 
           {error === "reauth" ? (
             <Notice text="Google needs you to sign in again before it shares your calendar.">
@@ -1013,7 +997,35 @@ export function CalendarApp({
             error && <Notice text={error} onClose={() => setError(null)} />
           )}
 
-          <div className="relative mt-4 lg:min-h-0 lg:flex-1">
+          {phone && tab !== "calendar" && !searching ? (
+            // Phones: the page picked in the bottom bar, in place of the calendar.
+            <div className="mt-1">
+              {tab === "today" ? (
+                <div className="space-y-4">
+                  <TodayCard version={gen} onCalendarChange={() => setGen((g) => g + 1)} waiting />
+                  <Suggestions version={gen} onCalendarChange={() => setGen((g) => g + 1)} />
+                </div>
+              ) : tab === "priorities" ? (
+                <PrioritiesPanel items={priorities} onAction={priorityAction} />
+              ) : tab === "now" ? (
+                <section aria-label="What now?" className="rounded-2xl border border-line bg-surface p-4">
+                  <WhatNowBody onCalendarChange={() => setGen((g) => g + 1)} />
+                </section>
+              ) : (
+                <TodoBody
+                  version={gen}
+                  now={now}
+                  onCalendarChange={() => setGen((g) => g + 1)}
+                  onOpenDay={(d) => {
+                    openDay(startOfDay(d));
+                    setTab("calendar");
+                  }}
+                  onDragStart={dragTodo}
+                />
+              )}
+            </div>
+          ) : (
+          <div className="relative lg:mt-4 lg:min-h-0 lg:flex-1">
             {mounted && !searching && !entry && (
               <motion.div
                 className="absolute inset-x-4 -top-2 z-10 h-0.5 origin-left rounded-full bg-accent"
@@ -1090,6 +1102,7 @@ export function CalendarApp({
                         onMove={moveEvent}
                         todoDrag={todoDrag}
                         onTodoDrop={dropTodo}
+                        hideHead={phone && view === "day"}
                       />
                     )}
                   </motion.div>
@@ -1097,6 +1110,7 @@ export function CalendarApp({
               </div>
             )}
           </div>
+          )}
           </div>
           <div
             role="separator"
@@ -1214,19 +1228,36 @@ export function CalendarApp({
           />
         )}
         {away && <AwayDialog key="away" kind={away} now={now} onClose={() => setAway(null)} onSaved={() => setGen((g) => g + 1)} />}
-        {sheet && !wide && (
-          <Modal key="sheet" title={sheet === "today" ? "Today" : "Your priorities"} onClose={() => setSheet(null)}>
-            {sheet === "today" ? (
-              <div className="space-y-4">
-                <TodayCard version={gen} onCalendarChange={() => setGen((g) => g + 1)} />
-                <Suggestions version={gen} onCalendarChange={() => setGen((g) => g + 1)} />
-              </div>
-            ) : (
-              <PrioritiesPanel items={priorities} onAction={priorityAction} />
-            )}
-          </Modal>
+        {monthOpen && phone && (
+          <MonthPopup
+            key="month"
+            day={anchor}
+            now={now}
+            onPick={(d) => {
+              setDir(0);
+              setAnchor(d);
+              setMonthOpen(false);
+            }}
+            onClose={() => setMonthOpen(false)}
+            load={(f, t) => fetchEvents({ from: f.toISOString(), to: t.toISOString() }, calIds.filter((id) => !hidden.has(id)))}
+            color={color}
+          />
         )}
       </AnimatePresence>
+
+      {mounted && (
+        <BottomBar
+          tab={tab}
+          onTab={(t) => {
+            setTab(t);
+            setMonthOpen(false);
+            setQuery("");
+            setSearchOpen(false);
+            scrollTo({ top: 0 });
+          }}
+          open={openPriorities}
+        />
+      )}
 
       <FullScreenAlert onChanged={() => setGen((g) => g + 1)} />
 
@@ -1234,7 +1265,7 @@ export function CalendarApp({
         <CreateMenu
           canEdit={!!writable}
           onNew={newEvent}
-          onTodo={() => setTodos(true)}
+          onTodo={openTodos}
           onMeeting={() => {
             if (!writable) return;
             // Next half hour, 30 minutes, with a Meet link; guests are added in the form, which asks before inviting anyone.
@@ -1246,7 +1277,7 @@ export function CalendarApp({
       )}
       <Assistant open={showAssistant} onOpenChange={setShowAssistant} onChanged={() => setGen((g) => g + 1)} />
 
-      <div role="status" aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-4 z-30 flex flex-col items-center gap-2 px-4">
+      <div role="status" aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-4 z-30 max-lg:bottom-[calc(6.25rem+env(safe-area-inset-bottom))] flex flex-col items-center gap-2 px-4">
         <AnimatePresence>
           {moved && (
             <motion.div

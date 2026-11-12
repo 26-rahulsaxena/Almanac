@@ -41,7 +41,8 @@ export function CreateMenu({
   ];
 
   return (
-    <div ref={ref} className="fixed bottom-[4.75rem] right-5 z-30 flex flex-col items-end gap-2">
+    // Phones: above Ask Almanac, which sits above the bottom bar.
+    <div ref={ref} className="fixed bottom-[4.75rem] right-5 z-30 flex flex-col items-end gap-2 max-lg:bottom-[calc(9.75rem+env(safe-area-inset-bottom))]">
       <AnimatePresence>
         {open && (
           <motion.ul
@@ -78,7 +79,7 @@ export function CreateMenu({
         aria-expanded={open}
         aria-controls="create-menu"
         aria-label={open ? "Close the add menu" : "Add: new event, to-do, meeting, out of office, focus time"}
-        className="grid size-12 place-items-center rounded-full bg-ink text-paper shadow-xl"
+        className="grid size-12 place-items-center rounded-full bg-ink text-paper shadow-xl max-lg:size-14 max-lg:rounded-[18px]"
       >
         <motion.svg animate={{ rotate: open ? 45 : 0 }} className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
           <path d="M12 5v14M5 12h14" />

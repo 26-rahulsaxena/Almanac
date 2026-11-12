@@ -54,6 +54,7 @@ type Props = {
   onMove?: (e: Ev, start: Date, end: Date) => void;
   todoDrag?: TodoDrag | null;
   onTodoDrop?: (start: Date | null) => void;
+  hideHead?: boolean; // phones show the days in their own strip above
 };
 
 const minutesInto = (d: Date) => d.getHours() * 60 + d.getMinutes();
@@ -71,7 +72,7 @@ const at = (day: Date, minutes: number) => {
 
 // Day view (1 column) and week view (7 columns). Events can be dragged to a new time or day, and stretched from
 // their bottom edge; to-dos can be dropped in from the menu. On touch screens, press and hold to pick up.
-export function TimeGrid({ days, events, color, severityOf, now, onPickDay, onOpen, onBook, canDrag, onMove, todoDrag, onTodoDrop }: Props) {
+export function TimeGrid({ days, events, color, severityOf, now, onPickDay, onOpen, onBook, canDrag, onMove, todoDrag, onTodoDrop, hideHead }: Props) {
   const cols = `3.5rem repeat(${days.length}, minmax(0, 1fr))`;
   const today = +startOfDay(now);
   const allDay = events.filter((e) => e.allDay);
@@ -210,7 +211,7 @@ export function TimeGrid({ days, events, color, severityOf, now, onPickDay, onOp
 
   return (
     <div className={`overflow-hidden rounded-2xl border border-line bg-surface lg:flex lg:h-full lg:flex-col ${drag ? "cursor-grabbing select-none" : ""}`}>
-      <div className="grid border-b border-line" style={{ gridTemplateColumns: cols }}>
+      <div className={`grid border-b border-line ${hideHead ? "hidden" : ""}`} style={{ gridTemplateColumns: cols }}>
         <div />
         {days.map((d) => (
           <button
@@ -259,7 +260,7 @@ export function TimeGrid({ days, events, color, severityOf, now, onPickDay, onOp
         ))}
       </div>
 
-      <div ref={scrollOnce} className="max-h-[max(24rem,calc(100dvh-17rem))] overflow-y-auto lg:max-h-none lg:min-h-0 lg:flex-1">
+      <div ref={scrollOnce} className="max-h-[max(24rem,calc(100dvh-17rem))] overflow-y-auto max-lg:max-h-[max(20rem,calc(100dvh-24rem))] lg:max-h-none lg:min-h-0 lg:flex-1">
         <div className="grid" style={{ gridTemplateColumns: cols, height: 24 * HOUR }}>
           <div className="relative">
             {Array.from({ length: 23 }, (_, i) => i + 1).map((h) => (
