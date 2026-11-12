@@ -15,15 +15,18 @@ type Props = {
   now: Date;
   onOpen: (e: Ev) => void;
   showFree?: boolean;
+  isDone?: (e: Ev) => boolean; // left out of the list: ticked Done, or already over today
 };
 
-// A day-by-day list. Also used for search results (showFree off, only days with matches).
-export function Agenda({ days, events, color, severityOf, now, onOpen, showFree = true }: Props) {
+// A day-by-day list of what's still ahead. Also used for search results (showFree off, only days with matches,
+// nothing left out).
+export function Agenda({ days, events, color, severityOf, now, onOpen, showFree = true, isDone }: Props) {
   const today = startOfDay(now);
   return (
     <ol className="space-y-6">
       {days.map((day) => {
-        const dayEvents = events.filter((e) => overlapsDay(e, day));
+        const all = events.filter((e) => overlapsDay(e, day));
+        const dayEvents = isDone ? all.filter((e) => !isDone(e)) : all;
         return (
           <li key={+day}>
             <h2 className="flex items-baseline gap-3 border-b border-line pb-1.5">
@@ -36,7 +39,7 @@ export function Agenda({ days, events, color, severityOf, now, onOpen, showFree 
               <AnimatePresence initial={false}>
                 {showFree && dayEvents.length === 0 && (
                   <motion.li key="free" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="py-1.5 text-sm text-muted">
-                    Free all day
+                    {all.length ? "Nothing left" : "Free all day"}
                   </motion.li>
                 )}
                 {dayEvents.map((e) => (

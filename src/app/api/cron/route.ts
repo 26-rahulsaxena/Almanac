@@ -1,5 +1,6 @@
 import { healthCheck, sql } from "@/lib/db";
 import { listCalendars, listEvents, type Ev } from "@/lib/calendar";
+import { ReauthError } from "@/lib/google";
 import { morningCheck, replan } from "@/lib/planner";
 import { dayPlanText } from "@/lib/coach";
 import { coachToday, coachWeek } from "@/lib/coach-data";
@@ -34,25 +35,28 @@ export async function GET(req: Request) {
       sent += await remindUser(u, now);
     } catch (err) {
       console.error(`Reminders for user ${u.id} failed:`, err); // e.g. Google login expired; others still get theirs
+      if (err instanceof ReauthError) await warnSignedOut(u.id, u.timezone).catch(() => {});
     }
   }
 
-  // Stage 2: a reminder left unanswered comes back once after the snooze time, as if Snooze was pressed. Not once
-  // the event has started: the start alarm takes over then.
+  // Stage 2: whatever is left unanswered comes back after each snooze time, as if Snooze was pressed, until it's
+  // answered (so one the phone missed, or that was silenced, isn't lost). A reminder stops when its event starts
+  // (the start alarm takes over); the start alarm stops an hour after the start.
   await sql`
     update reminder_deliveries r set status = 'snoozed', snooze_until = now(), repeated = true
     from users u
-    where u.id = r.user_id and r.status = 'sent' and not r.alarm and not r.repeated
+    where u.id = r.user_id and r.status = 'sent'
       -- 30 s slack: runs are a minute apart and land on the same second the reminder was sent, so it would miss by a hair
       and r.sent_at <= now() - make_interval(mins => u.snooze_minutes) + interval '30 seconds'
-      and r.fire_at + make_interval(mins => r.minutes) > now()`;
-  const snoozed = await sql<{ id: string; user_id: string; title: string; body: string; snooze_minutes: number }[]>`
+      and case when r.alarm then r.fire_at > now() - interval '1 hour' else r.fire_at + make_interval(mins => r.minutes) > now() end`;
+  const snoozed = await sql<{ id: string; user_id: string; title: string; body: string; alarm: boolean; snooze_minutes: number }[]>`
     update reminder_deliveries r set status = 'sent', snooze_until = null, sent_at = now(),
       body = 'Again · ' || regexp_replace(r.body, '^(In [^·]+|Now|Snoozed|Again) · ', '') -- "In 9 min" would be stale by now
     from users u
     where u.id = r.user_id and r.status = 'snoozed' and r.snooze_until <= now()
-    returning r.id, r.user_id, r.title, r.body, u.snooze_minutes`;
-  for (const d of snoozed) await sendPush(d.user_id, { id: d.id, title: d.title, body: d.body, snooze: d.snooze_minutes });
+    returning r.id, r.user_id, r.title, r.body, r.alarm, u.snooze_minutes`;
+  // A start alarm rings as an alarm again, also when it comes back from Snooze.
+  for (const d of snoozed) await sendPush(d.user_id, { id: d.id, title: d.title, body: d.body, snooze: d.snooze_minutes, alarm: d.alarm });
 
   const checkins = await sendCheckins();
   let digests = 0;
@@ -70,6 +74,18 @@ export async function GET(req: Request) {
   await sql`delete from reminder_deliveries where fire_at < now() - interval '2 days'`;
   await sql`delete from deadline_states where due_at < now() - interval '7 days'`;
   return Response.json({ users: users.length, sent, snoozed: snoozed.length, checkins, digests, planned, updates });
+}
+
+// Google no longer accepts the saved sign-in (in Google's testing mode it expires every 7 days), so the calendar
+// can't be read and reminders stop. Say so once a day, from 8 am, until they sign in again.
+async function warnSignedOut(userId: string, timeZone: string) {
+  const [claim] = await sql<{ id: string }[]>`
+    update users set reauth_warned_on = (now() at time zone ${timeZone})::date
+    where id = ${userId}
+      and extract(hour from now() at time zone ${timeZone}) >= ${DIGEST_HOUR}
+      and (reauth_warned_on is null or reauth_warned_on < (now() at time zone ${timeZone})::date)
+    returning id`;
+  if (claim) await sendPush(userId, { title: "Sign in to Almanac again", body: "Google signed Almanac out, so your reminders have stopped. Open Almanac and sign in to get them back." });
 }
 
 // A new Android app build is live (the build writes src/lib/android-build.json, and the site redeploys with it):

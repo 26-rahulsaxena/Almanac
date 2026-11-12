@@ -21,6 +21,15 @@ export async function setHiddenCalendars(ids: unknown) {
   await sql`update users set hidden_calendars = ${ids} where id = ${session.user.id}`;
 }
 
+// Events and to-do blocks ticked Done, as "calendarId:eventId", so the Agenda (and the phone widget) leave them out.
+export async function doneEventKeys() {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Not signed in");
+  const rows = await sql<{ key: string }[]>`
+    select calendar_id || ':' || event_id as key from deadline_states where user_id = ${session.user.id} and status = 'done'`;
+  return rows.map((r) => r.key);
+}
+
 // Almanac's own colour for a calendar ("#rrggbb"), or null for its Google colour again.
 export async function setCalendarColor(id: unknown, color: unknown) {
   const session = await auth();

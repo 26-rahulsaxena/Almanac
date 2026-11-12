@@ -1,13 +1,13 @@
 "use client";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { setCalendarColor, setHiddenCalendars, setRemovedCalendars, type AlertStages } from "@/app/actions";
+import { doneEventKeys, setCalendarColor, setHiddenCalendars, setRemovedCalendars, type AlertStages } from "@/app/actions";
 import { appHasWidget, saveAgenda } from "@/lib/android-app";
 import { GoogleSignIn } from "./google-sign-in";
 import type { Cal, Ev } from "@/lib/calendar";
 import { CATEGORIES, categoryHex } from "@/lib/categories";
 import type { DeleteInput, SaveInput, Scope, SendUpdates } from "@/lib/recurrence";
-import { addDays, atHour, formatTime, parseWhen, startOfDay, startOfMonth, startOfWeek } from "@/lib/time";
+import { addDays, atHour, endedToday, formatTime, parseWhen, startOfDay, startOfMonth, startOfWeek } from "@/lib/time";
 import { Assistant } from "./assistant";
 import { FullScreenAlert } from "./full-screen-alert";
 import { syncPush } from "./notify-settings";
@@ -190,6 +190,7 @@ export function CalendarApp({
   }, [pending]);
   const [cats, setCats] = useState<Set<string>>(() => new Set());
   const [priorities, setPriorities] = useState<Priority[] | null>(null);
+  const [doneKeys, setDoneKeys] = useState<Set<string>>(() => new Set()); // "calendarId:eventId" of what's ticked Done
   const firstPriorities = useRef(true);
   const [showAssistant, setShowAssistant] = useState(false);
   const [menu, setMenu] = useState(false);
@@ -252,6 +253,13 @@ export function CalendarApp({
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, []);
 
+  // What's ticked Done, reloaded with the calendar and after any answer in Priorities. The Agenda and the phone
+  // widget list what's still ahead, so they leave these out (and, today, what's already over).
+  useEffect(() => {
+    doneEventKeys().then((keys) => setDoneKeys(new Set(keys)), () => {});
+  }, [gen, priorities]);
+  const agendaDone = useCallback((e: Ev) => doneKeys.has(`${e.calendarId}:${e.id}`) || endedToday(e, now), [doneKeys, now]);
+
   // The Android home-screen Agenda widget: the next two weeks of shown calendars, saved on the phone each time the
   // calendar reloads (opening the app, coming back to it, any change).
   useEffect(() => {
@@ -263,13 +271,14 @@ export function CalendarApp({
       .then((events) =>
         saveAgenda(
           events
+            .filter((e) => !doneKeys.has(`${e.calendarId}:${e.id}`))
             .map((e) => ({ title: e.title, start: +parseWhen(e.start, e.allDay), end: +parseWhen(e.end, e.allDay), allDay: e.allDay, color: color(e) }))
             .sort((a, b) => a.start - b.start)
             .slice(0, 80),
         ),
       )
       .catch(() => {}); // the widget keeps what it had
-  }, [mounted, gen, calIds, hidden, color]);
+  }, [mounted, gen, calIds, hidden, color, doneKeys]);
 
   const q = query.trim();
   const searching = q.length >= 2;
@@ -1066,7 +1075,7 @@ export function CalendarApp({
                     {view === "month" ? (
                       <MonthGrid days={days} month={anchor.getMonth()} events={visible} color={color} severityOf={severityOf} now={now} onPickDay={openDay} />
                     ) : view === "agenda" ? (
-                      <Agenda days={days} events={visible} color={color} severityOf={severityOf} now={now} onOpen={openEvent} />
+                      <Agenda days={days} events={visible} color={color} severityOf={severityOf} now={now} onOpen={openEvent} isDone={agendaDone} />
                     ) : (
                       <TimeGrid
                         days={days}

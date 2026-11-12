@@ -1,6 +1,6 @@
 process.env.TZ = "Asia/Kolkata";
 import { describe, expect, test } from "vitest";
-import { bookableWindow, freeSlots, layoutColumns, overlapsDay, parseWhen } from "./time";
+import { bookableWindow, endedToday, freeSlots, layoutColumns, overlapsDay, parseWhen } from "./time";
 
 const nov = (d: number, h = 0, m = 0) => new Date(2026, 10, d, h, m); // local IST
 const ev = (start: string, end: string, extra: Partial<{ allDay: boolean; busy: boolean }> = {}) => ({
@@ -36,6 +36,16 @@ describe("day matching", () => {
 
   test("event ending exactly at midnight does not spill into next day", () => {
     expect(overlapsDay(ev(ist(3, "22:00"), ist(4, "00:00")), nov(4))).toBe(false);
+  });
+
+  test("ended today: over since midnight, not still running, not all-day today, not earlier days", () => {
+    const now = nov(3, 14);
+    expect(endedToday(ev(ist(3, "10:00"), ist(3, "11:00")), now)).toBe(true);
+    expect(endedToday(ev(ist(3, "13:00"), ist(3, "15:00")), now)).toBe(false); // still on
+    expect(endedToday(ev(ist(3, "16:00"), ist(3, "17:00")), now)).toBe(false); // later today
+    expect(endedToday(ev("2026-11-03", "2026-11-04", { allDay: true }), now)).toBe(false);
+    expect(endedToday(ev(ist(2, "10:00"), ist(2, "11:00")), now)).toBe(false); // yesterday stays as a record
+    expect(endedToday(ev("2026-11-02", "2026-11-03", { allDay: true }), now)).toBe(false);
   });
 
   test("UTC-written event lands on the right IST day", () => {

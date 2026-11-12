@@ -214,3 +214,6 @@ alter table app_meta enable row level security;
 -- calendars taken off the menu list (they're also in hidden_calendars, so their events and reminders stop).
 alter table users add column if not exists calendar_colors jsonb not null default '{}';
 alter table users add column if not exists removed_calendars text[] not null default '{}';
+
+-- The day the "Sign in to Almanac again" notification last went out (once a day while Google refuses the saved sign-in).
+alter table users add column if not exists reauth_warned_on date;

@@ -2,12 +2,14 @@ package app.almanac.calendar;
 
 import android.Manifest;
 import android.app.NotificationManager;
+import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.PowerManager;
 import android.provider.Settings;
 import androidx.appcompat.app.AlertDialog;
 import androidx.core.app.NotificationManagerCompat;
@@ -74,6 +76,10 @@ public class MainActivity extends BridgeActivity {
         if (Build.VERSION.SDK_INT >= 34 && !getSystemService(NotificationManager.class).canUseFullScreenIntent()) {
             explain("Allow full-screen alarms", "So an event starting rings over your lock screen, like an alarm clock. Switch Almanac on in the next screen.",
                 new Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:" + getPackageName())));
+        } else if (!getSystemService(PowerManager.class).isIgnoringBatteryOptimizations(getPackageName())) {
+            // Battery saving puts the app to sleep, and then reminders arrive late or never (the usual cause of a missed one).
+            explain("Keep reminders on time", "Your phone can put Almanac to sleep to save battery, and then reminders come late or not at all. Allow Almanac to run in the background.",
+                new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + getPackageName())));
         }
     }
 
@@ -85,7 +91,13 @@ public class MainActivity extends BridgeActivity {
         new AlertDialog.Builder(this)
             .setTitle(title)
             .setMessage(message)
-            .setPositiveButton("Open settings", (d, w) -> startActivity(settings))
+            .setPositiveButton("Open settings", (d, w) -> {
+                try {
+                    startActivity(settings);
+                } catch (ActivityNotFoundException e) {
+                    // This phone has no such screen: nothing to open.
+                }
+            })
             .setNegativeButton("Not now", (d, w) -> prefs.edit().putLong(key, System.currentTimeMillis() + THREE_DAYS).apply())
             .show();
     }

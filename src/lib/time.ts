@@ -63,6 +63,13 @@ export function overlapsDay(e: Timed, day: Date) {
   return parseWhen(e.start, e.allDay) < addDays(dayStart, 1) && parseWhen(e.end, e.allDay) > dayStart;
 }
 
+// Already over today (ended since midnight). The Agenda lists what's still ahead, so it leaves these out; earlier
+// days keep theirs, as a record.
+export function endedToday(e: Timed, now: Date) {
+  const end = parseWhen(e.end, e.allDay);
+  return end <= now && end > startOfDay(now);
+}
+
 // Busy time within [from, to), with overlapping events merged. Events marked "free" in Google don't count.
 export function busyIntervals(events: Busy[], from: Date, to: Date): Interval[] {
   const spans = events

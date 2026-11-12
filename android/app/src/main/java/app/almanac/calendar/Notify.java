@@ -94,9 +94,8 @@ public final class Notify {
                 .setCategory(NotificationCompat.CATEGORY_ALARM)
                 .setFullScreenIntent(full, true)
                 .setContentIntent(full)
-                .setOngoing(true)
-                .setAutoCancel(false)
-                .setTimeoutAfter(15 * 60 * 1000); // stops by itself after 15 minutes
+                .setOngoing(true) // stays, and can't be swiped away, until Done or Snooze
+                .setAutoCancel(false);
         } else if (!id.isEmpty()) {
             b.setPriority(NotificationCompat.PRIORITY_HIGH).setCategory(NotificationCompat.CATEGORY_REMINDER);
         }
