@@ -81,9 +81,42 @@ export function DateButton({ day, now, open, onToggle }: { day: Date; now: Date;
   );
 }
 
+type Load = (from: Date, to: Date) => Promise<Ev[]>;
+
+// The colours under each day: one dot per calendar with something on that day, up to three. Reloaded when the
+// range or the calendar (version) changes.
+function useDots(from: Date, to: Date, load: Load, color: (e: Ev) => string, version: number) {
+  const [dots, setDots] = useState<Map<number, string[]>>(new Map());
+  useEffect(() => {
+    let live = true;
+    load(from, to)
+      .then((events) => {
+        const m = new Map<number, string[]>();
+        for (const e of events) {
+          const k = +startOfDay(parseWhen(e.start, e.allDay));
+          const c = color(e);
+          const list = m.get(k) ?? [];
+          if (list.length < 3 && !list.includes(c)) m.set(k, [...list, c]);
+        }
+        if (live) setDots(m);
+      })
+      .catch(() => {}); // no dots, the days still work
+    return () => void (live = false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per range shown
+  }, [+from, +to, version]);
+  return dots;
+}
+
+const Dots = ({ colors }: { colors?: string[] }) => (
+  <span className="flex h-[5px] gap-[3px]" aria-hidden>
+    {colors?.map((c) => <span key={c} className="size-[5px] rounded-full" style={{ background: c }} />)}
+  </span>
+);
+
 // Mon to Sun of the week being shown; tap a day to go to it.
-export function WeekStrip({ day, now, onPick }: { day: Date; now: Date; onPick: (d: Date) => void }) {
+export function WeekStrip({ day, now, onPick, load, color, version }: { day: Date; now: Date; onPick: (d: Date) => void; load: Load; color: (e: Ev) => string; version: number }) {
   const first = startOfWeek(day);
+  const dots = useDots(first, addDays(first, 7), load, color, version);
   return (
     <div className="-mx-1 mb-2 grid grid-cols-7">
       {Array.from({ length: 7 }, (_, i) => addDays(first, i)).map((d) => {
@@ -93,6 +126,7 @@ export function WeekStrip({ day, now, onPick }: { day: Date; now: Date; onPick: 
           <button key={+d} type="button" onClick={() => onPick(d)} aria-pressed={here} aria-label={fmt(d, { weekday: "long", day: "numeric", month: "long" }) + (today ? ", today" : "")} className="flex flex-col items-center gap-1.5 pb-1">
             <span className={`border-b-2 pb-1 text-xs ${here ? "border-ink font-semibold" : "border-transparent text-muted"}`}>{fmt(d, { weekday: "short" })}</span>
             <span className={`grid h-[34px] w-[38px] place-items-center rounded-[11px] text-[15px] ${here ? "bg-ink font-medium text-paper" : today ? "font-semibold text-accent" : ""}`}>{d.getDate()}</span>
+            <Dots colors={dots.get(+d)} />
           </button>
         );
       })}
@@ -114,30 +148,12 @@ export function MonthPanel({
   now: Date;
   onPick: (d: Date) => void;
   onClose: () => void;
-  load: (from: Date, to: Date) => Promise<Ev[]>;
+  load: Load;
   color: (e: Ev) => string;
 }) {
   const [month, setMonth] = useState(() => startOfMonth(day));
-  const [dots, setDots] = useState<Map<number, string[]>>(new Map());
   const next = new Date(month.getFullYear(), month.getMonth() + 1, 1);
-
-  useEffect(() => {
-    let live = true;
-    load(month, next)
-      .then((events) => {
-        const m = new Map<number, string[]>();
-        for (const e of events) {
-          const k = +startOfDay(parseWhen(e.start, e.allDay));
-          const c = color(e);
-          const list = m.get(k) ?? [];
-          if (list.length < 3 && !list.includes(c)) m.set(k, [...list, c]);
-        }
-        if (live) setDots(m);
-      })
-      .catch(() => {}); // no dots, the month still works
-    return () => void (live = false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per month shown
-  }, [+month]);
+  const dots = useDots(month, next, load, color, 0);
 
   useEffect(() => {
     const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -192,9 +208,7 @@ export function MonthPanel({
             return (
               <button key={+d} type="button" onClick={() => onPick(d)} aria-pressed={here} aria-label={fmt(d, { weekday: "long", day: "numeric", month: "long" }) + (today ? ", today" : "")} className="flex h-[46px] flex-col items-center justify-center gap-[3px]">
                 <span className={`grid size-[34px] place-items-center text-[15px] ${here ? "rounded-[11px] bg-ink font-medium text-paper" : today ? "font-semibold text-accent" : ""}`}>{d.getDate()}</span>
-                <span className="flex h-[5px] gap-[3px]">
-                  {!here && dots.get(+d)?.map((c) => <span key={c} className="size-[5px] rounded-full" style={{ background: c }} />)}
-                </span>
+                <Dots colors={dots.get(+d)} />
               </button>
             );
           })}

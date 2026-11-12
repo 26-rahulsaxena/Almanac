@@ -239,6 +239,8 @@ export function CalendarApp({
   const colorOf = useMemo(() => new Map(calendars.map((c) => [c.id, c.color])), [calendars]);
   const color = useCallback((e: Ev) => categoryHex(e.colorId) ?? colorOf.get(e.calendarId) ?? "var(--muted)", [colorOf]);
   const writable = calendars.find((c) => c.primary && c.canEdit) ?? calendars.find((c) => c.canEdit);
+  // The shown calendars' events in a range, for the dots under the days in the week strip and the month.
+  const loadShown = (f: Date, t: Date) => fetchEvents({ from: f.toISOString(), to: t.toISOString() }, calIds.filter((id) => !hidden.has(id)));
   const { from, to, days } = useMemo(() => rangeOf(view, anchor), [view, anchor]);
   const key = `${+from}-${+to}`;
   const entry = cache[key];
@@ -999,7 +1001,7 @@ export function CalendarApp({
                     setMonthOpen(false);
                   }}
                   onClose={() => setMonthOpen(false)}
-                  load={(f, t) => fetchEvents({ from: f.toISOString(), to: t.toISOString() }, calIds.filter((id) => !hidden.has(id)))}
+                  load={loadShown}
                   color={color}
                 />
               ) : (
@@ -1012,7 +1014,7 @@ export function CalendarApp({
                     transition={{ duration: 0.3, ease }}
                     className="overflow-hidden"
                   >
-                    <WeekStrip day={anchor} now={now} onPick={(d) => (setDir(0), setAnchor(d))} />
+                    <WeekStrip day={anchor} now={now} onPick={(d) => (setDir(0), setAnchor(d))} load={loadShown} color={color} version={gen} />
                   </motion.div>
                 )
               )}
