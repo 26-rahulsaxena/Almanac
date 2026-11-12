@@ -2,16 +2,18 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { setMailOn } from "@/app/actions";
-import { isAndroidApp } from "@/lib/android-app";
+import { almanacPlugin, appOpensGmail, isAndroidApp } from "@/lib/android-app";
 import { gmailLink } from "@/lib/mail-parse";
 import { GoogleSignIn } from "./google-sign-in";
 
 type Find = { id: string; message_id: string; kind: "meeting" | "call" | "deadline"; title: string; start_at: string; end_at: string | null; summary: string; quote: string; sender: string };
 
-// The whole email in Gmail. In the Android app, in the phone's browser (which hands it to the Gmail app).
+// The whole email in Gmail: on a computer in a new tab (the link itself), in the Android app in the Gmail app
+// (an app from before version 6 can only show it in a browser page).
 async function openInGmail(e: React.MouseEvent, url: string) {
-  if (!isAndroidApp()) return; // the link opens it in a new tab
+  if (!isAndroidApp()) return;
   e.preventDefault();
+  if (appOpensGmail()) return (await almanacPlugin()).openGmail({ url });
   const { Browser } = await import("@capacitor/browser");
   await Browser.open({ url });
 }

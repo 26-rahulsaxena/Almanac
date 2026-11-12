@@ -118,6 +118,24 @@ public class AlmanacPlugin extends Plugin {
         call.resolve();
     }
 
+    // "Open in Gmail": hands the email's link straight to the Gmail app instead of a browser page; the browser only
+    // when Gmail isn't installed. Only Gmail links, whatever the page asks.
+    @PluginMethod
+    public void openGmail(PluginCall call) {
+        Uri uri = Uri.parse(call.getString("url", ""));
+        if (!"https".equals(uri.getScheme()) || !"mail.google.com".equals(uri.getHost())) {
+            call.reject("Not a Gmail link");
+            return;
+        }
+        Intent i = new Intent(Intent.ACTION_VIEW, uri).setPackage("com.google.android.gm");
+        try {
+            getActivity().startActivity(i);
+        } catch (ActivityNotFoundException e) {
+            getActivity().startActivity(new Intent(Intent.ACTION_VIEW, uri));
+        }
+        call.resolve();
+    }
+
     // This install's build number, to compare with the newest one on the site (Settings → App).
     @PluginMethod
     public void build(PluginCall call) {

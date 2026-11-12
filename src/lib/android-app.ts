@@ -6,10 +6,11 @@ import latest from "./android-build.json";
 export const isAndroidApp = () => typeof navigator !== "undefined" && /AlmanacAndroid\//.test(navigator.userAgent);
 const appVersion = () => Number(navigator.userAgent.match(/AlmanacAndroid\/(\d+)/)?.[1] ?? 0);
 // What each app version can do (the "Almanac" plugin in android/.../AlmanacPlugin.java): 2 gets reminders,
-// 3 has voice typing, 4 has the home-screen Agenda widget, 5 tells its build number.
+// 3 has voice typing, 4 has the home-screen Agenda widget, 5 tells its build number, 6 opens links in the Gmail app.
 export const appHasReminders = () => appVersion() >= 2;
 export const appCanListen = () => appVersion() >= 3;
 export const appHasWidget = () => appVersion() >= 4;
+export const appOpensGmail = () => appVersion() >= 6;
 // The newest app on the site (written by the Android build), and this phone's (0 = older than version 5, so
 // older than any build that could say). An update is out when the site's is higher.
 export const LATEST_BUILD = latest.build;
@@ -23,6 +24,7 @@ type AlmanacPlugin = {
   listen(): Promise<{ text: string }>;
   setAgenda(o: { items: string }): Promise<void>;
   build(): Promise<{ build: number }>;
+  openGmail(o: { url: string }): Promise<void>;
 };
 export async function almanacPlugin(): Promise<AlmanacPlugin> {
   const p = (await import("@capacitor/core")).registerPlugin<AlmanacPlugin>("Almanac");
@@ -35,6 +37,7 @@ export async function almanacPlugin(): Promise<AlmanacPlugin> {
     listen: () => p.listen(),
     setAgenda: (o) => p.setAgenda(o),
     build: () => p.build(),
+    openGmail: (o) => p.openGmail(o),
   };
 }
 
