@@ -51,7 +51,8 @@ export async function scanAll(now = new Date()) {
 
 async function scanUser(u: MailUser, now: Date) {
   const since = u.since ?? new Date(+now - FIRST_LOOK_DAYS * 86_400_000);
-  const q = `in:inbox category:primary -from:me after:${Math.floor(+since / 1000)}`;
+  // The Primary tab, said as "not the other tabs": some accounts don't tag mail as primary at all.
+  const q = `in:inbox -category:promotions -category:social -category:updates -category:forums -from:me after:${Math.floor(+since / 1000)}`;
   const list = await google<{ messages?: { id: string }[] }>(u.id, `${GMAIL}/messages?maxResults=30&q=${encodeURIComponent(q)}`);
   const mails: Mail[] = [];
   for (const { id } of list.messages ?? []) {
