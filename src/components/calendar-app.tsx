@@ -986,7 +986,8 @@ export function CalendarApp({
           {/* Phones: the month when the date at the top is tapped (it pushes the calendar down), otherwise on the
               day view the week as a strip of days. */}
           {phone && tab === "calendar" && !searching && (
-            <AnimatePresence initial={false} mode="wait">
+            // The strip folds away while the month unfolds (and back), at the same pace, so the calendar below glides.
+            <AnimatePresence initial={false}>
               {monthOpen ? (
                 <MonthPanel
                   key="month"
@@ -1003,7 +1004,14 @@ export function CalendarApp({
                 />
               ) : (
                 view === "day" && (
-                  <motion.div key="week" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
+                  <motion.div
+                    key="week"
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.3, ease }}
+                    className="overflow-hidden"
+                  >
                     <WeekStrip day={anchor} now={now} onPick={(d) => (setDir(0), setAnchor(d))} />
                   </motion.div>
                 )
