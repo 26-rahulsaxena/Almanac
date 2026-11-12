@@ -8,7 +8,7 @@ import { askJson, hasAi } from "./ai";
 import { listCalendars, type Cal } from "./calendar";
 import { sql } from "./db";
 import { google } from "./google";
-import { header, parseFinds, prompt, senderName, skip, SYSTEM, textOf, whenOf, type Find, type Kind, type Mail, type Part } from "./mail-parse";
+import { gmailLink, header, parseFinds, prompt, senderName, skip, SYSTEM, textOf, whenOf, type Find, type Kind, type Mail, type Part } from "./mail-parse";
 import { midnightIn } from "./reminders";
 import { bookBlock, upcoming, type User } from "./planner";
 import { sendPush } from "./push";
@@ -19,7 +19,7 @@ const FIRST_LOOK_DAYS = 7; // when switched on, how far back it reads
 const BATCH = 8; // emails per AI question
 
 type MailUser = User & { email: string; plan_mode: "ask" | "auto"; since: Date | null };
-export type MailFind = { id: string; message_id: string; kind: Kind; title: string; start_at: Date; end_at: Date | null; quote: string; sender: string };
+export type MailFind = { id: string; message_id: string; kind: Kind; title: string; start_at: Date; end_at: Date | null; summary: string; quote: string; sender: string };
 
 // Users whose mail is due a read (switched on, Gmail allowed, not already read this minute), each claimed so two
 // minute-jobs never read the same mail twice. since: up to when it was read last time.
@@ -80,10 +80,10 @@ async function scanUser(u: MailUser, now: Date) {
     const when = whenOf(f, now, u.timezone, free);
     if (!when) continue;
     const [row] = await sql<MailFind[]>`
-      insert into mail_finds (user_id, message_id, kind, title, start_at, end_at, quote, sender)
-      values (${u.id}, ${m.id}, ${f.kind}, ${f.title}, ${when.start}, ${when.end}, ${f.quote}, ${senderName(m.from).slice(0, 120)})
+      insert into mail_finds (user_id, message_id, kind, title, start_at, end_at, summary, quote, sender)
+      values (${u.id}, ${m.id}, ${f.kind}, ${f.title}, ${when.start}, ${when.end}, ${f.summary}, ${f.quote}, ${senderName(m.from).slice(0, 120)})
       on conflict do nothing
-      returning id, message_id, kind, title, start_at, end_at, quote, sender`;
+      returning id, message_id, kind, title, start_at, end_at, summary, quote, sender`;
     if (!row) continue;
     if (when.end) busy.push({ start: when.start.toISOString(), end: when.end.toISOString(), allDay: false, busy: true }); // the next find won't take this time
     if (u.plan_mode === "auto") await addFind(u, row, calendars);
@@ -115,7 +115,7 @@ export async function addFind(u: User & { email: string }, f: MailFind, calendar
       title: f.title,
       start: new Date(f.start_at),
       end: new Date(f.end_at),
-      description: `From an email from ${f.sender}: “${f.quote}”\nhttps://mail.google.com/mail/?authuser=${encodeURIComponent(u.email)}#all/${f.message_id}`,
+      description: `${f.summary || `“${f.quote}”`} (email from ${f.sender})\n${gmailLink(u.email, f.message_id)}`,
     });
   } else {
     await sql`insert into todos (user_id, title, due_at, minutes) values (${u.id}, ${f.title}, ${f.start_at}, 60)`;
@@ -125,6 +125,6 @@ export async function addFind(u: User & { email: string }, f: MailFind, calendar
 
 export const waitingFinds = (userId: string) =>
   sql<MailFind[]>`
-    select id, message_id, kind, title, start_at, end_at, quote, sender from mail_finds
+    select id, message_id, kind, title, start_at, end_at, summary, quote, sender from mail_finds
     where user_id = ${userId} and status = 'waiting' and start_at > now()
     order by start_at`;

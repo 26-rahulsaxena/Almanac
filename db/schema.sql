@@ -238,3 +238,4 @@ create table if not exists mail_finds (
   unique (user_id, message_id, title)
 );
 alter table mail_finds enable row level security;
+alter table mail_finds add column if not exists summary text not null default ''; -- the AI's few words: "Wants a quick 15-min call"

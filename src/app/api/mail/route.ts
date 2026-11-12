@@ -26,7 +26,7 @@ export async function POST(req: Request) {
     // Taken off the waiting list first, so a double tap can't add it twice.
     const [f] = await sql<MailFind[]>`
       update mail_finds set status = 'dismissed' where id = ${b.id} and user_id = ${u.id} and status = 'waiting'
-      returning id, message_id, kind, title, start_at, end_at, quote, sender`;
+      returning id, message_id, kind, title, start_at, end_at, summary, quote, sender`;
     if (!f) throw new InvalidInput("That's already been answered. The list has been refreshed.");
     if (b.action === "add") {
       const [{ email }] = await sql<{ email: string }[]>`select email from users where id = ${u.id}`;

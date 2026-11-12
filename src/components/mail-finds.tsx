@@ -2,9 +2,19 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { setMailOn } from "@/app/actions";
+import { isAndroidApp } from "@/lib/android-app";
+import { gmailLink } from "@/lib/mail-parse";
 import { GoogleSignIn } from "./google-sign-in";
 
-type Find = { id: string; kind: "meeting" | "call" | "deadline"; title: string; start_at: string; end_at: string | null; quote: string; sender: string };
+type Find = { id: string; message_id: string; kind: "meeting" | "call" | "deadline"; title: string; start_at: string; end_at: string | null; summary: string; quote: string; sender: string };
+
+// The whole email in Gmail. In the Android app, in the phone's browser (which hands it to the Gmail app).
+async function openInGmail(e: React.MouseEvent, url: string) {
+  if (!isAndroidApp()) return; // the link opens it in a new tab
+  e.preventDefault();
+  const { Browser } = await import("@capacitor/browser");
+  await Browser.open({ url });
+}
 
 const when = (f: Find) => {
   const d = (iso: string, o: Intl.DateTimeFormatOptions) => new Date(iso).toLocaleString("en-IN", o);
@@ -12,10 +22,12 @@ const when = (f: Find) => {
   return f.end_at ? `${at} – ${d(f.end_at, { hour: "numeric", minute: "2-digit" })}` : `Due ${at}`;
 };
 
-// "Found in your email" (Ask-first mode): meetings, calls and deadlines the AI spotted in new mail, each with the
-// words that asked for it. Nothing goes on the calendar until Add. Shows nothing when there's nothing waiting.
-export function MailFinds({ version, onCalendarChange }: { version: number; onCalendarChange: () => void }) {
+// "Found in your email" (Ask-first mode): meetings, calls and deadlines the AI spotted in new mail, each with a few
+// words on what's wanted; Show words reveals the email's own words, Open in Gmail the whole email. Nothing goes on
+// the calendar until Add. Shows nothing when there's nothing waiting.
+export function MailFinds({ email, version, onCalendarChange }: { email: string; version: number; onCalendarChange: () => void }) {
   const [list, setList] = useState<Find[] | null>(null);
+  const [shown, setShown] = useState<Set<string>>(new Set()); // cards showing the email's own words
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,18 +62,43 @@ export function MailFinds({ version, onCalendarChange }: { version: number; onCa
       <p className="text-xs text-muted">Nothing goes on your calendar until you press Add. Nobody is invited.</p>
       <ul className="mt-3 space-y-3">
         <AnimatePresence initial={false}>
-          {list.map((f) => (
+          {list.map((f) => {
+            const open = shown.has(f.id) || !f.summary; // found before summaries existed: the words are all there is
+            const toggle = () => {
+              const next = new Set(shown);
+              if (!next.delete(f.id)) next.add(f.id);
+              setShown(next);
+            };
+            return (
             <motion.li key={f.id} layout initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="text-sm">
               <p className="break-words font-medium leading-snug">{f.title}</p>
               <p className="mt-0.5 text-xs text-muted">
                 {when(f)} · {f.kind === "deadline" ? "to-do" : f.kind}
               </p>
-              {f.quote && (
-                <p className="mt-1 break-words border-l-2 border-line pl-2 text-xs italic text-muted">
-                  “{f.quote}” <span className="not-italic">from {f.sender}</span>
-                </p>
-              )}
-              <div className="mt-1.5 flex gap-1.5">
+              {f.summary && <p className="mt-1 break-words leading-snug">{f.summary}</p>}
+              <AnimatePresence initial={false}>
+                {open && f.quote && (
+                  <motion.p
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="mt-1 overflow-hidden break-words border-l-2 border-line pl-2 text-xs italic text-muted"
+                  >
+                    “{f.quote}” <span className="not-italic">from {f.sender}</span>
+                  </motion.p>
+                )}
+              </AnimatePresence>
+              <div className="mt-1 flex gap-3 text-xs">
+                {f.summary && f.quote && (
+                  <button type="button" aria-expanded={open} onClick={toggle} className="font-medium text-accent hover:underline">
+                    {open ? "Hide words" : "Show words"}
+                  </button>
+                )}
+                <a href={gmailLink(email, f.message_id)} target="_blank" rel="noopener noreferrer" onClick={(e) => openInGmail(e, gmailLink(email, f.message_id))} className="font-medium text-accent hover:underline">
+                  Open in Gmail
+                </a>
+              </div>
+              <div className="mt-2 flex gap-1.5">
                 <button type="button" disabled={!!busy} onClick={() => answer(f.id, "add")} className="rounded-full bg-ink px-3 py-1 text-xs font-medium text-paper disabled:opacity-50">
                   {busy === f.id ? "Adding…" : "Add"}
                 </button>
@@ -70,7 +107,8 @@ export function MailFinds({ version, onCalendarChange }: { version: number; onCa
                 </button>
               </div>
             </motion.li>
-          ))}
+            );
+          })}
         </AnimatePresence>
       </ul>
       {error && (

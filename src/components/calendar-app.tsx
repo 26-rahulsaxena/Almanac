@@ -1043,7 +1043,7 @@ export function CalendarApp({
               {tab === "today" ? (
                 <div className="space-y-4">
                   <TodayCard version={gen} onCalendarChange={() => setGen((g) => g + 1)} waiting />
-                  <MailFinds version={gen} onCalendarChange={() => setGen((g) => g + 1)} />
+                  <MailFinds email={email} version={gen} onCalendarChange={() => setGen((g) => g + 1)} />
                   <Suggestions version={gen} onCalendarChange={() => setGen((g) => g + 1)} />
                 </div>
               ) : tab === "priorities" ? (
@@ -1183,7 +1183,7 @@ export function CalendarApp({
           {wide && (
             <div className="min-w-0 space-y-4 lg:flex lg:min-h-0 lg:flex-col lg:gap-4 lg:space-y-0 lg:overflow-y-auto">
               <TodayCard version={gen} onCalendarChange={() => setGen((g) => g + 1)} />
-              <MailFinds version={gen} onCalendarChange={() => setGen((g) => g + 1)} />
+              <MailFinds email={email} version={gen} onCalendarChange={() => setGen((g) => g + 1)} />
               <Suggestions version={gen} onCalendarChange={() => setGen((g) => g + 1)} />
               <PrioritiesPanel items={priorities} onAction={priorityAction} />
             </div>
