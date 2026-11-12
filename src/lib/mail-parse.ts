@@ -6,14 +6,16 @@ import { fromLocal, toLocal, ymdIn } from "./plan";
 import { shiftDate } from "./recurrence";
 
 export type Part = { mimeType?: string; filename?: string; body?: { data?: string }; parts?: Part[]; headers?: { name: string; value: string }[] };
-export type Mail = { id: string; from: string; subject: string; sent: Date; text: string };
+export type Mail = { id: string; thread?: string; from: string; subject: string; sent: Date; text: string };
 export type Kind = "meeting" | "call" | "deadline";
 
 // What was found: a meeting or call at a time (time), or only within part of a day (part); or a deadline.
 export type Find = { mail: number; kind: Kind; title: string; summary: string; quote: string; day: string; time: string | null; part: TimeOfDay; minutes: number };
 
-// Opens the email in Gmail, in the right Google account when several are signed in.
-export const gmailLink = (email: string, messageId: string) => `https://mail.google.com/mail/?authuser=${encodeURIComponent(email)}#all/${messageId}`;
+// Opens the email's conversation in Gmail, in the right Google account when several are signed in. The same form
+// as Gmail's own address bar, which the Gmail app on phones is likeliest to follow (there's no documented link).
+// shortcut: the Gmail app may still only open the inbox; then try a #search/rfc822msgid: link instead.
+export const gmailLink = (email: string, threadId: string) => `https://mail.google.com/mail/u/${encodeURIComponent(email)}/#inbox/${threadId}`;
 
 const MAX_TEXT = 1500;
 const decode = (data?: string) => (data ? Buffer.from(data, "base64url").toString("utf8") : "");

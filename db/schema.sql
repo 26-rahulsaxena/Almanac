@@ -239,3 +239,4 @@ create table if not exists mail_finds (
 );
 alter table mail_finds enable row level security;
 alter table mail_finds add column if not exists summary text not null default ''; -- the AI's few words: "Wants a quick 15-min call"
+alter table mail_finds add column if not exists thread_id text; -- the email's conversation in Gmail, for Open in Gmail

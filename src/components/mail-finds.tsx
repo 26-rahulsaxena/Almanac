@@ -6,7 +6,7 @@ import { almanacPlugin, appOpensGmail, isAndroidApp } from "@/lib/android-app";
 import { gmailLink } from "@/lib/mail-parse";
 import { GoogleSignIn } from "./google-sign-in";
 
-type Find = { id: string; message_id: string; kind: "meeting" | "call" | "deadline"; title: string; start_at: string; end_at: string | null; summary: string; quote: string; sender: string };
+type Find = { id: string; thread_id: string; kind: "meeting" | "call" | "deadline"; title: string; start_at: string; end_at: string | null; summary: string; quote: string; sender: string };
 
 // The whole email in Gmail: on a computer in a new tab (the link itself), in the Android app in the Gmail app
 // (an app from before version 6 can only show it in a browser page).
@@ -96,7 +96,7 @@ export function MailFinds({ email, version, onCalendarChange }: { email: string;
                     {open ? "Hide words" : "Show words"}
                   </button>
                 )}
-                <a href={gmailLink(email, f.message_id)} target="_blank" rel="noopener noreferrer" onClick={(e) => openInGmail(e, gmailLink(email, f.message_id))} className="font-medium text-accent hover:underline">
+                <a href={gmailLink(email, f.thread_id)} target="_blank" rel="noopener noreferrer" onClick={(e) => openInGmail(e, gmailLink(email, f.thread_id))} className="font-medium text-accent hover:underline">
                   Open in Gmail
                 </a>
               </div>

@@ -19,7 +19,9 @@ const FIRST_LOOK_DAYS = 7; // when switched on, how far back it reads
 const BATCH = 8; // emails per AI question
 
 type MailUser = User & { email: string; plan_mode: "ask" | "auto"; since: Date | null };
-export type MailFind = { id: string; message_id: string; kind: Kind; title: string; start_at: Date; end_at: Date | null; summary: string; quote: string; sender: string };
+// thread_id: the email's conversation (finds from before it was kept use the email itself, the same for a first message).
+export type MailFind = { id: string; message_id: string; thread_id: string; kind: Kind; title: string; start_at: Date; end_at: Date | null; summary: string; quote: string; sender: string };
+export const FIELDS = "id, message_id, coalesce(thread_id, message_id) as thread_id, kind, title, start_at, end_at, summary, quote, sender";
 
 // Users whose mail is due a read (switched on, Gmail allowed, not already read this minute), each claimed so two
 // minute-jobs never read the same mail twice. since: up to when it was read last time.
@@ -56,10 +58,10 @@ async function scanUser(u: MailUser, now: Date) {
   const list = await google<{ messages?: { id: string }[] }>(u.id, `${GMAIL}/messages?maxResults=30&q=${encodeURIComponent(q)}`);
   const mails: Mail[] = [];
   for (const { id } of list.messages ?? []) {
-    const m = await google<{ id: string; internalDate: string; payload: Part }>(u.id, `${GMAIL}/messages/${id}?format=full`);
+    const m = await google<{ id: string; threadId: string; internalDate: string; payload: Part }>(u.id, `${GMAIL}/messages/${id}?format=full`);
     if (+m.internalDate <= +since || skip(m.payload)) continue;
     const text = textOf(m.payload);
-    if (text) mails.push({ id: m.id, from: header(m.payload, "From"), subject: header(m.payload, "Subject").slice(0, 200), sent: new Date(+m.internalDate), text });
+    if (text) mails.push({ id: m.id, thread: m.threadId, from: header(m.payload, "From"), subject: header(m.payload, "Subject").slice(0, 200), sent: new Date(+m.internalDate), text });
   }
   if (!mails.length) return 0;
 
@@ -81,10 +83,10 @@ async function scanUser(u: MailUser, now: Date) {
     const when = whenOf(f, now, u.timezone, free);
     if (!when) continue;
     const [row] = await sql<MailFind[]>`
-      insert into mail_finds (user_id, message_id, kind, title, start_at, end_at, summary, quote, sender)
-      values (${u.id}, ${m.id}, ${f.kind}, ${f.title}, ${when.start}, ${when.end}, ${f.summary}, ${f.quote}, ${senderName(m.from).slice(0, 120)})
+      insert into mail_finds (user_id, message_id, thread_id, kind, title, start_at, end_at, summary, quote, sender)
+      values (${u.id}, ${m.id}, ${m.thread ?? null}, ${f.kind}, ${f.title}, ${when.start}, ${when.end}, ${f.summary}, ${f.quote}, ${senderName(m.from).slice(0, 120)})
       on conflict do nothing
-      returning id, message_id, kind, title, start_at, end_at, summary, quote, sender`;
+      returning ${sql.unsafe(FIELDS)}`;
     if (!row) continue;
     if (when.end) busy.push({ start: when.start.toISOString(), end: when.end.toISOString(), allDay: false, busy: true }); // the next find won't take this time
     if (u.plan_mode === "auto") await addFind(u, row, calendars);
@@ -116,7 +118,7 @@ export async function addFind(u: User & { email: string }, f: MailFind, calendar
       title: f.title,
       start: new Date(f.start_at),
       end: new Date(f.end_at),
-      description: `${f.summary || `“${f.quote}”`} (email from ${f.sender})\n${gmailLink(u.email, f.message_id)}`,
+      description: `${f.summary || `“${f.quote}”`} (email from ${f.sender})\n${gmailLink(u.email, f.thread_id)}`,
     });
   } else {
     await sql`insert into todos (user_id, title, due_at, minutes) values (${u.id}, ${f.title}, ${f.start_at}, 60)`;
@@ -126,6 +128,6 @@ export async function addFind(u: User & { email: string }, f: MailFind, calendar
 
 export const waitingFinds = (userId: string) =>
   sql<MailFind[]>`
-    select id, message_id, kind, title, start_at, end_at, summary, quote, sender from mail_finds
+    select ${sql.unsafe(FIELDS)} from mail_finds
     where user_id = ${userId} and status = 'waiting' and start_at > now()
     order by start_at`;

@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { sql } from "@/lib/db";
 import { ReauthError } from "@/lib/google";
-import { addFind, waitingFinds, type MailFind } from "@/lib/mail";
+import { addFind, FIELDS, waitingFinds, type MailFind } from "@/lib/mail";
 import { me } from "@/lib/planner";
 import { InvalidInput } from "@/lib/validate";
 
@@ -26,7 +26,7 @@ export async function POST(req: Request) {
     // Taken off the waiting list first, so a double tap can't add it twice.
     const [f] = await sql<MailFind[]>`
       update mail_finds set status = 'dismissed' where id = ${b.id} and user_id = ${u.id} and status = 'waiting'
-      returning id, message_id, kind, title, start_at, end_at, summary, quote, sender`;
+      returning ${sql.unsafe(FIELDS)}`;
     if (!f) throw new InvalidInput("That's already been answered. The list has been refreshed.");
     if (b.action === "add") {
       const [{ email }] = await sql<{ email: string }[]>`select email from users where id = ${u.id}`;
