@@ -260,7 +260,7 @@ export function TimeGrid({ days, events, color, severityOf, now, onPickDay, onOp
         ))}
       </div>
 
-      <div ref={scrollOnce} className="max-h-[max(24rem,calc(100dvh-17rem))] overflow-y-auto max-lg:max-h-[max(20rem,calc(100dvh-13.5rem))] max-lg:pb-36 lg:max-h-none lg:min-h-0 lg:flex-1">
+      <div ref={scrollOnce} className="max-h-[max(24rem,calc(100dvh-17rem))] overflow-y-auto max-lg:max-h-[max(20rem,calc(100dvh-13.5rem))] lg:max-h-none lg:min-h-0 lg:flex-1">
         <div className="grid" style={{ gridTemplateColumns: cols, height: 24 * HOUR }}>
           <div className="relative">
             {Array.from({ length: 23 }, (_, i) => i + 1).map((h) => (
@@ -290,6 +290,15 @@ export function TimeGrid({ days, events, color, severityOf, now, onPickDay, onOp
               pickUp={pickUp}
               drag={drag}
             />
+          ))}
+        </div>
+        {/* Phones: the lines carry on past midnight under the bottom bar, so the day's last hours scroll clear of it. */}
+        <div className="grid h-40 lg:hidden" style={{ gridTemplateColumns: cols }} aria-hidden>
+          <div className="relative">
+            <span className="absolute right-2 top-0 -translate-y-1/2 font-mono text-[10px] text-muted">12 am</span>
+          </div>
+          {days.map((d) => (
+            <div key={+d} className="border-l border-line" style={{ backgroundImage: hourLines }} />
           ))}
         </div>
       </div>
