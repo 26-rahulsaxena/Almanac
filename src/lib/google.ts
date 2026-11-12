@@ -76,6 +76,11 @@ export async function google<T>(userId: string, url: string, init?: RequestInit)
     tokens.delete(userId);
     throw new ReauthError();
   }
-  if (!res.ok) throw new GoogleError(res.status, await res.text());
+  if (!res.ok) {
+    const body = await res.text();
+    // A permission allowed since (e.g. Gmail): the remembered token predates it, so read the new one next time.
+    if (res.status === 403 && body.includes("ACCESS_TOKEN_SCOPE_INSUFFICIENT")) tokens.delete(userId);
+    throw new GoogleError(res.status, body);
+  }
   return (res.status === 204 ? undefined : await res.json()) as T;
 }
