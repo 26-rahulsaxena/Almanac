@@ -240,3 +240,12 @@ create table if not exists mail_finds (
 alter table mail_finds enable row level security;
 alter table mail_finds add column if not exists summary text not null default ''; -- the AI's few words: "Wants a quick 15-min call"
 alter table mail_finds add column if not exists thread_id text; -- the email's conversation in Gmail, for Open in Gmail
+-- Which emails have been read already (their Gmail id only), so each check can look back an hour (Gmail's search lists
+-- a new email only after a delay) without reading anything twice. Kept 2 days.
+create table if not exists mail_seen (
+  user_id uuid not null references users(id) on delete cascade,
+  message_id text not null,
+  seen_at timestamptz not null default now(),
+  primary key (user_id, message_id)
+);
+alter table mail_seen enable row level security;

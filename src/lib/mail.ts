@@ -17,6 +17,7 @@ import { freeSlots } from "./time";
 const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me";
 const FIRST_LOOK_DAYS = 7; // when switched on, how far back it reads
 const BATCH = 8; // emails per AI question
+const LOOK_BACK_MS = 3_600_000;
 
 type MailUser = User & { email: string; plan_mode: "ask" | "auto"; since: Date | null };
 // thread_id: the email's conversation (finds from before it was kept use the email itself, the same for a first message).
@@ -24,7 +25,7 @@ export type MailFind = { id: string; message_id: string; thread_id: string; kind
 export const FIELDS = "id, message_id, coalesce(thread_id, message_id) as thread_id, kind, title, start_at, end_at, summary, quote, sender";
 
 // Users whose mail is due a read (switched on, Gmail allowed, not already read this minute), each claimed so two
-// minute-jobs never read the same mail twice. since: up to when it was read last time.
+// minute-jobs never read the same mail twice. since: when it was last checked (null: never, so look back a week).
 export async function scanAll(now = new Date()) {
   if (!hasAi()) return 0;
   const due = await sql<MailUser[]>`
@@ -42,28 +43,36 @@ export async function scanAll(now = new Date()) {
     try {
       found += await scanUser(u, now);
     } catch (err) {
+      // Nothing was marked read, so the next check (looking back an hour) tries the same mail again. The very first
+      // look, over the last week, starts over.
       console.error(`Reading mail for user ${u.id} failed:`, err);
-      // Try the same mail again next time (e.g. the AI was busy), but not for more than an hour.
-      if (!u.since || +now - +u.since < 3_600_000) await sql`update users set mail_checked_at = ${u.since} where id = ${u.id}`;
+      if (!u.since) await sql`update users set mail_checked_at = null where id = ${u.id}`;
     }
   }
   await sql`delete from mail_finds where created_at < now() - interval '30 days'`;
+  await sql`delete from mail_seen where seen_at < now() - interval '2 days'`;
   return found;
 }
 
 async function scanUser(u: MailUser, now: Date) {
-  const since = u.since ?? new Date(+now - FIRST_LOOK_DAYS * 86_400_000);
+  // Gmail's search lists a new email only after a delay, so each check looks back an hour, skipping what's been read.
+  const since = u.since ? new Date(+u.since - LOOK_BACK_MS) : new Date(+now - FIRST_LOOK_DAYS * 86_400_000);
   // The Primary tab, said as "not the other tabs": some accounts don't tag mail as primary at all.
   const q = `in:inbox -category:promotions -category:social -category:updates -category:forums -from:me after:${Math.floor(+since / 1000)}`;
   const list = await google<{ messages?: { id: string }[] }>(u.id, `${GMAIL}/messages?maxResults=30&q=${encodeURIComponent(q)}`);
+  const ids = (list.messages ?? []).map((m) => m.id);
+  if (!ids.length) return 0;
+  const seen = new Set((await sql<{ message_id: string }[]>`select message_id from mail_seen where user_id = ${u.id} and message_id = any(${ids})`).map((s) => s.message_id));
+  const fresh = ids.filter((id) => !seen.has(id));
+  if (!fresh.length) return 0;
+
   const mails: Mail[] = [];
-  for (const { id } of list.messages ?? []) {
+  for (const id of fresh) {
     const m = await google<{ id: string; threadId: string; internalDate: string; payload: Part }>(u.id, `${GMAIL}/messages/${id}?format=full`);
-    if (+m.internalDate <= +since || skip(m.payload)) continue;
+    if (skip(m.payload)) continue;
     const text = textOf(m.payload);
     if (text) mails.push({ id: m.id, thread: m.threadId, from: header(m.payload, "From"), subject: header(m.payload, "Subject").slice(0, 200), sent: new Date(+m.internalDate), text });
   }
-  if (!mails.length) return 0;
 
   const finds: { f: Find; m: Mail }[] = [];
   for (let i = 0; i < mails.length; i += BATCH) {
@@ -71,6 +80,8 @@ async function scanUser(u: MailUser, now: Date) {
     const raw = await askJson(SYSTEM, prompt(batch, now, u.timezone), 60_000);
     for (const f of parseFinds(raw, batch.length, now, u.timezone)) finds.push({ f, m: batch[f.mail] });
   }
+  // Read: only now that the AI has answered for all of them (if it failed, they're tried again next minute).
+  await sql`insert into mail_seen ${sql(fresh.map((message_id) => ({ user_id: u.id, message_id })))} on conflict do nothing`;
   if (!finds.length) return 0;
 
   // What's on the calendar over the days the finds are on, to put a meeting "sometime tomorrow" in free time.
