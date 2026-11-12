@@ -56,6 +56,13 @@ describe("when it goes on the calendar", () => {
   });
   it("nothing that's already over", () => {
     expect(whenOf({ ...f, day: "2026-11-12", time: "09:00" }, now, TZ, none)).toBeNull();
-    expect(whenOf({ ...f, day: "2026-11-12", time: null, part: "morning" }, new Date("2026-11-12T12:30:00+05:30"), TZ, none)).toBeNull();
+    expect(whenOf({ ...f, kind: "deadline", day: "2026-11-12", time: "09:00" }, now, TZ, none)).toBeNull();
+  });
+  it("“later today”, read after that part of the day: the same part of tomorrow", () => {
+    const night = new Date("2026-11-12T23:26:00+05:30");
+    expect(whenOf({ ...f, day: "2026-11-12", time: null, part: "evening", minutes: 15 }, night, TZ, none)).toEqual({
+      start: new Date("2026-11-13T17:00:00+05:30"),
+      end: new Date("2026-11-13T17:15:00+05:30"),
+    });
   });
 });

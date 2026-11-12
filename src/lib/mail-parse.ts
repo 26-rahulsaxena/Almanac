@@ -101,20 +101,24 @@ export function parseFinds(raw: unknown, count: number, now: Date, timeZone: str
 }
 
 // When a find happens, once it's known what's free: an exact time; for a meeting or call without one, the first free
-// stretch in the part of the day asked for (or its start, if there's none); a deadline without a time is due by the
-// end of its day. null if it's already over.
+// stretch in the part of the day asked for (or its start, if there's none), and if that part of the day is already
+// over ("call me later today", read at night), the same part of the next day; a deadline without a time is due by
+// the end of its day. null if it's already over.
 export function whenOf(f: Find, now: Date, timeZone: string, free: (from: Date, to: Date, minutes: number) => Date | null) {
+  const end = (start: Date) => ({ start, end: new Date(+start + f.minutes * 60_000) });
   if (f.kind === "deadline") {
     const due = fromLocal(`${f.day}T${f.time ?? "23:59"}`, timeZone);
     return due && due > now ? { start: due, end: null } : null;
   }
-  let start = f.time ? fromLocal(`${f.day}T${f.time}`, timeZone) : null;
-  if (!f.time) {
-    const [from, to] = TIMES_OF_DAY[f.part].map((h) => fromLocal(`${f.day}T${String(h).padStart(2, "0")}:00`, timeZone)!);
-    const q = 15 * 60_000;
-    const earliest = new Date(Math.max(+from, Math.ceil(+now / q) * q));
-    if (earliest >= to) return null;
-    start = free(earliest, to, f.minutes) ?? earliest;
+  if (f.time) {
+    const start = fromLocal(`${f.day}T${f.time}`, timeZone);
+    return start && start > now ? end(start) : null;
   }
-  return start && start > now ? { start, end: new Date(+start + f.minutes * 60_000) } : null;
+  const q = 15 * 60_000;
+  for (const day of [f.day, shiftDate(f.day, 1)]) {
+    const [from, to] = TIMES_OF_DAY[f.part].map((h) => fromLocal(`${day}T${String(h).padStart(2, "0")}:00`, timeZone)!);
+    const earliest = new Date(Math.max(+from, Math.ceil(+now / q) * q));
+    if (earliest < to) return end(free(earliest, to, f.minutes) ?? earliest);
+  }
+  return null;
 }
