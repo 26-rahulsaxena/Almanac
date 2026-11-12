@@ -1,4 +1,4 @@
-// "Read my email": every 5 minutes, new mail in the Primary inbox is read by the AI for meetings, calls and
+// "Read my email": every minute, new mail in the Primary inbox is read by the AI for meetings, calls and
 // deadlines. In Ask-first mode these wait in "Found in your email" for Add / Not now; in Automatic mode they go
 // straight onto the calendar (meetings and calls as events, deadlines as to-dos). Never invites anyone.
 // The email text is only passed to the AI; nothing of it is kept except a short quote of what was found.
@@ -21,14 +21,15 @@ const BATCH = 8; // emails per AI question
 type MailUser = User & { email: string; plan_mode: "ask" | "auto"; since: Date | null };
 export type MailFind = { id: string; message_id: string; kind: Kind; title: string; start_at: Date; end_at: Date | null; quote: string; sender: string };
 
-// Users whose mail is due a read (switched on, Gmail allowed, last read 5+ minutes ago), each claimed so two
+// Users whose mail is due a read (switched on, Gmail allowed, not already read this minute), each claimed so two
 // minute-jobs never read the same mail twice. since: up to when it was read last time.
 export async function scanAll(now = new Date()) {
   if (!hasAi()) return 0;
   const due = await sql<MailUser[]>`
     with due as (
       select u.id, u.mail_checked_at as since from users u
-      where u.mail_on and (u.mail_checked_at is null or u.mail_checked_at < now() - interval '5 minutes')
+      -- every minute-job (50 s, as runs land a hair under a minute apart); the AI only runs when there's new mail
+      where u.mail_on and (u.mail_checked_at is null or u.mail_checked_at < now() - interval '50 seconds')
         and exists (select 1 from google_tokens t where t.user_id = u.id and t.scope like ${"%" + GMAIL_SCOPE + "%"})
       for update skip locked
     )

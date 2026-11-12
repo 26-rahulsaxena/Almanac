@@ -102,7 +102,7 @@ export function MailSetting({ gmail, on: initial, onChange }: { gmail: boolean; 
     <div className="mt-3 text-sm">
       <p className="flex items-center gap-2">
         <span className={`size-2 rounded-full ${active ? "bg-[var(--cat-2)]" : "bg-muted"}`} aria-hidden />
-        {active ? "On: new emails are read every 5 minutes" : "Off"}
+        {active ? "On: new emails are read within a minute of arriving" : "Off"}
       </p>
       <p className="mt-2 text-xs text-muted">
         Almanac&rsquo;s AI reads new emails in your Primary inbox and spots meetings, calls and deadlines (&ldquo;call me tomorrow
