@@ -24,7 +24,7 @@ import { EMPTY_PROFILE, type Profile } from "@/lib/profile";
 import { PrioritiesPanel, type PriorityAction } from "./priorities-panel";
 import { AddCalendarHelp } from "./add-calendar";
 import { Review, TodayCard, WhatNow, WhatNowBody } from "./coach";
-import { BottomBar, DateButton, MonthPopup, TAB_TITLE, WeekStrip, type Tab } from "./phone";
+import { BottomBar, DateButton, MonthPanel, TAB_TITLE, WeekStrip, type Tab } from "./phone";
 import { Suggestions, type PlanMode } from "./suggestions";
 import { ThemeToggle } from "./theme-toggle";
 import { TodoBody, TodoDialog } from "./todo-dialog";
@@ -762,8 +762,9 @@ export function CalendarApp({
         </div>
       </header>
 
-      {/* Phones: room at the bottom so nothing ends up under the bottom bar and the + / Ask Almanac buttons. */}
-      <div className={`w-full flex-1 px-3 py-4 sm:px-6 ${tab === "calendar" ? "max-lg:pb-24" : "max-lg:pb-48"}`}>
+      {/* Phones: the calendar runs to the bottom of the screen, under the bar (it scrolls clear of it); other pages
+          get room at the bottom so nothing ends up under the bar and the + / Ask Almanac buttons. */}
+      <div className={`w-full flex-1 px-3 py-4 sm:px-6 ${tab === "calendar" ? "max-lg:pb-0" : "max-lg:pb-48"}`}>
         {/* The side panel slides out over the calendar. It stays mounted while closed (inert), so its panels
             keep their state and don't reload every time it opens. */}
         <AnimatePresence>
@@ -982,8 +983,33 @@ export function CalendarApp({
             </h1>
             {whatNow}
           </div>
-          {/* Phones, on the day view: the week as a strip of days. */}
-          {phone && tab === "calendar" && view === "day" && !searching && <WeekStrip day={anchor} now={now} onPick={(d) => (setDir(0), setAnchor(d))} />}
+          {/* Phones: the month when the date at the top is tapped (it pushes the calendar down), otherwise on the
+              day view the week as a strip of days. */}
+          {phone && tab === "calendar" && !searching && (
+            <AnimatePresence initial={false} mode="wait">
+              {monthOpen ? (
+                <MonthPanel
+                  key="month"
+                  day={anchor}
+                  now={now}
+                  onPick={(d) => {
+                    setDir(0);
+                    setAnchor(d);
+                    setMonthOpen(false);
+                  }}
+                  onClose={() => setMonthOpen(false)}
+                  load={(f, t) => fetchEvents({ from: f.toISOString(), to: t.toISOString() }, calIds.filter((id) => !hidden.has(id)))}
+                  color={color}
+                />
+              ) : (
+                view === "day" && (
+                  <motion.div key="week" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
+                    <WeekStrip day={anchor} now={now} onPick={(d) => (setDir(0), setAnchor(d))} />
+                  </motion.div>
+                )
+              )}
+            </AnimatePresence>
+          )}
 
           {error === "reauth" ? (
             <Notice text="Google needs you to sign in again before it shares your calendar.">
@@ -1228,21 +1254,6 @@ export function CalendarApp({
           />
         )}
         {away && <AwayDialog key="away" kind={away} now={now} onClose={() => setAway(null)} onSaved={() => setGen((g) => g + 1)} />}
-        {monthOpen && phone && (
-          <MonthPopup
-            key="month"
-            day={anchor}
-            now={now}
-            onPick={(d) => {
-              setDir(0);
-              setAnchor(d);
-              setMonthOpen(false);
-            }}
-            onClose={() => setMonthOpen(false)}
-            load={(f, t) => fetchEvents({ from: f.toISOString(), to: t.toISOString() }, calIds.filter((id) => !hidden.has(id)))}
-            color={color}
-          />
-        )}
       </AnimatePresence>
 
       {mounted && (

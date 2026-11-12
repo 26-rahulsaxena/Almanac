@@ -100,8 +100,9 @@ export function WeekStrip({ day, now, onPick }: { day: Date; now: Date; onPick: 
   );
 }
 
-// The whole month, dropped down from the top. A dot under each day with something on, in its calendar's colours.
-export function MonthPopup({
+// The whole month, opened in place of the week strip so it pushes the calendar down. A dot under each day with
+// something on, in its calendar's colours.
+export function MonthPanel({
   day,
   now,
   onPick,
@@ -149,18 +150,18 @@ export function MonthPopup({
   const arrow = "grid size-11 place-items-center rounded-full text-muted hover:bg-ink/5 hover:text-ink";
 
   return (
-    <div className="fixed inset-0 z-40 flex flex-col lg:hidden">
-      <motion.div
-        initial={{ y: -24, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        exit={{ y: -24, opacity: 0 }}
-        transition={{ type: "spring", damping: 30, stiffness: 380 }}
-        role="dialog"
-        aria-label="Pick a day"
-        className="rounded-b-[28px] bg-paper px-3.5 pb-4 pt-[calc(1.5rem+env(safe-area-inset-top))] shadow-[0_18px_40px_rgba(0,0,0,0.18)]"
-      >
+    <motion.div
+      initial={{ height: 0, opacity: 0 }}
+      animate={{ height: "auto", opacity: 1 }}
+      exit={{ height: 0, opacity: 0 }}
+      transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+      role="region"
+      aria-label="Pick a day"
+      className="-mx-1 overflow-hidden"
+    >
+      <div className="pb-3">
         <div className="flex items-center justify-between px-1.5">
-          <p className="font-serif text-[1.85rem] leading-none" aria-live="polite">
+          <p className="font-serif text-2xl leading-none" aria-live="polite">
             {fmt(month, { month: "long", year: "numeric" })}
           </p>
           <div className="flex gap-0.5">
@@ -203,8 +204,7 @@ export function MonthPopup({
             Today
           </button>
         </div>
-      </motion.div>
-      <motion.button type="button" aria-label="Close the month" onClick={onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 bg-ink/25" />
-    </div>
+      </div>
+    </motion.div>
   );
 }
