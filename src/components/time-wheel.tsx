@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 const pad = (n: number) => String(n).padStart(2, "0");
-const ROW = 40; // px per row; 5 rows show, the middle one is the choice
+const ROW = 32; // px per row (h-8 below); 5 rows show, the middle one is the choice
 const HOURS = Array.from({ length: 12 }, (_, i) => String(i + 1));
 const MINUTES = Array.from({ length: 60 }, (_, i) => pad(i));
 
@@ -40,7 +40,7 @@ export function TimeWheel({ value, onChange, className = "", "aria-label": ariaL
 
   function show() {
     const r = box.current!.getBoundingClientRect();
-    setUp(innerHeight - r.bottom < 290 && r.top > innerHeight - r.bottom);
+    setUp(innerHeight - r.bottom < 230 && r.top > innerHeight - r.bottom);
     setOpen(true);
   }
 
@@ -73,15 +73,15 @@ export function TimeWheel({ value, onChange, className = "", "aria-label": ariaL
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: up ? 6 : -6, scale: 0.98 }}
             transition={{ duration: 0.12 }}
-            className={`absolute right-0 z-30 w-60 rounded-2xl border border-line bg-surface p-2 shadow-xl ${up ? "bottom-full mb-1" : "top-full mt-1"}`}
+            className={`absolute right-0 z-30 w-48 rounded-2xl border border-line bg-surface p-1.5 shadow-xl ${up ? "bottom-full mb-1" : "top-full mt-1"}`}
           >
             <div className="relative grid grid-cols-[1fr_1fr_0.9fr]">
-              <span className="pointer-events-none absolute inset-x-0 top-1/2 h-10 -translate-y-1/2 rounded-lg bg-ink/5" aria-hidden />
+              <span className="pointer-events-none absolute inset-x-0 top-1/2 h-8 -translate-y-1/2 rounded-lg bg-ink/5" aria-hidden />
               <Wheel label="Hour" items={HOURS} index={hour12 - 1} loop onPick={(i) => set(i + 1, m, pm)} />
               <Wheel label="Minutes" items={MINUTES} index={m} loop onPick={(i) => set(hour12, i, pm)} />
               <Wheel label="am or pm" items={["am", "pm"]} index={pm ? 1 : 0} onPick={(i) => set(hour12, m, i === 1)} />
             </div>
-            <button type="button" onClick={close} className="mt-2 w-full rounded-full bg-ink py-1.5 text-sm font-medium text-paper">
+            <button type="button" onClick={close} className="mt-1.5 w-full rounded-full bg-ink py-1 text-sm font-medium text-paper">
               Done
             </button>
           </motion.div>
@@ -130,7 +130,7 @@ function Wheel({ label, items, index, loop, onPick }: { label: string; items: st
         e.preventDefault();
         step(e.key === "ArrowDown" ? 1 : -1);
       }}
-      className="relative h-[200px] snap-y snap-mandatory overflow-y-auto overscroll-contain rounded-lg py-[80px] text-center outline-none [scrollbar-width:none] focus-visible:ring-2 focus-visible:ring-accent/50 [&::-webkit-scrollbar]:hidden"
+      className="relative h-[160px] snap-y snap-mandatory overflow-y-auto overscroll-contain rounded-lg py-[64px] text-center outline-none [scrollbar-width:none] focus-visible:ring-2 focus-visible:ring-accent/50 [&::-webkit-scrollbar]:hidden"
       style={{ maskImage: "linear-gradient(transparent, black 35%, black 65%, transparent)" }}
     >
       {Array.from({ length: copies }, (_, c) =>
@@ -138,7 +138,7 @@ function Wheel({ label, items, index, loop, onPick }: { label: string; items: st
           <div
             key={`${c}-${i}`}
             onClick={() => ref.current?.scrollTo({ top: (c * n + i) * ROW, behavior: "smooth" })}
-            className={`grid h-10 cursor-pointer snap-center place-items-center font-mono text-lg tabular-nums ${i === index ? "text-ink" : "text-muted"}`}
+            className={`grid h-8 cursor-pointer snap-center place-items-center font-mono text-base tabular-nums ${i === index ? "text-ink" : "text-muted"}`}
             aria-hidden
           >
             {it}

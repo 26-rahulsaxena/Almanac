@@ -22,6 +22,7 @@ export type Ev = {
   isOrganizer: boolean; // only the organizer can change guests
   reminders?: Reminder[]; // missing = the calendar's default reminders
   plan?: string; // set on blocks the auto-planner booked: "todo:<id>" or "routine:<id>"
+  prep?: string; // set on "Prepare for …" blocks booked from a suggestion: the deadline's "<calendarId>:<eventId>"
   away?: "ooo" | "focus"; // out of office or focus time (Google's own kind, or Almanac's busy block on personal Gmail)
 };
 
@@ -110,6 +111,7 @@ export async function listEvents(userId: string, calendarIds: string[], from: st
             isOrganizer: e.organizer?.self ?? true,
             reminders: e.reminders?.useDefault === false ? (e.reminders.overrides ?? []) : undefined,
             plan: e.extendedProperties?.private?.almanacPlan || undefined,
+            prep: e.extendedProperties?.private?.almanacPrep || undefined,
             away: awayOf(e),
           }),
         );

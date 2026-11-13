@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { length } from "@/lib/time";
 import { Select } from "./select";
+import { TimeWheel } from "./time-wheel";
 
 type Todo = {
   id: string;
@@ -20,7 +21,7 @@ const LENGTHS = [15, 30, 60, 90, 120, 180, 240, 360, 480];
 const SESSIONS = [45, 60, 90, 120];
 const when = (iso: string) =>
   new Date(iso).toLocaleString("en-IN", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
-// An ISO time as the value a datetime-local box expects, in the browser's own time zone.
+// An ISO time as "YYYY-MM-DDTHH:MM" in the browser's own time zone (the due date and time fields' value).
 const localInput = (iso: string | null) => {
   if (!iso) return "";
   const d = new Date(iso);
@@ -39,12 +40,19 @@ const field = "w-full rounded-lg border border-line bg-surface px-2.5 py-1.5 tex
 
 // Due, length and "book automatically", shared by the add form and editing.
 function Details({ d, set, splittable }: { d: Draft; set: (d: Draft) => void; splittable: boolean }) {
+  // Like the event panel: a date box and Almanac's time wheel. A new due date starts at 6 pm; a time picked before
+  // any date means today.
+  const [date, clock] = d.due ? d.due.split("T") : ["", ""];
+  const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
   return (
     <>
-      <label className="block text-xs text-muted">
+      <div className="text-xs text-muted">
         Due (optional)
-        <input type="datetime-local" value={d.due} onChange={(e) => set({ ...d, due: e.target.value })} className={`${field} mt-0.5`} />
-      </label>
+        <div className="mt-0.5 grid grid-cols-[1fr_auto] gap-2">
+          <input type="date" aria-label="Due date" value={date} onChange={(e) => set({ ...d, due: e.target.value ? `${e.target.value}T${clock || "18:00"}` : "" })} className={field} />
+          <TimeWheel aria-label="Due time" value={clock || "18:00"} onChange={(v) => set({ ...d, due: `${date || today()}T${v}` })} className={`${field} ${date ? "" : "text-muted!"}`} />
+        </div>
+      </div>
       <label className="block text-xs text-muted">
         Takes
         <Select

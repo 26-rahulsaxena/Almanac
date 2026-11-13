@@ -19,6 +19,12 @@ describe("kind of task", () => {
     expect(classify(item("Dinner with Aanya")).category).toBe("personal");
     expect(classify(item("Gym")).category).toBe("leisure");
   });
+  test("preparing for a deadline is work, not the deadline", () => {
+    expect(classify(item("Prepare for AI Certification Submission")).category).toBe("work");
+    expect(classify(item("Prep: finance exam")).category).toBe("work");
+    expect(classify(item("Exam prep")).category).toBe("deadline"); // only a title that starts with it
+  });
+
   test("mixed titles: work beats personal, leisure beats personal", () => {
     expect(classify(item("Lunch meeting with client")).category).toBe("work");
     expect(classify(item("Gym with friends")).category).toBe("leisure");

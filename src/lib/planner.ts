@@ -48,7 +48,7 @@ export async function upcoming(u: User, from: Date, days: number) {
 export async function bookBlock(
   u: User,
   calendars: Cal[],
-  b: { title: string; start: Date; end: Date; description?: string; reminderMinutes?: number; plan?: string },
+  b: { title: string; start: Date; end: Date; description?: string; reminderMinutes?: number; plan?: string; prep?: string },
 ) {
   const cal = calendars.find((c) => c.primary && c.canEdit) ?? calendars.find((c) => c.canEdit);
   if (!cal) throw new InvalidInput("There's no calendar you can add to.");
@@ -61,8 +61,9 @@ export async function bookBlock(
       start: { dateTime: b.start.toISOString() },
       end: { dateTime: b.end.toISOString() },
       ...(b.reminderMinutes != null && { reminders: { useDefault: false, overrides: [{ method: "popup", minutes: b.reminderMinutes }] } }),
-      // A private tag (only this app sees it) marks the auto-planner's own blocks, the only events it may move.
-      ...(b.plan && { extendedProperties: { private: { almanacPlan: b.plan } } }),
+      // Private tags (only this app sees them): almanacPlan marks the auto-planner's own blocks, the only events it
+      // may move; almanacPrep names the deadline a prep block is for, so that deadline isn't suggested again.
+      ...((b.plan || b.prep) && { extendedProperties: { private: { ...(b.plan && { almanacPlan: b.plan }), ...(b.prep && { almanacPrep: b.prep }) } } }),
     }),
   });
   return { calendarId: cal.id, eventId: e.id };

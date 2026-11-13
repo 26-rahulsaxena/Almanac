@@ -3,7 +3,7 @@ import { listCalendars, listEvents, type Ev } from "@/lib/calendar";
 import { ReauthError } from "@/lib/google";
 import { scanAll } from "@/lib/mail";
 import { morningCheck, replan } from "@/lib/planner";
-import { dayPlanText } from "@/lib/coach";
+import { dayPlanText, riskText } from "@/lib/coach";
 import { coachToday, coachWeek } from "@/lib/coach-data";
 import { checkinText } from "@/lib/priorities";
 import latest from "@/lib/android-build.json";
@@ -164,9 +164,15 @@ async function morningDigest(userId: string, timeZone: string, hidden: string[],
       and (last_digest_on is null or last_digest_on < (now() at time zone ${timeZone})::date)
     returning id`;
   if (claim) {
-    const { today } = await coachToday(u, now);
+    const { today, risks } = await coachToday(u, now);
     if (today.count || today.blocks.length) {
       await sendPush(userId, { kind: "digest", ...dayPlanText(today, timeZone) });
+      sent++;
+    }
+    // Once a day: deadlines whose prep won't fit in the free time left ("tight" ones only show in the app).
+    const atRisk = risks.filter((r) => r.level === "risk");
+    if (atRisk.length) {
+      await sendPush(userId, { kind: "digest", ...riskText(atRisk, timeZone) });
       sent++;
     }
     const fixes = await morningCheck(u, now);
@@ -188,13 +194,16 @@ async function morningDigest(userId: string, timeZone: string, hidden: string[],
     await sendPush(userId, {
       kind: "review",
       title: "Your week in review",
-      body: [
-        top && `Most time on ${top.label.toLowerCase()} (${Math.round(top.minutes / 60)} h)`,
-        r.deadlines.total && `${r.deadlines.met} of ${r.deadlines.total} deadlines marked done`,
-        r.overdue.length && `${r.overdue.length} to-do${r.overdue.length === 1 ? "" : "s"} overdue`,
-      ]
-        .filter(Boolean)
-        .join(" · ") || "Open Almanac to see where your time went.",
+      body:
+        r.note ??
+        ([
+          top && `Most time on ${top.label.toLowerCase()} (${Math.round(top.minutes / 60)} h)`,
+          r.deadlines.total && `${r.deadlines.met} of ${r.deadlines.total} deadlines marked done`,
+          r.overdue.length && `${r.overdue.length} to-do${r.overdue.length === 1 ? "" : "s"} overdue`,
+        ]
+          .filter(Boolean)
+          .join(" · ") ||
+          "Open Almanac to see where your time went."),
     });
     sent++;
   }

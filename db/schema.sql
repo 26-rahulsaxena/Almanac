@@ -249,3 +249,6 @@ create table if not exists mail_seen (
   primary key (user_id, message_id)
 );
 alter table mail_seen enable row level security;
+
+-- The AI's short note at the top of the week in review, written at most once a day: {"on": "YYYY-MM-DD", "text": "..."}.
+alter table users add column if not exists week_note jsonb;

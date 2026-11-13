@@ -232,9 +232,10 @@ export function EventPanel({ initial, event, calendars, priority, onDeadline, on
         animate={{ x: 0, y: 0 }}
         exit={phone ? { y: "100%" } : { x: "100%" }}
         transition={{ type: "spring", damping: 34, stiffness: 340 }}
-        className="fixed inset-x-0 bottom-0 z-50 flex max-h-[92dvh] flex-col rounded-t-3xl border border-line bg-surface shadow-2xl sm:inset-y-0 sm:left-auto sm:max-h-none sm:w-[27rem] sm:rounded-none sm:rounded-l-3xl"
+        className="fixed inset-x-0 bottom-0 z-50 flex max-h-[92dvh] flex-col overflow-hidden rounded-t-3xl border border-line bg-surface shadow-2xl sm:inset-y-0 sm:left-auto sm:max-h-none sm:w-[27rem] sm:rounded-none sm:rounded-l-3xl"
       >
-        <div className="h-1.5 shrink-0 rounded-t-3xl sm:rounded-tl-3xl sm:rounded-tr-none" style={{ background: CATEGORIES.find((c) => c.id === f.colorId)?.hex ?? cal?.color }} />
+        {/* The category colour along the top, clipped to the panel's rounded corners (overflow-hidden above). */}
+        <div className="h-1.5 shrink-0" style={{ background: CATEGORIES.find((c) => c.id === f.colorId)?.hex ?? cal?.color }} />
         <div className="flex items-center justify-between px-5 pt-4">
           <h2 id="panel-title" className={label}>
             {readOnly ? "Event" : event ? "Edit event" : "New event"}
@@ -255,7 +256,8 @@ export function EventPanel({ initial, event, calendars, priority, onDeadline, on
           {/* The scrolling is on a div: browsers don't reliably scroll (or clip) a fieldset, so on phones the fields
               spilled under the Save row. */}
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          <fieldset disabled={readOnly || saving} className="min-w-0 space-y-5 px-5 pb-5">
+          {/* pt-1: room for the title's focus outline, which the scrolling div would otherwise cut off at the top. */}
+          <fieldset disabled={readOnly || saving} className="min-w-0 space-y-5 px-5 pb-5 pt-1">
             <input
               data-autofocus
               aria-label="Title"

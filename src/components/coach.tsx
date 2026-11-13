@@ -2,10 +2,15 @@
 import { motion } from "motion/react";
 import { useEffect, useState, type ReactNode } from "react";
 import { length } from "@/lib/time";
-import type { DayPlan, NowAnswer, Pick, WeekReview } from "@/lib/coach";
+import { startChoices, type DayPlan, type NowAnswer, type Pick, type PrepState, type WeekReview } from "@/lib/coach";
+import { TimeWheel } from "./time-wheel";
 import { useDialog } from "./use-dialog";
 
 const time = (iso: string) => new Date(iso).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
+const dayTime = (iso: string) => new Date(iso).toLocaleString("en-IN", { weekday: "short", hour: "numeric", minute: "2-digit" });
+// "Not now" on an at-risk warning hides it on this device until tomorrow: {"<today>": [deadline keys]}.
+const RISK_NOT_NOW = "prepRiskNotNow";
+const todayKey = () => new Date().toDateString();
 const hours = (m: number) => length(Math.round(m / 5) * 5); // totals, to the nearest 5 min
 
 async function load<T>(url: string): Promise<T> {
@@ -15,14 +20,100 @@ async function load<T>(url: string): Promise<T> {
   return data as T;
 }
 
-// Books the time a piece of advice suggested; only ever called from a button the person pressed.
-async function book(p: Pick, start: Date) {
+// Books the time a piece of advice suggested; only ever called from a button the person pressed. check: a time the
+// person picked, so if it overlaps something nothing is booked and what it overlaps comes back (force: book anyway).
+async function book(p: Pick, start: Date, opts: { check?: boolean; force?: boolean } = {}): Promise<string | null> {
   const r = await fetch("/api/coach", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title: p.title, start: start.toISOString(), minutes: p.minutes, todoId: p.todoId }),
+    body: JSON.stringify({ title: p.title, start: start.toISOString(), minutes: p.minutes, todoId: p.todoId, prepFor: p.prepFor, ...opts }),
   });
-  if (!r.ok) throw new Error((await r.json().catch(() => null))?.error ?? "Couldn't book it.");
+  const data = await r.json().catch(() => null);
+  if (!r.ok) throw new Error(data?.error ?? "Couldn't book it.");
+  return data?.clash ?? null;
+}
+
+const chip = "rounded-full border border-line px-2.5 py-1 text-xs hover:border-ink/40 disabled:opacity-50";
+
+// Pick your own time for a suggestion, today: free times where it fits (one tap), or any time on the wheel. A
+// picked time that overlaps something asks before booking. A time that has passed is refused by the server.
+function PickTime({ pick, free, onBooked }: { pick: Pick; free: DayPlan["free"]; onBooked: (start: Date, minutes: number) => void }) {
+  const minutes = pick.need ?? pick.minutes;
+  const choices = startChoices(free, minutes);
+  const [other, setOther] = useState(!choices.length);
+  const [clock, setClock] = useState(() => `${String((new Date().getHours() + 1) % 24).padStart(2, "0")}:00`);
+  const [clash, setClash] = useState<{ start: Date; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function go(start: Date, force = false) {
+    setBusy(true);
+    setError(null);
+    try {
+      const overlap = await book({ ...pick, minutes }, start, { check: true, force });
+      if (overlap) setClash({ start, text: overlap });
+      else onBooked(start, minutes);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  const atClock = () => {
+    const [h, m] = clock.split(":").map(Number);
+    const d = new Date();
+    d.setHours(h, m, 0, 0);
+    return d;
+  };
+
+  return (
+    <div className="mt-2 rounded-xl border border-line p-2.5 text-sm lg:text-xs">
+      {clash ? (
+        <>
+          <p>
+            {time(clash.start.toISOString())} overlaps {clash.text}. Book it anyway?
+          </p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <button type="button" disabled={busy} onClick={() => go(clash.start, true)} className="rounded-full bg-ink px-3 py-1 text-xs font-medium text-paper disabled:opacity-50">
+              {busy ? "Booking…" : "Book anyway"}
+            </button>
+            <button type="button" onClick={() => setClash(null)} className={chip}>
+              Pick another time
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="text-xs text-muted">{choices.length ? `Book ${length(minutes)} at:` : `No free stretch of ${length(minutes)} left today. Pick a time:`}</p>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {choices.map((d) => (
+              <button key={+d} type="button" disabled={busy} onClick={() => go(d)} className={chip}>
+                {time(d.toISOString())}
+              </button>
+            ))}
+            {choices.length > 0 && (
+              <button type="button" aria-expanded={other} onClick={() => setOther(!other)} className={chip}>
+                Other time…
+              </button>
+            )}
+          </div>
+          {other && (
+            <div className="mt-2 flex items-center gap-2">
+              <TimeWheel aria-label="Start time" value={clock} onChange={setClock} className="rounded-full border border-line px-3 py-1 text-sm" />
+              <button type="button" disabled={busy} onClick={() => go(atClock())} className="rounded-full bg-ink px-3 py-1 text-xs font-medium text-paper disabled:opacity-50">
+                {busy ? "Booking…" : "Book"}
+              </button>
+            </div>
+          )}
+        </>
+      )}
+      {error && (
+        <p role="alert" className="mt-2 text-xs text-accent">
+          {error}
+        </p>
+      )}
+    </div>
+  );
 }
 
 // at: the button it was opened from. Then it hangs just under that button like a chat bubble, its tail pointing
@@ -123,9 +214,11 @@ export function WhatNowBody({ onCalendarChange, onPick }: { onCalendarChange: ()
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [booked, setBooked] = useState<string | null>(null);
+  const [free, setFree] = useState<DayPlan["free"]>([]);
+  const [choosing, setChoosing] = useState(false);
 
   useEffect(() => {
-    load<{ now: NowAnswer }>("/api/coach").then((d) => setAnswer(d.now), (e: Error) => setError(e.message));
+    load<{ now: NowAnswer; today: DayPlan }>("/api/coach").then((d) => (setAnswer(d.now), setFree(d.today.free)), (e: Error) => setError(e.message));
   }, []);
 
   const pick = answer?.picks[i];
@@ -169,13 +262,27 @@ export function WhatNowBody({ onCalendarChange, onPick }: { onCalendarChange: ()
                 <button type="button" data-autofocus disabled={busy || pick.minutes < 5} onClick={blockIt} className="rounded-full bg-ink px-4 py-2 text-sm font-medium text-paper disabled:opacity-50 lg:px-3 lg:py-1.5 lg:text-xs">
                   {busy ? "Booking…" : `Block ${length(pick.minutes)} for it now`}
                 </button>
+                <button type="button" aria-expanded={choosing} onClick={() => setChoosing(!choosing)} className="rounded-full border border-line px-4 py-2 text-sm hover:border-ink/40 lg:px-3 lg:py-1.5 lg:text-xs">
+                  Pick a time
+                </button>
                 {answer.picks.length > 1 && (
-                  <button type="button" onClick={() => setI((i + 1) % answer.picks.length)} className="rounded-full border border-line px-4 py-2 text-sm hover:border-ink/40 lg:px-3 lg:py-1.5 lg:text-xs">
+                  <button type="button" onClick={() => (setI((i + 1) % answer.picks.length), setChoosing(false))} className="rounded-full border border-line px-4 py-2 text-sm hover:border-ink/40 lg:px-3 lg:py-1.5 lg:text-xs">
                     Something else
                   </button>
                 )}
               </div>
             )
+          )}
+          {pick && choosing && !booked && (
+            <PickTime
+              key={i}
+              pick={pick}
+              free={free}
+              onBooked={(start, minutes) => {
+                setBooked(`Booked “${pick.title}” at ${time(start.toISOString())}, until ${time(new Date(+start + minutes * 60_000).toISOString())}.`);
+                onCalendarChange();
+              }}
+            />
           )}
         </div>
       )}
@@ -193,12 +300,49 @@ export function WhatNowBody({ onCalendarChange, onPick }: { onCalendarChange: ()
 // skip: the task What now? is already suggesting above it, so it isn't offered twice.
 export function TodayCard({ version, onCalendarChange, waiting, inDialog, skip }: { version: number; onCalendarChange: () => void; waiting?: boolean; inDialog?: boolean; skip?: string | null }) {
   const [plan, setPlan] = useState<DayPlan | null>(null);
+  const [risks, setRisks] = useState<PrepState[]>([]);
+  const [hidden, setHidden] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(RISK_NOT_NOW) ?? "{}")[todayKey()] ?? [];
+    } catch {
+      return [];
+    }
+  });
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [choosing, setChoosing] = useState<string | null>(null); // the suggestion (by its start) whose time is being picked
 
   useEffect(() => {
-    load<{ today: DayPlan }>("/api/coach").then((d) => setPlan(d.today), () => {});
+    load<{ today: DayPlan; risks?: PrepState[] }>("/api/coach").then((d) => (setPlan(d.today), setRisks(d.risks ?? []), setChoosing(null)), () => {});
   }, [version]);
+
+  // A warning's buttons: book prep into the free time left, mark the deadline done, or hide it until tomorrow.
+  async function riskAction(r: PrepState, action: "fit" | "done" | "later") {
+    if (action === "later") {
+      const next = [...hidden, r.key];
+      setHidden(next);
+      try {
+        localStorage.setItem(RISK_NOT_NOW, JSON.stringify({ [todayKey()]: next }));
+      } catch {}
+      return;
+    }
+    setBusy(r.key);
+    setError(null);
+    try {
+      // Priorities keys are "<calendarId>:<eventId>"; Google event ids never contain ":".
+      const cut = r.key.lastIndexOf(":");
+      const res =
+        action === "fit"
+          ? await fetch("/api/coach", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fit: r.key }) })
+          : await fetch("/api/priorities", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ calendarId: r.key.slice(0, cut), eventId: r.key.slice(cut + 1), action: "done" }) });
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? "Couldn't do that. Try again.");
+      onCalendarChange();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function bookBlock(b: DayPlan["blocks"][number]) {
     setBusy(b.start);
@@ -227,20 +371,53 @@ export function TodayCard({ version, onCalendarChange, waiting, inDialog, skip }
         {plan.last && plan.count > 1 && ` · done by ${time(plan.last.end)}`}
         {` · ${hours(plan.freeMinutes)} free`}
       </p>
+      {risks
+        .filter((r) => !hidden.includes(r.key))
+        .map((r) => (
+          <div key={r.key} role="status" className="mt-3 rounded-xl border border-accent/40 bg-accent/10 px-3 py-2 text-sm lg:text-xs">
+            <p className="break-words font-medium">{r.level === "risk" ? `⚠ “${r.title}” is at risk` : `Heads-up: “${r.title}” is tight`}</p>
+            <p className="mt-0.5 text-muted">
+              {length(r.left)} of prep left, {length(r.free)} free before {dayTime(r.due)}.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              <button type="button" disabled={!!busy || r.free < 15} onClick={() => riskAction(r, "fit")} className="rounded-full bg-ink px-3 py-1 text-xs font-medium text-paper disabled:opacity-50">
+                {busy === r.key ? "Booking…" : "Book what fits"}
+              </button>
+              <button type="button" disabled={!!busy} onClick={() => riskAction(r, "done")} className="rounded-full border border-line px-3 py-1 text-xs hover:border-ink/40 disabled:opacity-50">
+                Mark done
+              </button>
+              <button type="button" onClick={() => riskAction(r, "later")} className="rounded-full px-2 py-1 text-xs text-muted hover:text-ink">
+                Not now
+              </button>
+            </div>
+          </div>
+        ))}
       {plan.blocks.some((b) => b.title !== skip) && (
         <ul className="mt-3 space-y-2">
           {plan.blocks.filter((b) => b.title !== skip).map((b) => (
-            <li key={b.start} className="flex items-start gap-3 text-sm lg:text-xs">
-              <span className="w-16 shrink-0 pt-0.5 font-mono text-xs text-muted">{time(b.start)}</span>
-              <span className="min-w-0 flex-1">
-                <span className="block break-words leading-snug">{b.title}</span>
-                <span className="block text-xs text-muted">
-                  {length(b.minutes)} · {b.why}
+            <li key={b.start} className="text-sm lg:text-xs">
+              <div className="flex items-start gap-3">
+                {/* The suggested time; tap it to pick your own. */}
+                <button
+                  type="button"
+                  aria-expanded={choosing === b.start}
+                  aria-label={`${time(b.start)}. Pick another time for “${b.title}”`}
+                  onClick={() => setChoosing(choosing === b.start ? null : b.start)}
+                  className="w-16 shrink-0 pt-0.5 text-left font-mono text-xs text-muted underline decoration-dotted underline-offset-4 hover:text-ink"
+                >
+                  {time(b.start)}
+                </button>
+                <span className="min-w-0 flex-1">
+                  <span className="block break-words leading-snug">{b.title}</span>
+                  <span className="block text-xs text-muted">
+                    {length(b.minutes)} · {b.why}
+                  </span>
                 </span>
-              </span>
-              <button type="button" disabled={!!busy} onClick={() => bookBlock(b)} className="shrink-0 rounded-full border border-line px-2.5 py-0.5 text-xs hover:border-ink/40 disabled:opacity-50">
-                {busy === b.start ? "Booking…" : "Book"}
-              </button>
+                <button type="button" disabled={!!busy} onClick={() => bookBlock(b)} className="shrink-0 rounded-full border border-line px-2.5 py-0.5 text-xs hover:border-ink/40 disabled:opacity-50">
+                  {busy === b.start ? "Booking…" : "Book"}
+                </button>
+              </div>
+              {choosing === b.start && <PickTime pick={b} free={plan.free} onBooked={onCalendarChange} />}
             </li>
           ))}
         </ul>
@@ -279,6 +456,7 @@ export function Review({ onClose }: { onClose: () => void }) {
             {hours(r.totalMinutes)} in events
             {r.busiestDay && ` · busiest: ${day(r.busiestDay.day)} (${hours(r.busiestDay.minutes)})`}
           </p>
+          {r.note && <p className="mt-3 rounded-xl bg-ink/5 px-3 py-2 text-sm leading-snug">{r.note}</p>}
 
           <h3 className={h3}>Where the time went</h3>
           {r.byCategory.length ? (

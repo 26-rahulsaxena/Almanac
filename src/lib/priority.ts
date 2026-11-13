@@ -45,6 +45,8 @@ const SMALL_WORDS = /\b(practice|optional|reading|draft|mock)\b/i;
 export type Item = { calendarId: string; calendarName?: string; title: string; description?: string; busy?: boolean; guests?: number };
 
 export function classify(e: Item): { category: Category; word?: string; importance: number } {
+  // Time to prepare for a deadline is work, not the deadline: "Prepare for exam" isn't the exam.
+  if (/^\s*prep(are|aration)?\b/i.test(e.title)) return { category: "work", word: "prep", importance: 2 };
   // The title decides; the notes only count when the title has no telling words.
   for (const text of [e.title, e.description ?? ""]) {
     for (const [category, words, importance] of KINDS) {

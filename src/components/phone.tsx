@@ -157,6 +157,8 @@ export function MonthPanel({
   color: (e: Ev) => string;
 }) {
   const [month, setMonth] = useState(() => startOfMonth(day));
+  // Tapping the title switches to the year: 12 months to pick from, the arrows change the year (null = the days).
+  const [year, setYear] = useState<number | null>(null);
   const next = new Date(month.getFullYear(), month.getMonth() + 1, 1);
   const dots = useDots(month, next, load, color, 0);
 
@@ -183,22 +185,53 @@ export function MonthPanel({
     >
       <div className="pb-3">
         <div className="flex items-center justify-between px-1.5">
-          <p className="font-serif text-2xl leading-none lg:text-xl" aria-live="polite">
-            {fmt(month, { month: "long", year: "numeric" })}
-          </p>
+          <button
+            type="button"
+            aria-expanded={year !== null}
+            aria-label={year === null ? `${fmt(month, { month: "long", year: "numeric" })}. Change the month or year` : `${year}. Back to the days`}
+            onClick={() => setYear(year === null ? month.getFullYear() : null)}
+            className="rounded-lg font-serif text-2xl leading-none hover:text-accent lg:text-xl"
+          >
+            <span aria-live="polite">{year === null ? `${fmt(month, { month: "long" })}, ${month.getFullYear()}` : year}</span>
+          </button>
           <div className="flex gap-0.5">
-            <button type="button" aria-label="Previous month" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))} className={arrow}>
+            <button
+              type="button"
+              aria-label={year === null ? "Previous month" : "Previous year"}
+              onClick={() => (year === null ? setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1)) : setYear(year - 1))}
+              className={arrow}
+            >
               <svg className="size-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
                 <path d="m15 6-6 6 6 6" />
               </svg>
             </button>
-            <button type="button" aria-label="Next month" onClick={() => setMonth(next)} className={arrow}>
+            <button type="button" aria-label={year === null ? "Next month" : "Next year"} onClick={() => (year === null ? setMonth(next) : setYear(year + 1))} className={arrow}>
               <svg className="size-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
                 <path d="m9 6 6 6-6 6" />
               </svg>
             </button>
           </div>
         </div>
+        {year !== null ? (
+          <div className="mt-3 grid grid-cols-3 gap-1.5 px-1.5">
+            {Array.from({ length: 12 }, (_, i) => new Date(year, i, 1)).map((m) => {
+              const here = +m === +month;
+              const thisMonth = m.getFullYear() === now.getFullYear() && m.getMonth() === now.getMonth();
+              return (
+                <button
+                  key={+m}
+                  type="button"
+                  aria-pressed={here}
+                  aria-label={fmt(m, { month: "long", year: "numeric" })}
+                  onClick={() => (setMonth(m), setYear(null))}
+                  className={`rounded-xl py-3 text-[15px] transition-colors lg:py-2 lg:text-[13px] ${here ? "bg-ink font-medium text-paper" : `hover:bg-ink/10 ${thisMonth ? "font-semibold text-accent" : ""}`}`}
+                >
+                  {fmt(m, { month: "short" })}
+                </button>
+              );
+            })}
+          </div>
+        ) : (
         <div className="mt-2 grid grid-cols-7 gap-y-0.5">
           {["M", "T", "W", "T", "F", "S", "S"].map((w, i) => (
             <span key={i} className="py-1.5 text-center text-xs text-muted lg:py-1 lg:text-[11px]" aria-hidden>
@@ -219,6 +252,7 @@ export function MonthPanel({
             );
           })}
         </div>
+        )}
         <div className="mt-2.5 flex justify-end px-1.5">
           <button type="button" onClick={() => onPick(startOfDay(now))} className="rounded-full border border-line px-3.5 py-1.5 text-sm hover:border-ink/40 lg:px-3 lg:py-1 lg:text-xs">
             Today

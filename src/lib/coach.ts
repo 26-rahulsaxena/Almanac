@@ -13,32 +13,107 @@ const LATE_HOUR = 22; // after this (and before EARLY_HOUR) the advice is to res
 const EARLY_HOUR = 7;
 
 type Busy = { title: string; start: string; end: string; allDay: boolean; busy: boolean; calendarId?: string; description?: string };
-type TodoIn = { id: string; title: string; minutes: number; due_at: Date | null; done: boolean; event_id: string | null };
-type DeadlineIn = { key: string; title: string; due: string; severity: Severity; reason: string; category: Category; status: Status };
+// ai: the AI's rating of an unbooked to-do, when it has one.
+type TodoIn = { id: string; title: string; minutes: number; due_at: Date | null; done: boolean; event_id: string | null; ai?: { severity: Severity; reason: string } };
+// prepMinutes, prepSessions: the AI's estimate of the preparation it's worth (else an hour in one sitting).
+type DeadlineIn = { key: string; title: string; due: string; severity: Severity; reason: string; category: Category; status: Status; prepMinutes?: number; prepSessions?: number };
 
 // Something that needs your time, ranked like Priorities: severity first, then whichever is due sooner.
-export type Work = { key: string; title: string; minutes: number; due: Date | null; severity: Severity; why: string; todoId?: string };
+// prepFor: on "Prepare for …" work, the deadline's Priorities key, saved on the block it books.
+export type Work = { key: string; title: string; minutes: number; due: Date | null; severity: Severity; why: string; todoId?: string; prepFor?: string };
 // One piece of advice: do this, for this long (bookable with one button).
-export type Pick = { title: string; why: string; minutes: number; todoId?: string };
+// need: the task's whole length, booked when you pick your own time (minutes may be cut to the time free now).
+export type Pick = { title: string; why: string; minutes: number; need?: number; todoId?: string; prepFor?: string };
 
 const time = (d: Date, tz: string) => d.toLocaleTimeString("en-IN", { timeZone: tz, hour: "numeric", minute: "2-digit" });
 const dayTime = (d: Date, tz: string) => d.toLocaleString("en-IN", { timeZone: tz, weekday: "short", hour: "numeric", minute: "2-digit" });
 const hourIn = (d: Date, tz: string) => +new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", hourCycle: "h23" }).format(d);
 
-// Open to-dos that aren't booked yet, and coming deadlines (exam, submission…) to prepare for.
-export function workList(todos: TodoIn[], deadlines: DeadlineIn[], now: Date, tz: string): Work[] {
+const rankOf = (s: Severity) => SEVERITIES.indexOf(s);
+const openDeadlines = (deadlines: DeadlineIn[]) => deadlines.filter((p) => p.category === "deadline" && p.status !== "done");
+
+// A deadline's prep: in all, in how many sittings of `each` minutes, how much is still to book (booked: minutes of
+// Almanac's prep blocks for it), and which sitting is next.
+export function prepNeed(p: DeadlineIn, booked: number) {
+  const total = p.prepMinutes ?? 60;
+  const sessions = p.prepSessions ?? 1;
+  const each = Math.max(15, Math.ceil(total / sessions / 5) * 5);
+  return { total, sessions, each, left: Math.max(0, total - booked), next: Math.min(sessions, Math.floor(booked / each) + 1) };
+}
+
+// Open to-dos that aren't booked yet, and coming deadlines (exam, submission…) to prepare for, until Almanac's prep
+// blocks for a deadline add up to the prep it needs (prepped: booked minutes by deadline key).
+export function workList(todos: TodoIn[], deadlines: DeadlineIn[], now: Date, tz: string, prepped = new Map<string, number>()): Work[] {
   const fromTodos = todos
     .filter((t) => !t.done && !t.event_id)
     .map((t): Work => {
-      const { severity } = suggest({ calendarId: "", title: t.title }, t.due_at ?? new Date(+now + 7 * DAY), now);
-      const why = !t.due_at ? "On your to-do list" : t.due_at < now ? `Overdue since ${dayTime(t.due_at, tz)}` : `Due ${dayTime(t.due_at, tz)}`;
-      return { key: `todo:${t.id}`, title: t.title, minutes: t.minutes, due: t.due_at, severity: t.due_at && t.due_at < now ? "high" : severity, why, todoId: t.id };
+      const overdue = !!t.due_at && t.due_at < now;
+      const severity = t.ai?.severity ?? suggest({ calendarId: "", title: t.title }, t.due_at ?? new Date(+now + 7 * DAY), now).severity;
+      const when = !t.due_at ? "On your to-do list" : overdue ? `Overdue since ${dayTime(t.due_at, tz)}` : `Due ${dayTime(t.due_at, tz)}`;
+      const why = t.ai ? `${t.ai.reason} · ${when}` : when;
+      return { key: `todo:${t.id}`, title: t.title, minutes: t.minutes, due: t.due_at, severity: overdue && rankOf(severity) < rankOf("high") ? "high" : severity, why, todoId: t.id };
     });
-  const fromDeadlines = deadlines
-    .filter((p) => p.category === "deadline" && p.status !== "done")
-    .map((p): Work => ({ key: `deadline:${p.key}`, title: `Prepare for ${p.title}`, minutes: 60, due: new Date(p.due), severity: p.severity, why: p.reason }));
-  const rank = (w: Work) => SEVERITIES.indexOf(w.severity);
-  return [...fromTodos, ...fromDeadlines].sort((a, b) => rank(b) - rank(a) || (a.due ? +a.due : Infinity) - (b.due ? +b.due : Infinity));
+  const fromDeadlines = openDeadlines(deadlines).flatMap((p): Work[] => {
+    const n = prepNeed(p, prepped.get(p.key) ?? 0);
+    if (!n.left) return [];
+    const why = n.sessions > 1 ? `${p.reason} · sitting ${n.next} of ${n.sessions}, ${length(n.total)} of prep in all` : p.reason;
+    return [{ key: `deadline:${p.key}`, title: `Prepare for ${p.title}`, minutes: Math.min(n.each, n.left), due: new Date(p.due), severity: p.severity, why, prepFor: p.key }];
+  });
+  return [...fromTodos, ...fromDeadlines].sort((a, b) => rankOf(b.severity) - rankOf(a.severity) || (a.due ? +a.due : Infinity) - (b.due ? +b.due : Infinity));
+}
+
+// Free stretches of 30 min or more from now until `due` (waking hours only).
+function freeBefore(events: Busy[], now: Date, due: Date, tz: string): Interval[] {
+  return freeByDay(events, now, tz, Math.ceil((+due - +now) / DAY) + 1, 30)
+    .flatMap((d) => d.slots)
+    .filter((s) => s.start < due && +(s.end > due ? due : s.end) - +s.start >= 30 * MIN)
+    .map((s) => ({ start: s.start, end: s.end > due ? due : s.end }));
+}
+
+// For each open deadline with prep still to book: how much, and the free time left before it. risk: it won't fit;
+// tight: under twice what's needed is free; ok otherwise.
+export type PrepState = { key: string; title: string; due: string; left: number; free: number; level: "risk" | "tight" | "ok" };
+export function prepStates(events: Busy[], deadlines: DeadlineIn[], prepped: Map<string, number>, now: Date, tz: string): PrepState[] {
+  return openDeadlines(deadlines).flatMap((p): PrepState[] => {
+    const { left } = prepNeed(p, prepped.get(p.key) ?? 0);
+    if (!left) return [];
+    const free = Math.round(freeBefore(events, now, new Date(p.due), tz).reduce((m, s) => m + (+s.end - +s.start) / MIN, 0));
+    return [{ key: p.key, title: p.title, due: p.due, left, free, level: free < left ? "risk" : free < 2 * left ? "tight" : "ok" }];
+  });
+}
+
+// "Book what fits": sittings for the prep still to book, in the free time before the deadline. One a day first,
+// earliest first, then more on the same days (15 min apart) while some is still left.
+export function fitPrep(events: Busy[], p: DeadlineIn, booked: number, now: Date, tz: string): Interval[] {
+  const { each, left: need } = prepNeed(p, booked);
+  let left = need;
+  const slots = freeBefore(events, now, new Date(p.due), tz).map((s) => ({ at: +s.start, end: +s.end }));
+  const days = new Set<string>();
+  const out: Interval[] = [];
+  for (const firstPass of [true, false]) {
+    for (const s of slots) {
+      const day = ymdIn(new Date(s.at), tz);
+      if (firstPass && days.has(day)) continue;
+      while (left > 0) {
+        const m = Math.min(each, left, Math.floor((s.end - s.at) / (5 * MIN)) * 5);
+        if (m < 15) break;
+        out.push({ start: new Date(s.at), end: new Date(s.at + m * MIN) });
+        left -= m;
+        days.add(day);
+        s.at += (m + 15) * MIN;
+        if (firstPass) break;
+      }
+    }
+  }
+  return out.sort((a, b) => +a.start - +b.start);
+}
+
+// The 8 am warning for deadlines whose prep won't fit.
+export function riskText(risks: PrepState[], tz: string) {
+  const line = (r: PrepState) => `${length(r.left)} of prep left for “${r.title}”, ${length(r.free)} free before ${dayTime(new Date(r.due), tz)}`;
+  return risks.length === 1
+    ? { title: `“${risks[0].title}” is at risk`, body: `${line(risks[0])}. Open Almanac to book what fits.` }
+    : { title: `${risks.length} deadlines are at risk`, body: risks.map(line).join(" · ") };
 }
 
 const timedSpans = (events: Busy[]) =>
@@ -78,7 +153,9 @@ export function whatNow(events: Busy[], work: Work[], now: Date, tz: string): No
     title: w.title,
     why: w.minutes <= gap ? `${w.why}. Takes ${length(w.minutes)}.` : `${w.why}. It takes ${length(w.minutes)}; make a start now.`,
     minutes: Math.min(w.minutes, usable),
+    need: w.minutes,
     todoId: w.todoId,
+    prepFor: w.prepFor,
   }));
   const until = `You have ${length(gap)} free, until ${time(freeUntil, tz)}${next && next.start <= freeUntil ? `, then “${next.title}”` : ""}.`;
   return picks.length
@@ -92,7 +169,19 @@ export type DayPlan = {
   last: { title: string; end: string } | null;
   freeMinutes: number; // waking free time left today
   blocks: (Pick & { start: string; end: string })[]; // the most important work that fits each free stretch
+  free: { start: string; end: string }[]; // today's free stretches left, for picking your own time
 };
+
+// Times offered when you pick your own: up to `count` starts in today's free time where `minutes` fits, spread
+// across the day (every half hour is a candidate; the first, last and evenly spaced ones between are offered).
+export function startChoices(free: { start: string; end: string }[], minutes: number, count = 5): Date[] {
+  const all: Date[] = [];
+  for (const s of free) {
+    for (let t = +new Date(s.start); t + minutes * MIN <= +new Date(s.end); t += 30 * MIN) all.push(new Date(t));
+  }
+  if (all.length <= count) return all;
+  return Array.from({ length: count }, (_, i) => all[Math.round((i * (all.length - 1)) / (count - 1))]);
+}
 
 // Today at a glance: your events, your free stretches, and what to put in them (up to 4 suggestions).
 export function dayPlan(events: Busy[], work: Work[], now: Date, tz: string): DayPlan {
@@ -107,7 +196,7 @@ export function dayPlan(events: Busy[], work: Work[], now: Date, tz: string): Da
     const i = left.findIndex((w) => w.minutes <= room);
     if (i < 0) continue;
     const [w] = left.splice(i, 1);
-    blocks.push({ title: w.title, why: w.why, minutes: w.minutes, todoId: w.todoId, start: slot.start.toISOString(), end: new Date(+slot.start + w.minutes * MIN).toISOString() });
+    blocks.push({ title: w.title, why: w.why, minutes: w.minutes, todoId: w.todoId, prepFor: w.prepFor, start: slot.start.toISOString(), end: new Date(+slot.start + w.minutes * MIN).toISOString() });
   }
   return {
     count: spans.length,
@@ -115,6 +204,7 @@ export function dayPlan(events: Busy[], work: Work[], now: Date, tz: string): Da
     last: spans.at(-1) ? { title: spans.at(-1)!.title, end: spans.at(-1)!.end.toISOString() } : null,
     freeMinutes: Math.round(slots.reduce((m, s) => m + (+s.end - +s.start) / MIN, 0)),
     blocks,
+    free: slots.map((s) => ({ start: s.start.toISOString(), end: s.end.toISOString() })),
   };
 }
 
@@ -135,6 +225,7 @@ export type WeekReview = {
   deadlines: { met: number; total: number };
   unmarked: string[]; // deadlines that passed without being marked done in Priorities
   overdue: string[]; // open to-dos past their due time
+  note?: string; // the AI's short take on the week (added by coachWeek when the AI is available)
 };
 
 // The last 7 days: where your time went (by kind of task), what got done, and what slipped.

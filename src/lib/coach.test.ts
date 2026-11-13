@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { clashFixes, dayPlan, weekReview, whatNow, workList, type Work } from "./coach";
+import { clashFixes, dayPlan, fitPrep, prepStates, riskText, startChoices, weekReview, whatNow, workList, type Work } from "./coach";
 
 const IST = "Asia/Kolkata";
 const at = (local: string) => new Date(`${local}+05:30`);
@@ -50,10 +50,79 @@ describe("work list", () => {
     expect(list).toEqual([]);
   });
 
+  test("a deadline whose prep is all booked isn't suggested again; without the AI's estimate that's an hour", () => {
+    expect(workList([], [deadline({})], now, IST)[0].prepFor).toBe("c:e");
+    expect(workList([], [deadline({}), deadline({ key: "c:f", title: "Exam" })], now, IST, new Map([["c:e", 60]])).map((w) => w.title)).toEqual(["Prepare for Exam"]);
+    expect(workList([], [deadline({})], now, IST, new Map([["c:e", 30]]))[0].minutes).toBe(30); // the half hour still to book
+  });
+
+  test("the AI's prep estimate comes in sittings, counted from the prep already booked", () => {
+    const big = deadline({ prepMinutes: 180, prepSessions: 3 });
+    const [w] = workList([], [big], now, IST, new Map([["c:e", 60]]));
+    expect(w.minutes).toBe(60);
+    expect(w.why).toBe("Deadline · in 20 h · sitting 2 of 3, 3 h of prep in all");
+    expect(workList([], [big], now, IST, new Map([["c:e", 180]]))).toEqual([]);
+    expect(workList([], [deadline({ prepMinutes: 0 })], now, IST)).toEqual([]); // nothing to prepare
+  });
+
+  test("an unbooked to-do takes the AI's rating and reason", () => {
+    const [w] = workList([todo({ ai: { severity: "critical", reason: "Needed for the client pitch" } })], [], now, IST);
+    expect([w.severity, w.why]).toEqual(["critical", "Needed for the client pitch · On your to-do list"]);
+    const [late] = workList([todo({ due_at: at("2026-11-03T10:00"), ai: { severity: "low", reason: "Optional" } })], [], now, IST);
+    expect(late.severity).toBe("high"); // overdue still counts as at least high
+  });
+
   test("an overdue to-do counts as high", () => {
     const [w] = workList([todo({ due_at: at("2026-11-03T10:00") })], [], now, IST);
     expect(w.severity).toBe("high");
     expect(w.why).toContain("Overdue");
+  });
+});
+
+describe("prep at risk", () => {
+  const now = at("2026-11-04T14:00"); // Wednesday; free time counts 8 am–10 pm
+  const exam = (prepMinutes: number, due = "2026-11-05T10:00") => ({ key: "c:e", title: "Exam", due: at(due).toISOString(), severity: "critical" as const, reason: "Deadline", category: "deadline" as const, status: "open" as const, prepMinutes, prepSessions: 3 });
+  const workshop = ev("Workshop", "2026-11-04T14:00", "2026-11-04T22:00"); // only Thursday 8–10 am is left: 2 h
+
+  test("won't fit → risk; under twice what's needed → tight; else ok", () => {
+    const level = (prep: number) => prepStates([workshop], [exam(prep)], new Map(), now, IST)[0]?.level;
+    expect(prepStates([workshop], [exam(180)], new Map(), now, IST)).toEqual([{ key: "c:e", title: "Exam", due: exam(180).due, left: 180, free: 120, level: "risk" }]);
+    expect(level(90)).toBe("tight");
+    expect(level(30)).toBe("ok");
+    expect(prepStates([workshop], [exam(180)], new Map([["c:e", 180]]), now, IST)).toEqual([]); // all booked
+  });
+
+  test("book what fits: one sitting a day first, then more on the same days", () => {
+    const span = (s: { start: Date; end: Date }) => [s.start.toISOString(), s.end.toISOString()];
+    expect(fitPrep([], exam(180, "2026-11-06T10:00"), 0, now, IST).map(span)).toEqual([
+      [at("2026-11-04T14:00"), at("2026-11-04T15:00")],
+      [at("2026-11-05T08:00"), at("2026-11-05T09:00")],
+      [at("2026-11-06T08:00"), at("2026-11-06T09:00")],
+    ].map((s) => s.map((d) => d.toISOString())));
+    const busy = [ev("Class", "2026-11-04T15:30", "2026-11-04T22:00"), ev("Lab", "2026-11-05T08:00", "2026-11-05T10:00")];
+    expect(fitPrep(busy, exam(180), 0, now, IST).map(span)).toEqual([
+      [at("2026-11-04T14:00"), at("2026-11-04T15:00")],
+      [at("2026-11-04T15:15"), at("2026-11-04T15:30")], // only 1 h 30 min free: as much as fits
+    ].map((s) => s.map((d) => d.toISOString())));
+  });
+
+  test("the morning warning", () => {
+    const r = prepStates([workshop], [exam(180)], new Map(), now, IST);
+    expect(riskText(r, IST)).toEqual({ title: "“Exam” is at risk", body: "3 h of prep left for “Exam”, 2 h free before Thu, 10:00 am. Open Almanac to book what fits." });
+  });
+});
+
+describe("picking your own time", () => {
+  const slot = (a: string, b: string) => ({ start: at(a).toISOString(), end: at(b).toISOString() });
+  const clock = (ds: Date[]) => ds.map((d) => d.toLocaleTimeString("en-IN", { timeZone: IST, hour: "numeric", minute: "2-digit" }));
+
+  test("free times where it fits, spread across the day", () => {
+    expect(clock(startChoices([slot("2026-11-04T08:00", "2026-11-04T22:00")], 60))).toEqual(["8:00 am", "11:30 am", "2:30 pm", "6:00 pm", "9:00 pm"]);
+  });
+
+  test("only stretches long enough; few choices are all offered", () => {
+    expect(clock(startChoices([slot("2026-11-04T09:00", "2026-11-04T09:45"), slot("2026-11-04T14:00", "2026-11-04T15:30")], 60))).toEqual(["2:00 pm", "2:30 pm"]);
+    expect(startChoices([slot("2026-11-04T09:00", "2026-11-04T09:45")], 60)).toEqual([]);
   });
 });
 

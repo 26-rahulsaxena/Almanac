@@ -16,6 +16,8 @@ export type Priority = {
   suggested: Severity;
   reason: string;
   ai: boolean; // suggested by the AI (otherwise by the rules)
+  prepMinutes?: number; // on deadlines the AI rated: preparation it's worth, in all, and in how many sittings
+  prepSessions?: number;
   severity: Severity; // what's shown: your choice, or the suggestion raised by repeated "Later"s
   chosen: Severity | null; // your choice for every event with this name
   manual: boolean | null; // "Show in priorities" / "Hide from priorities"; null = automatic
@@ -52,10 +54,13 @@ export const dueAt = (e: Pick<Ev, "start" | "allDay">, timeZone: string) => (e.a
 export async function loadPriorities(userId: string, timeZone: string, hidden: string[], now = new Date(), rate = false): Promise<Priority[]> {
   const calendars = (await listCalendars(userId)).filter((c) => !hidden.includes(c.id));
   const calendarName = new Map(calendars.map((c) => [c.id, c.name]));
-  const [events, states, rules] = await Promise.all([
+  const [events, states, rules, todos] = await Promise.all([
     listEvents(userId, calendars.map((c) => c.id), now.toISOString(), new Date(+now + WINDOW_DAYS * 86_400_000).toISOString()),
     sql<State[]>`select calendar_id, event_id, is_deadline, status, next_check_at, later_count from deadline_states where user_id = ${userId}`,
     sql<{ title_key: string; severity: Severity }[]>`select title_key, severity from severity_rules where user_id = ${userId}`,
+    // Unbooked to-dos are rated in the same AI request, for What now? and Today (they aren't listed here).
+    sql<{ id: string; title: string; minutes: number; due_at: Date | null }[]>`
+      select id, title, minutes, due_at from todos where user_id = ${userId} and not done and event_id is null`,
   ]);
   const stateOf = new Map(states.map((s) => [`${s.calendar_id}:${s.event_id}`, s]));
   const ruleOf = new Map(rules.map((r) => [r.title_key, r.severity]));
@@ -98,6 +103,9 @@ export async function loadPriorities(userId: string, timeZone: string, hidden: s
       ];
     });
 
+  for (const t of todos) {
+    toRate.push({ key: `todo:${t.id}`, title: t.title, due: t.due_at?.toISOString() ?? "", end: null, allDay: false, deadline: false, guests: 0, todo: { minutes: t.minutes } });
+  }
   const rated = await aiRatings(userId, timeZone, toRate, now, rate).catch((err) => {
     console.error("AI priority ratings:", err);
     return new Map<string, Rating>();
@@ -105,7 +113,9 @@ export async function loadPriorities(userId: string, timeZone: string, hidden: s
   return list
     .map((p) => {
       const r = rated.get(`${p.key}|${p.due}`);
-      return r ? { ...p, ai: true, suggested: r.severity, reason: `${r.reason} · in ${timeLeft(new Date(p.due), now)}`, severity: effective(r.severity, p.chosen, p.laterCount) } : p;
+      if (!r) return p;
+      const prep = r.prep !== undefined ? { prepMinutes: r.prep, prepSessions: r.sessions } : {};
+      return { ...p, ...prep, ai: true, suggested: r.severity, reason: `${r.reason} · in ${timeLeft(new Date(p.due), now)}`, severity: effective(r.severity, p.chosen, p.laterCount) };
     })
     .sort(byPriority);
 }
