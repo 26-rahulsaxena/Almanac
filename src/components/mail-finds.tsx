@@ -26,8 +26,9 @@ const when = (f: Find) => {
 
 // "Found in your email" (Ask-first mode): meetings, calls and deadlines the AI spotted in new mail, each with a few
 // words on what's wanted; Show words reveals the email's own words, Open in Gmail the whole email. Nothing goes on
-// the calendar until Add. Shows nothing when there's nothing waiting.
-export function MailFinds({ email, version, onCalendarChange }: { email: string; version: number; onCalendarChange: () => void }) {
+// the calendar until Add. Shows nothing when there's nothing waiting. inDialog: inside the header mail button's
+// pop-up, which has its own title, so no card or heading; onCount hears how many are waiting.
+export function MailFinds({ email, version, onCalendarChange, inDialog, onCount }: { email: string; version: number; onCalendarChange: () => void; inDialog?: boolean; onCount?: (n: number) => void }) {
   const [list, setList] = useState<Find[] | null>(null);
   const [shown, setShown] = useState<Set<string>>(new Set()); // cards showing the email's own words
   const [busy, setBusy] = useState<string | null>(null);
@@ -39,6 +40,10 @@ export function MailFinds({ email, version, onCalendarChange }: { email: string;
       .then((l: Find[] | null) => l && setList(l))
       .catch(() => {});
   }, [version]);
+
+  useEffect(() => {
+    if (list) onCount?.(list.length);
+  }, [list, onCount]);
 
   async function answer(id: string, action: "add" | "dismiss") {
     setBusy(id);
@@ -57,10 +62,12 @@ export function MailFinds({ email, version, onCalendarChange }: { email: string;
 
   if (!list?.length) return null;
   return (
-    <motion.section aria-labelledby="mail-title" initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="rounded-2xl border border-accent/50 bg-surface p-4">
-      <h2 id="mail-title" className="font-serif text-xl">
-        Found in your email
-      </h2>
+    <motion.section aria-labelledby={inDialog ? undefined : "mail-title"} initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className={inDialog ? "" : "rounded-2xl border border-accent/50 bg-surface p-4"}>
+      {!inDialog && (
+        <h2 id="mail-title" className="font-serif text-xl">
+          Found in your email
+        </h2>
+      )}
       <p className="text-xs text-muted">Nothing goes on your calendar until you press Add. Nobody is invited.</p>
       <ul className="mt-3 space-y-3">
         <AnimatePresence initial={false}>

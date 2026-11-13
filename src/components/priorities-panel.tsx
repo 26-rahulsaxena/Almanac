@@ -69,7 +69,7 @@ export function PrioritiesPanel({ items, onAction }: Props) {
           </div>
         </div>
 
-        <ol className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3">
+        <ol className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
           <AnimatePresence initial={false}>
             {shown?.map((p, i) => (
               <motion.li
@@ -103,6 +103,7 @@ export function PrioritiesPanel({ items, onAction }: Props) {
 function Card({ p, onAction }: { p: Priority; onAction: (a: PriorityAction) => Promise<void> }) {
   const [mode, setMode] = useState<"doing" | "later" | "done" | null>(null);
   const [picking, setPicking] = useState(false); // the four severity choices, opened from the chip
+  const [more, setMore] = useState(false); // the ⋮ menu: I'm stuck, Hide
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const c = sevColor(p.severity);
@@ -143,10 +144,11 @@ function Card({ p, onAction }: { p: Priority; onAction: (a: PriorityAction) => P
 
   const btn = "rounded-full px-2.5 py-1 text-xs transition-colors disabled:opacity-50";
   // Tighter when the card is narrow (the side panel on a computer), so the three always fit.
-  const big = "whitespace-nowrap rounded-full px-2 py-2 text-center text-[11px] @[15rem]:px-3 @[15rem]:text-xs transition-colors disabled:opacity-50";
+  const big = "whitespace-nowrap rounded-full px-2 py-1.5 text-center text-[11px] @[15rem]:px-3 @[15rem]:text-xs transition-colors disabled:opacity-50";
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-line bg-paper pl-3" style={{ boxShadow: `inset 4px 0 0 ${c}` }}>
-      <div className="@container p-3 pl-2">
+    // The whole card takes its severity's colour: red, orange, yellow or green.
+    <div className="relative rounded-2xl border" style={{ background: `color-mix(in srgb, ${c} 16%, var(--paper))`, borderColor: `color-mix(in srgb, ${c} 45%, transparent)` }}>
+      <div className="@container px-4 py-3.5">
         <div className="flex items-center justify-between gap-2">
           {/* Tap the level to change it; the four choices stay out of the way until then. */}
           <button
@@ -167,14 +169,63 @@ function Card({ p, onAction }: { p: Priority; onAction: (a: PriorityAction) => P
               </svg>
             )}
           </button>
-          {left && p.status !== "done" && (
-            <span className="shrink-0 text-xs font-medium" style={{ color: soon ? "var(--sev-critical)" : "var(--muted)" }}>
-              {left}
-            </span>
-          )}
+          <div className="flex shrink-0 items-center gap-1">
+            {left && p.status !== "done" && (
+              <span className="text-xs font-medium" style={{ color: soon ? "var(--sev-critical)" : "var(--muted)" }}>
+                {left}
+              </span>
+            )}
+            {/* The rarer actions, out of the way until asked for. */}
+            {p.status !== "done" && (
+              <div className="relative -mr-1.5">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setMore(!more)}
+                  aria-haspopup="menu"
+                  aria-expanded={more}
+                  aria-label={`More for ${title}`}
+                  className="grid size-7 place-items-center rounded-full text-muted hover:bg-ink/10 hover:text-ink"
+                >
+                  <svg className="size-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                    <circle cx="12" cy="5" r="1.8" />
+                    <circle cx="12" cy="12" r="1.8" />
+                    <circle cx="12" cy="19" r="1.8" />
+                  </svg>
+                </button>
+                <AnimatePresence>
+                  {more && (
+                    <>
+                      <div className="fixed inset-0 z-10" onClick={() => setMore(false)} aria-hidden />
+                      <motion.div
+                        role="menu"
+                        initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                        transition={{ duration: 0.15, ease }}
+                        onKeyDown={(e) => e.key === "Escape" && (e.stopPropagation(), setMore(false))}
+                        className="absolute right-0 top-full z-20 mt-1 w-44 origin-top-right rounded-xl border border-line bg-surface p-1 shadow-lg"
+                      >
+                        {p.status !== "stuck" && (
+                          <button type="button" role="menuitem" autoFocus onClick={() => (setMore(false), act({ action: "stuck" }))} className="block w-full rounded-lg px-3 py-2 text-left text-xs hover:bg-ink/5">
+                            I&apos;m stuck
+                            <span className="block text-[11px] text-muted">Check in again in an hour</span>
+                          </button>
+                        )}
+                        <button type="button" role="menuitem" autoFocus={p.status === "stuck"} onClick={() => (setMore(false), act({ action: "deadline", deadline: false }))} className="block w-full rounded-lg px-3 py-2 text-left text-xs hover:bg-ink/5">
+                          Hide
+                          <span className="block text-[11px] text-muted">Not a priority; stays on your calendar</span>
+                        </button>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
+          </div>
         </div>
-        <h3 className={`mt-2 text-[15px] font-medium leading-snug ${p.status === "done" ? "line-through" : ""}`}>{title}</h3>
-        <p className="mt-1 text-xs text-muted">
+        <h3 className={`mt-2.5 text-sm font-medium leading-snug ${p.status === "done" ? "line-through" : ""}`}>{title}</h3>
+        <p className="mt-1.5 text-xs text-muted">
           {p.category === "deadline" ? "Due" : "Starts"} {p.allDay ? `${day(due, now)}, all day` : `${day(due, now)}, ${clock(due)}`}
         </p>
         {why && <p className="mt-0.5 text-xs text-muted/80">{why}</p>}
@@ -228,8 +279,8 @@ function Card({ p, onAction }: { p: Priority; onAction: (a: PriorityAction) => P
               </div>
             )}
 
-            {/* Three equal buttons that always fit on one line; the rarer actions as small links below. */}
-            <div className="mt-3 grid grid-cols-[auto_1fr_1fr] gap-1.5">
+            {/* Three equal buttons that always fit on one line; the rarer actions are in the ⋮ menu at the top. */}
+            <div className="mt-4 grid grid-cols-[auto_1fr_1fr] gap-2">
               <button type="button" disabled={busy} onClick={() => setMode(mode === "doing" ? null : "doing")} aria-expanded={mode === "doing"} className={`${big} bg-ink font-medium text-paper`}>
                 Doing it now
               </button>
@@ -238,16 +289,6 @@ function Card({ p, onAction }: { p: Priority; onAction: (a: PriorityAction) => P
               </button>
               <button type="button" disabled={busy} onClick={() => setMode(mode === "done" ? null : "done")} aria-expanded={mode === "done"} className={`${big} border border-line bg-surface hover:border-ink/40`}>
                 Done
-              </button>
-            </div>
-            <div className="mt-1.5 flex justify-center gap-4">
-              {p.status !== "stuck" && (
-                <button type="button" disabled={busy} onClick={() => act({ action: "stuck" })} className={`${btn} text-muted hover:text-ink`}>
-                  I&apos;m stuck
-                </button>
-              )}
-              <button type="button" disabled={busy} onClick={() => act({ action: "deadline", deadline: false })} className={`${btn} text-muted hover:text-ink`}>
-                Hide
               </button>
             </div>
 

@@ -7,9 +7,9 @@ import { addDays, parseWhen, startOfDay, startOfMonth, startOfWeek } from "@/lib
 // Phones and tablets (below the wide layout): a bar of five pages at the bottom, the day you're on at the top
 // (tap it for the month), and the week as a strip of days above the calendar.
 
-export type Tab = "today" | "priorities" | "now" | "todo" | "calendar";
+export type Tab = "today" | "priorities" | "mail" | "todo" | "calendar";
 
-export const TAB_TITLE: Record<Exclude<Tab, "calendar">, string> = { today: "Today's plan", priorities: "Priorities", now: "What now?", todo: "To-do" };
+export const TAB_TITLE: Record<Exclude<Tab, "calendar">, string> = { today: "Today", priorities: "Priorities", mail: "Email", todo: "To-do" };
 
 const icon = (children: ReactNode) => (
   <svg className="size-[21px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -20,12 +20,12 @@ const icon = (children: ReactNode) => (
 const TABS: [Tab, string, ReactNode][] = [
   ["today", "Today", icon(<><rect x="4" y="4" width="16" height="16" rx="5" /><circle cx="17" cy="7" r="2.2" fill="currentColor" stroke="none" /></>)],
   ["priorities", "Priorities", icon(<path d="M5 21V4M5 4h11l-2 4 2 4H5" />)],
-  ["now", "What now?", icon(<><circle cx="12" cy="12" r="9" /><path d="M10 8l4 4-4 4" /></>)],
+  ["mail", "Email", icon(<><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3.5 6.5 8.5 6 8.5-6" /></>)],
   ["todo", "To-do", icon(<path d="m4 7 2 2 3-3M4 15l2 2 3-3M12 8h8M12 16h8" />)],
   ["calendar", "Calendar", icon(<><rect x="3.5" y="5" width="17" height="15" rx="3" /><path d="M3.5 10h17M8 3v4M16 3v4" /></>)],
 ];
 
-export function BottomBar({ tab, onTab, open }: { tab: Tab; onTab: (t: Tab) => void; open: number }) {
+export function BottomBar({ tab, onTab, open, mail, todayDot }: { tab: Tab; onTab: (t: Tab) => void; open: number; mail: number; todayDot: boolean }) {
   return (
     <nav
       aria-label="Main"
@@ -33,6 +33,7 @@ export function BottomBar({ tab, onTab, open }: { tab: Tab; onTab: (t: Tab) => v
     >
       {TABS.map(([id, label, svg]) => {
         const on = tab === id;
+        const count = id === "priorities" ? open : id === "mail" ? mail : 0;
         return (
           <button
             key={id}
@@ -43,10 +44,14 @@ export function BottomBar({ tab, onTab, open }: { tab: Tab; onTab: (t: Tab) => v
           >
             {svg}
             <span className={`whitespace-nowrap text-[11px] ${on ? "font-semibold" : ""}`}>{label}</span>
-            {/* What's still open in Priorities, in red. */}
-            {id === "priorities" && open > 0 && (
+            {/* What's still open in Priorities, and email finds waiting for an answer, in red. */}
+            {/* Today: a plain red dot (no number) while it has a suggestion you haven't seen. */}
+            {id === "today" && todayDot && (
+              <span className="absolute left-1/2 top-1.5 ml-2 size-2.5 rounded-full ring-2 ring-surface" style={{ background: "var(--sev-critical)" }} aria-label="New suggestion" />
+            )}
+            {count > 0 && (
               <span className="absolute left-1/2 top-1 ml-1.5 grid min-w-4 place-items-center rounded-full px-1 text-[10px] font-semibold text-white" style={{ background: "var(--sev-critical)" }}>
-                {open}
+                {count}
               </span>
             )}
           </button>
@@ -163,7 +168,8 @@ export function MonthPanel({
 
   const lead = (month.getDay() + 6) % 7; // weeks start on Monday
   const count = new Date(next.getTime() - DAY).getDate();
-  const arrow = "grid size-11 place-items-center rounded-full text-muted hover:bg-ink/5 hover:text-ink";
+  // lg: sizes are for wide screens, where it sits in a small bubble under the date title.
+  const arrow = "grid size-11 lg:size-8 place-items-center rounded-full text-muted hover:bg-ink/5 hover:text-ink";
 
   return (
     <motion.div
@@ -177,7 +183,7 @@ export function MonthPanel({
     >
       <div className="pb-3">
         <div className="flex items-center justify-between px-1.5">
-          <p className="font-serif text-2xl leading-none" aria-live="polite">
+          <p className="font-serif text-2xl leading-none lg:text-xl" aria-live="polite">
             {fmt(month, { month: "long", year: "numeric" })}
           </p>
           <div className="flex gap-0.5">
@@ -195,7 +201,7 @@ export function MonthPanel({
         </div>
         <div className="mt-2 grid grid-cols-7 gap-y-0.5">
           {["M", "T", "W", "T", "F", "S", "S"].map((w, i) => (
-            <span key={i} className="py-1.5 text-center text-xs text-muted" aria-hidden>
+            <span key={i} className="py-1.5 text-center text-xs text-muted lg:py-1 lg:text-[11px]" aria-hidden>
               {w}
             </span>
           ))}
@@ -206,15 +212,15 @@ export function MonthPanel({
             const here = +d === +startOfDay(day);
             const today = +d === +startOfDay(now);
             return (
-              <button key={+d} type="button" onClick={() => onPick(d)} aria-pressed={here} aria-label={fmt(d, { weekday: "long", day: "numeric", month: "long" }) + (today ? ", today" : "")} className="flex h-[46px] flex-col items-center justify-center gap-[3px]">
-                <span className={`grid size-[34px] place-items-center text-[15px] ${here ? "rounded-[11px] bg-ink font-medium text-paper" : today ? "font-semibold text-accent" : ""}`}>{d.getDate()}</span>
+              <button key={+d} type="button" onClick={() => onPick(d)} aria-pressed={here} aria-label={fmt(d, { weekday: "long", day: "numeric", month: "long" }) + (today ? ", today" : "")} className="group flex h-[46px] flex-col items-center justify-center gap-[3px] lg:h-9 lg:gap-0.5">
+                <span className={`grid size-[34px] place-items-center rounded-[11px] text-[15px] transition-colors lg:size-7 lg:rounded-[9px] lg:text-[13px] ${here ? "bg-ink font-medium text-paper" : `group-hover:bg-ink/10 ${today ? "font-semibold text-accent" : ""}`}`}>{d.getDate()}</span>
                 <Dots colors={dots.get(+d)} />
               </button>
             );
           })}
         </div>
         <div className="mt-2.5 flex justify-end px-1.5">
-          <button type="button" onClick={() => onPick(startOfDay(now))} className="rounded-full border border-line px-3.5 py-1.5 text-sm hover:border-ink/40">
+          <button type="button" onClick={() => onPick(startOfDay(now))} className="rounded-full border border-line px-3.5 py-1.5 text-sm hover:border-ink/40 lg:px-3 lg:py-1 lg:text-xs">
             Today
           </button>
         </div>

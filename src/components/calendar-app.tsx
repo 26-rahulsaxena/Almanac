@@ -24,7 +24,7 @@ import { EMPTY_PROFILE, type Profile } from "@/lib/profile";
 import { PrioritiesPanel, type PriorityAction } from "./priorities-panel";
 import { AddCalendarHelp } from "./add-calendar";
 import { MailFinds } from "./mail-finds";
-import { Review, TodayCard, WhatNow, WhatNowBody } from "./coach";
+import { Modal, Review, TodayCard, WhatNowBody } from "./coach";
 import { BottomBar, DateButton, MonthPanel, TAB_TITLE, WeekStrip, type Tab } from "./phone";
 import { Suggestions, type PlanMode } from "./suggestions";
 import { ThemeToggle } from "./theme-toggle";
@@ -203,16 +203,62 @@ export function CalendarApp({
   const menuButton = useRef<HTMLButtonElement>(null);
   const menuClose = useRef<HTMLButtonElement>(null);
   const menuWasOpen = useRef(false);
-  const [todos, setTodos] = useState(false); // the to-do pop-up (from the "+" menu)
-  const [nowOpen, setNowOpen] = useState(false); // "What now?"
+  const [todos, setTodos] = useState<boolean | DOMRect>(false); // the to-do pop-up (a DOMRect: opened from that header button, so it hangs under it)
   const [review, setReview] = useState(false); // the week in review
   const [addCal, setAddCal] = useState(false); // how to add a calendar from another Google account
   const [away, setAway] = useState<AwayKind | null>(null); // the out of office / focus time pop-up
   const wide = useWide();
+  // Email finds waiting: behind the header's mail button on wide screens, the Email tab on phones (both with a count).
+  const [mailCount, setMailCount] = useState<number | null>(null); // null: not known yet
+  const [mailOpen, setMailOpen] = useState<DOMRect | null>(null); // where its header button is, while open
+  const [nowPick, setNowPick] = useState<string | null>(null); // the task What now? is suggesting, left out of today's plan under it
+  const [todayAt, setTodayAt] = useState<DOMRect | null>(null); // the Today button, while its plan bubble is open
+  const [monthAt, setMonthAt] = useState<DOMRect | null>(null); // the date title, while its month bubble is open
+  const countMail = useCallback((n: number) => {
+    setMailCount(n);
+    if (!n) setMailOpen(null); // the last one answered: nothing left to show
+  }, []);
+  useEffect(() => {
+    fetch("/api/mail")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((l) => countMail(Array.isArray(l) ? l.length : 0))
+      .catch(() => {});
+  }, [gen, countMail]);
   // Phones: the page picked in the bottom bar, and the month dropped down from the date at the top.
   const [tab, setTab] = useState<Tab>("calendar");
   const [monthOpen, setMonthOpen] = useState(false);
   const phone = mounted && !wide;
+  // A red dot on Today (the header icon, the phone's tab) while it has a suggestion you haven't opened it to see:
+  // What now?'s pick and the day plan's tasks. Opening Today clears it until a new one comes. Remembered per device.
+  // shortcut: rechecked when the calendar changes and every 10 min; push it from the server if it should be instant.
+  const [todayTips, setTodayTips] = useState<string[] | null>(null);
+  const [todaySeen, setTodaySeen] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.todaySeen ?? "[]");
+    } catch {
+      return [];
+    }
+  });
+  useEffect(() => {
+    const check = () =>
+      fetch("/api/coach")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d: { now?: { picks?: { title: string }[] }; today?: { blocks?: { title: string }[] } } | null) => {
+          if (d) setTodayTips([d.now?.picks?.[0]?.title, ...(d.today?.blocks ?? []).map((b) => b.title)].filter((t): t is string => !!t));
+        })
+        .catch(() => {});
+    check();
+    const id = setInterval(check, 10 * 60_000);
+    return () => clearInterval(id);
+  }, [gen]);
+  const seeToday = () => {
+    if (!todayTips) return;
+    setTodaySeen(todayTips);
+    try {
+      localStorage.todaySeen = JSON.stringify(todayTips);
+    } catch {}
+  };
+  const todayDot = !!todayTips?.some((t) => !todaySeen.includes(t)) && !todayAt && !(phone && tab === "today");
   const openTodos = () => (matchMedia(WIDE).matches ? setTodos(true) : setTab("todo"));
   // Priorities sit beside the calendar on wide screens (scroll to them) and are a page of their own on phones.
   const showPriorities = useCallback(() => {
@@ -632,11 +678,6 @@ export function CalendarApp({
   const found = results?.q === q ? results.events.filter(shown) : null;
   const openEvent = (e: Ev) => (e.calendarId === TODO_CAL ? openTodos() : setPanel({ form: draftFromEvent(e), event: e }));
   const openPriorities = priorities?.filter((p) => p.status !== "done").length ?? 0;
-  const whatNow = (
-    <button type="button" onClick={() => setNowOpen(true)} className="whitespace-nowrap rounded-full border border-accent/60 px-3 py-1.5 text-sm text-accent hover:border-accent">
-      What now?
-    </button>
-  );
   const foundDays = useMemo(() => {
     const seen = new Map<number, Date>();
     for (const e of found ?? []) {
@@ -679,28 +720,6 @@ export function CalendarApp({
           </div>
           <div className="flex shrink-0 items-center gap-1 lg:gap-2">
             <span className="hidden text-sm text-muted lg:inline">{name}</span>
-            {/* Wide screens: Today, To-do, search, theme, settings. Phones have Today and To-do in the bottom bar. */}
-            <button
-              type="button"
-              onClick={goToday}
-              aria-label={`Today, ${now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })}`}
-              title="Today (T)"
-              className="hidden h-10 shrink-0 items-center whitespace-nowrap rounded-full border border-line bg-surface px-4 text-sm hover:border-ink/40 lg:flex"
-            >
-              Today{mounted && <span className="text-muted"> · {now.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</span>}
-            </button>
-            <button
-              type="button"
-              onClick={() => setTodos(true)}
-              aria-label="To-dos"
-              title="To-dos"
-              className="hidden size-10 shrink-0 place-items-center rounded-full border border-line bg-surface hover:border-ink/40 lg:grid"
-            >
-              {/* A checklist: two ticks and two lines. */}
-              <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <path d="m3.5 7 1.8 1.8L8.5 5.5M3.5 15.5l1.8 1.8 3.2-3.3M12 7h8.5M12 16h8.5" />
-              </svg>
-            </button>
             {/* Search: the round button grows to the left into the search box (over the name and date while open). */}
             <div className="relative size-9 shrink-0 sm:size-10">
               <div
@@ -750,6 +769,54 @@ export function CalendarApp({
                 )}
               </div>
             </div>
+            {/* Wide screens: search, Today, mail, To-do, theme, settings. Phones have Today and To-do in the bottom bar. */}
+            <button
+              type="button"
+              onClick={(e) => {
+                seeToday();
+                setTodayAt(e.currentTarget.getBoundingClientRect());
+              }}
+              aria-label={`Today: what to do now, and the rest of the day${todayDot ? " (new suggestion)" : ""}`}
+              title="Today"
+              className="relative hidden size-10 shrink-0 place-items-center rounded-full border border-line bg-surface hover:border-ink/40 lg:grid"
+            >
+              {/* The phone bar's Today icon: a rounded square with a dot. */}
+              <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <rect x="4" y="4" width="16" height="16" rx="5" />
+                <circle cx="17" cy="7" r="2.2" fill="currentColor" stroke="none" />
+              </svg>
+              {/* A plain red dot, no number: Today has a suggestion you haven't opened it to see. */}
+              {todayDot && <span className="absolute -top-0.5 -right-0.5 size-3 rounded-full bg-accent ring-2 ring-paper" aria-hidden />}
+            </button>
+            {wide && !!mailCount && (
+              <button
+                type="button"
+                onClick={(e) => setMailOpen(e.currentTarget.getBoundingClientRect())}
+                aria-label={`Found in your email: ${mailCount} waiting`}
+                title="Found in your email"
+                className="relative grid size-10 shrink-0 place-items-center rounded-full border border-accent/50 bg-surface hover:border-ink/40"
+              >
+                <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <rect x="3" y="5" width="18" height="14" rx="2" />
+                  <path d="m3.5 6.5 8.5 6 8.5-6" />
+                </svg>
+                <span className="absolute -top-1 -right-1 grid min-w-5 place-items-center rounded-full bg-accent px-1 text-[0.7rem] font-medium leading-5 text-paper" aria-hidden>
+                  {mailCount}
+                </span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={(e) => setTodos(e.currentTarget.getBoundingClientRect())}
+              aria-label="To-dos"
+              title="To-dos"
+              className="hidden size-10 shrink-0 place-items-center rounded-full border border-line bg-surface hover:border-ink/40 lg:grid"
+            >
+              {/* A checklist: two ticks and two lines. */}
+              <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="m3.5 7 1.8 1.8L8.5 5.5M3.5 15.5l1.8 1.8 3.2-3.3M12 7h8.5M12 16h8.5" />
+              </svg>
+            </button>
             <ThemeToggle className="size-9 sm:size-10" />
             <button
               type="button"
@@ -985,9 +1052,23 @@ export function CalendarApp({
           {/* Wide screens: the dates shown and What now? (phones have the date at the top and What now? in the bar). */}
           <div className="flex flex-wrap items-center gap-2 max-lg:hidden">
             <h1 className="mr-auto font-serif text-4xl" aria-live="polite">
-              {mounted ? titleOf(view, anchor, days) : " "}
+              {mounted ? (
+                // Opens the month (as on the phone), with a Today button to jump back.
+                <button type="button" onClick={(e) => {
+                    // The bubble's tail points at the arrow, hanging just under the title.
+                    const b = e.currentTarget.getBoundingClientRect();
+                    const a = e.currentTarget.querySelector("svg")!.getBoundingClientRect();
+                    setMonthAt(new DOMRect(a.left, b.top, a.width, b.height));
+                  }} aria-expanded={!!monthAt} title="Pick a day" className="inline-flex items-center gap-2 rounded-xl text-left hover:text-accent">
+                  {titleOf(view, anchor, days)}
+                  <svg className={`size-5 shrink-0 text-muted transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] ${monthAt ? "rotate-180" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </button>
+              ) : (
+                " "
+              )}
             </h1>
-            {whatNow}
           </div>
           {/* Phones: the month when the date at the top is tapped (it pushes the calendar down), otherwise on the
               day view the week as a strip of days. */}
@@ -1041,17 +1122,24 @@ export function CalendarApp({
             // Phones: the page picked in the bottom bar, in place of the calendar.
             <div className="mt-1">
               {tab === "today" ? (
+                // What now? on top, then the rest of the day (the same as the Today bubble on wide screens).
                 <div className="space-y-4">
-                  <TodayCard version={gen} onCalendarChange={() => setGen((g) => g + 1)} waiting />
-                  <MailFinds email={email} version={gen} onCalendarChange={() => setGen((g) => g + 1)} />
+                  <section aria-label="What now?" className="rounded-2xl border border-line bg-surface p-4">
+                    <WhatNowBody onCalendarChange={() => setGen((g) => g + 1)} onPick={setNowPick} />
+                  </section>
+                  <TodayCard version={gen} onCalendarChange={() => setGen((g) => g + 1)} waiting skip={nowPick} />
                   <Suggestions version={gen} onCalendarChange={() => setGen((g) => g + 1)} />
                 </div>
               ) : tab === "priorities" ? (
                 <PrioritiesPanel items={priorities} onAction={priorityAction} />
-              ) : tab === "now" ? (
-                <section aria-label="What now?" className="rounded-2xl border border-line bg-surface p-4">
-                  <WhatNowBody onCalendarChange={() => setGen((g) => g + 1)} />
-                </section>
+              ) : tab === "mail" ? (
+                mailCount === 0 ? (
+                  <p className="rounded-2xl border border-line bg-surface p-4 text-sm text-muted">
+                    Nothing waiting from your email. With Read my email on (Settings), meetings, calls and deadlines found in new mail show up here.
+                  </p>
+                ) : (
+                  <MailFinds email={email} version={gen} onCalendarChange={() => setGen((g) => g + 1)} onCount={countMail} />
+                )
               ) : (
                 <TodoBody
                   version={gen}
@@ -1182,9 +1270,7 @@ export function CalendarApp({
           </div>
           {wide && (
             <div className="min-w-0 space-y-4 lg:flex lg:min-h-0 lg:flex-col lg:gap-4 lg:space-y-0 lg:overflow-y-auto">
-              <TodayCard version={gen} onCalendarChange={() => setGen((g) => g + 1)} />
-              <MailFinds email={email} version={gen} onCalendarChange={() => setGen((g) => g + 1)} />
-              <Suggestions version={gen} onCalendarChange={() => setGen((g) => g + 1)} />
+                            <Suggestions version={gen} onCalendarChange={() => setGen((g) => g + 1)} />
               <PrioritiesPanel items={priorities} onAction={priorityAction} />
             </div>
           )}
@@ -1208,9 +1294,45 @@ export function CalendarApp({
       </AnimatePresence>
 
       <AnimatePresence>
+        {mailOpen && (
+          <Modal key="mail" title="Found in your email" onClose={() => setMailOpen(null)} at={mailOpen}>
+            <MailFinds email={email} version={gen} onCalendarChange={() => setGen((g) => g + 1)} inDialog onCount={countMail} />
+          </Modal>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {todayAt && (
+          <Modal key="today" title="Today" onClose={() => (seeToday(), setTodayAt(null))} at={todayAt} width={320}>
+            {/* What now? and today's plan in one: the next step first, then the rest of the day. */}
+            <WhatNowBody onCalendarChange={() => setGen((g) => g + 1)} onPick={setNowPick} />
+            <h3 className="mt-4 border-t border-line pt-3 font-mono text-[10px] uppercase tracking-[0.25em] text-muted">The rest of today</h3>
+            <TodayCard version={gen} onCalendarChange={() => setGen((g) => g + 1)} waiting inDialog skip={nowPick} />
+          </Modal>
+        )}
+        {monthAt && (
+          <Modal key="month" label="Pick a day" onClose={() => setMonthAt(null)} at={monthAt} width={320}>
+            <MonthPanel
+              day={anchor}
+              now={now}
+              onPick={(d) => {
+                setDir(0);
+                setAnchor(d);
+                setMonthAt(null);
+              }}
+              onClose={() => setMonthAt(null)}
+              load={loadShown}
+              color={color}
+            />
+          </Modal>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
         {todos && (
           <TodoDialog
             key="todos"
+            at={todos instanceof DOMRect ? todos : null}
             version={gen}
             now={now}
             onCalendarChange={() => setGen((g) => g + 1)}
@@ -1225,7 +1347,6 @@ export function CalendarApp({
       </AnimatePresence>
 
       <AnimatePresence>
-        {nowOpen && <WhatNow key="now" onClose={() => setNowOpen(false)} onCalendarChange={() => setGen((g) => g + 1)} />}
         {review && <Review key="review" onClose={() => setReview(false)} />}
         {addCal && <AddCalendarHelp key="addcal" email={email} onClose={() => setAddCal(false)} />}
         {settings && (
@@ -1278,6 +1399,7 @@ export function CalendarApp({
         <BottomBar
           tab={tab}
           onTab={(t) => {
+            if (t === "today" || tab === "today") seeToday(); // opened it, or leaving it after seeing it
             setTab(t);
             setMonthOpen(false);
             setQuery("");
@@ -1285,6 +1407,8 @@ export function CalendarApp({
             scrollTo({ top: 0 });
           }}
           open={openPriorities}
+          mail={mailCount ?? 0}
+          todayDot={todayDot}
         />
       )}
 

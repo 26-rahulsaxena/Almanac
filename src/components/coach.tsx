@@ -25,8 +25,64 @@ async function book(p: Pick, start: Date) {
   if (!r.ok) throw new Error((await r.json().catch(() => null))?.error ?? "Couldn't book it.");
 }
 
-export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+// at: the button it was opened from. Then it hangs just under that button like a chat bubble, its tail pointing
+// up at it, instead of in the middle of the screen.
+// shortcut: placed once when opened, not moved if the window is resized while it's open.
+// No title: no title bar either (the content brings its own heading); label names it for screen readers.
+export function Modal({ title, label, onClose, children, at, width: max = 360 }: { title?: string; label?: string; onClose: () => void; children: ReactNode; at?: DOMRect | null; width?: number }) {
   const ref = useDialog<HTMLDivElement>(onClose);
+  const box = (
+    <>
+      {title && (
+        // A bubble under a header button is compact; the pop-up in the middle of the screen keeps its roomier size.
+        <header className={`flex items-center justify-between border-b border-line ${at ? "px-4 py-2.5" : "px-5 py-3.5"}`}>
+          <h2 id="coach-title" className={`font-serif ${at ? "text-xl" : "text-2xl"}`}>
+            {title}
+          </h2>
+          <button type="button" onClick={onClose} aria-label="Close" className="grid size-8 place-items-center rounded-full text-muted hover:bg-ink/5 hover:text-ink">
+            ✕
+          </button>
+        </header>
+      )}
+      <div className={`overflow-y-auto ${at ? "px-4 py-3" : "px-5 py-4"}`}>{children}</div>
+    </>
+  );
+  const named = title ? { "aria-labelledby": "coach-title" } : { "aria-label": label };
+  if (at) {
+    const vw = window.innerWidth;
+    const mid = at.left + at.width / 2;
+    const width = Math.min(max, vw - 32); // 16px from each edge
+    // The tail sits ~48px in from the bubble's right edge, unless the bubble has to slide over to stay on screen.
+    const left = Math.min(Math.max(16, mid + 48 - width), vw - 16 - width);
+    const top = at.bottom + 12;
+    const tail = mid - left; // from the bubble's left edge to under the button's middle
+    return (
+      <>
+        <motion.div className="fixed inset-0 z-40" onClick={onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />
+        <motion.div
+          ref={ref}
+          role="dialog"
+          aria-modal="true"
+          {...named}
+          initial={{ scale: 0.9, opacity: 0, y: -6 }}
+          animate={{ scale: 1, opacity: 1, y: 0 }}
+          exit={{ scale: 0.95, opacity: 0, y: -4 }}
+          transition={{ type: "spring", damping: 26, stiffness: 340 }}
+          style={{ top, left, width, transformOrigin: `${tail}px 0` }}
+          className="fixed z-50"
+        >
+          <span
+            aria-hidden
+            style={{ left: tail - 10 }}
+            className="absolute -top-2.5 z-10 size-5 rotate-45 rounded-tl-[5px] border-l border-t border-line bg-surface"
+          />
+          <div className="flex flex-col overflow-hidden rounded-3xl border border-line bg-surface shadow-2xl" style={{ maxHeight: `calc(100dvh - ${top + 16}px)` }}>
+            {box}
+          </div>
+        </motion.div>
+      </>
+    );
+  }
   return (
     <>
       <motion.div className="fixed inset-0 z-40 bg-ink/25 backdrop-blur-[2px]" onClick={onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />
@@ -35,22 +91,14 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
           ref={ref}
           role="dialog"
           aria-modal="true"
-          aria-labelledby="coach-title"
+          {...named}
           initial={{ scale: 0.95, opacity: 0, y: 12 }}
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.97, opacity: 0, y: 8 }}
           transition={{ type: "spring", damping: 26, stiffness: 340 }}
           className="pointer-events-auto flex max-h-[min(44rem,calc(100dvh-2rem))] w-full max-w-md flex-col overflow-hidden rounded-3xl border border-line bg-surface shadow-2xl"
         >
-          <header className="flex items-center justify-between border-b border-line px-5 py-3.5">
-            <h2 id="coach-title" className="font-serif text-2xl">
-              {title}
-            </h2>
-            <button type="button" onClick={onClose} aria-label="Close" className="grid size-8 place-items-center rounded-full text-muted hover:bg-ink/5 hover:text-ink">
-              ✕
-            </button>
-          </header>
-          <div className="overflow-y-auto px-5 py-4">{children}</div>
+          {box}
         </motion.div>
       </div>
     </>
@@ -67,7 +115,9 @@ export function WhatNow({ onClose, onCalendarChange }: { onClose: () => void; on
 }
 
 // The same, without the pop-up around it (the phone's "What now?" tab).
-export function WhatNowBody({ onCalendarChange }: { onCalendarChange: () => void }) {
+// onPick hears which task it is suggesting, so the day's plan shown with it can leave that one out.
+// lg: sizes are for wide screens, where it (and TodayCard) only show in the small Today bubble.
+export function WhatNowBody({ onCalendarChange, onPick }: { onCalendarChange: () => void; onPick?: (title: string | null) => void }) {
   const [answer, setAnswer] = useState<NowAnswer | null>(null);
   const [i, setI] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -79,6 +129,7 @@ export function WhatNowBody({ onCalendarChange }: { onCalendarChange: () => void
   }, []);
 
   const pick = answer?.picks[i];
+  useEffect(() => onPick?.(pick?.title ?? null), [pick, onPick]);
   async function blockIt() {
     if (!pick) return;
     setBusy(true);
@@ -103,23 +154,23 @@ export function WhatNowBody({ onCalendarChange }: { onCalendarChange: () => void
           {pick ? (
             <>
               <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-accent">{i === 0 ? "Do this now" : `Or this (${i + 1} of ${answer.picks.length})`}</p>
-              <p className="mt-1 break-words font-serif text-3xl leading-tight">{pick.title}</p>
-              <p className="mt-2 text-sm text-muted">{pick.why}</p>
+              <p className="mt-1 break-words font-serif text-3xl leading-tight lg:text-xl">{pick.title}</p>
+              <p className="mt-2 text-sm text-muted lg:mt-1 lg:text-xs">{pick.why}</p>
             </>
           ) : (
-            <p className="break-words font-serif text-2xl leading-snug">{answer.headline}</p>
+            <p className="break-words font-serif text-2xl leading-snug lg:text-lg">{answer.headline}</p>
           )}
-          <p className="mt-3 text-sm">{answer.detail}</p>
+          <p className="mt-3 text-sm lg:mt-1.5 lg:text-xs">{answer.detail}</p>
           {booked ? (
             <p className="mt-4 rounded-xl bg-ink/5 px-3 py-2 text-sm">{booked}</p>
           ) : (
             pick && (
-              <div className="mt-5 flex flex-wrap gap-2">
-                <button type="button" data-autofocus disabled={busy || pick.minutes < 5} onClick={blockIt} className="rounded-full bg-ink px-4 py-2 text-sm font-medium text-paper disabled:opacity-50">
+              <div className="mt-5 flex flex-wrap gap-2 lg:mt-3">
+                <button type="button" data-autofocus disabled={busy || pick.minutes < 5} onClick={blockIt} className="rounded-full bg-ink px-4 py-2 text-sm font-medium text-paper disabled:opacity-50 lg:px-3 lg:py-1.5 lg:text-xs">
                   {busy ? "Booking…" : `Block ${length(pick.minutes)} for it now`}
                 </button>
                 {answer.picks.length > 1 && (
-                  <button type="button" onClick={() => setI((i + 1) % answer.picks.length)} className="rounded-full border border-line px-4 py-2 text-sm hover:border-ink/40">
+                  <button type="button" onClick={() => setI((i + 1) % answer.picks.length)} className="rounded-full border border-line px-4 py-2 text-sm hover:border-ink/40 lg:px-3 lg:py-1.5 lg:text-xs">
                     Something else
                   </button>
                 )}
@@ -138,7 +189,9 @@ export function WhatNowBody({ onCalendarChange }: { onCalendarChange: () => void
 }
 
 // Today at a glance, above Priorities: events, free time, and the most important work for each free stretch.
-export function TodayCard({ version, onCalendarChange, waiting }: { version: number; onCalendarChange: () => void; waiting?: boolean }) {
+// inDialog: inside the header Today button's bubble, which has its own title, so no card or heading.
+// skip: the task What now? is already suggesting above it, so it isn't offered twice.
+export function TodayCard({ version, onCalendarChange, waiting, inDialog, skip }: { version: number; onCalendarChange: () => void; waiting?: boolean; inDialog?: boolean; skip?: string | null }) {
   const [plan, setPlan] = useState<DayPlan | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -162,20 +215,22 @@ export function TodayCard({ version, onCalendarChange, waiting }: { version: num
 
   if (!plan) return waiting ? <p className="text-sm text-muted">Looking at your day…</p> : null;
   return (
-    <section aria-labelledby="today-title" className="rounded-2xl border border-line bg-surface p-4">
-      <h2 id="today-title" className="font-serif text-xl">
-        Today
-      </h2>
-      <p className="mt-0.5 text-sm text-muted">
+    <section aria-labelledby={inDialog ? undefined : "today-title"} className={inDialog ? "" : "rounded-2xl border border-line bg-surface p-4"}>
+      {!inDialog && (
+        <h2 id="today-title" className="font-serif text-xl">
+          Today
+        </h2>
+      )}
+      <p className="mt-0.5 text-sm text-muted lg:text-xs">
         {plan.count ? `${plan.count} event${plan.count === 1 ? "" : "s"}` : "No events"}
         {plan.first && ` · first “${plan.first.title}” at ${time(plan.first.start)}`}
         {plan.last && plan.count > 1 && ` · done by ${time(plan.last.end)}`}
         {` · ${hours(plan.freeMinutes)} free`}
       </p>
-      {plan.blocks.length > 0 && (
+      {plan.blocks.some((b) => b.title !== skip) && (
         <ul className="mt-3 space-y-2">
-          {plan.blocks.map((b) => (
-            <li key={b.start} className="flex items-start gap-3 text-sm">
+          {plan.blocks.filter((b) => b.title !== skip).map((b) => (
+            <li key={b.start} className="flex items-start gap-3 text-sm lg:text-xs">
               <span className="w-16 shrink-0 pt-0.5 font-mono text-xs text-muted">{time(b.start)}</span>
               <span className="min-w-0 flex-1">
                 <span className="block break-words leading-snug">{b.title}</span>

@@ -1,14 +1,22 @@
 "use client";
 import { motion } from "motion/react";
 import type { ComponentProps } from "react";
+import { Modal } from "./coach";
 import { Routines } from "./routines";
 import { Suggestions } from "./suggestions";
 import { TodoList } from "./todo-list";
 import { useDialog } from "./use-dialog";
 
 // The "+ To-do" pop-up: the to-do list (add, edit, tick off, remove) and focus time & habits, in one place.
-export function TodoDialog({ onClose, ...list }: Omit<ComponentProps<typeof TodoList>, "autoFocus"> & { onClose: () => void }) {
+// at: opened from the header's To-do button, so it hangs under it as a bubble (see Modal).
+export function TodoDialog({ onClose, at, ...list }: Omit<ComponentProps<typeof TodoList>, "autoFocus"> & { onClose: () => void; at?: DOMRect | null }) {
   const ref = useDialog<HTMLDivElement>(onClose);
+  if (at)
+    return (
+      <Modal title="To-dos" onClose={onClose} at={at}>
+        <TodoBody {...list} autoFocus />
+      </Modal>
+    );
   return (
     <>
       <motion.div className="fixed inset-0 z-40 bg-ink/25 backdrop-blur-[2px]" onClick={onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />
