@@ -99,6 +99,8 @@ const SPLIT_DEFAULT = 70;
 const SPLIT_MIN = 40;
 const SPLIT_MAX = 80;
 
+const NO_MAIL = "Nothing waiting from your email. With Read my email on (Settings), meetings, calls and deadlines found in new mail show up here.";
+
 const useMounted = () => useSyncExternalStore(() => () => {}, () => true, () => false);
 
 // Wide screens (lg and up) show Today and Priorities beside the calendar; phones open them from two buttons.
@@ -214,16 +216,12 @@ export function CalendarApp({
   const [nowPick, setNowPick] = useState<string | null>(null); // the task What now? is suggesting, left out of today's plan under it
   const [todayAt, setTodayAt] = useState<DOMRect | null>(null); // the Today button, while its plan bubble is open
   const [monthAt, setMonthAt] = useState<DOMRect | null>(null); // the date title, while its month bubble is open
-  const countMail = useCallback((n: number) => {
-    setMailCount(n);
-    if (!n) setMailOpen(null); // the last one answered: nothing left to show
-  }, []);
   useEffect(() => {
     fetch("/api/mail")
       .then((r) => (r.ok ? r.json() : null))
-      .then((l) => countMail(Array.isArray(l) ? l.length : 0))
+      .then((l) => setMailCount(Array.isArray(l) ? l.length : 0))
       .catch(() => {});
-  }, [gen, countMail]);
+  }, [gen, setMailCount]);
   // Phones: the page picked in the bottom bar, and the month dropped down from the date at the top.
   const [tab, setTab] = useState<Tab>("calendar");
   const [monthOpen, setMonthOpen] = useState(false);
@@ -787,21 +785,24 @@ export function CalendarApp({
               {/* A plain red dot, no number: Today has a suggestion you haven't opened it to see. */}
               {todayDot && <span className="absolute -top-0.5 -right-0.5 size-3 rounded-full bg-accent ring-2 ring-paper" aria-hidden />}
             </button>
-            {wide && !!mailCount && (
+            {/* Always there on wide screens; the count shows only when something is waiting. */}
+            {wide && (
               <button
                 type="button"
                 onClick={(e) => setMailOpen(e.currentTarget.getBoundingClientRect())}
-                aria-label={`Found in your email: ${mailCount} waiting`}
+                aria-label={mailCount ? `Found in your email: ${mailCount} waiting` : "Found in your email"}
                 title="Found in your email"
-                className="relative grid size-10 shrink-0 place-items-center rounded-full border border-accent/50 bg-surface hover:border-ink/40"
+                className={`relative grid size-10 shrink-0 place-items-center rounded-full border bg-surface hover:border-ink/40 ${mailCount ? "border-accent/50" : "border-line"}`}
               >
                 <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                   <rect x="3" y="5" width="18" height="14" rx="2" />
                   <path d="m3.5 6.5 8.5 6 8.5-6" />
                 </svg>
-                <span className="absolute -top-1 -right-1 grid min-w-5 place-items-center rounded-full bg-accent px-1 text-[0.7rem] font-medium leading-5 text-paper" aria-hidden>
-                  {mailCount}
-                </span>
+                {!!mailCount && (
+                  <span className="absolute -top-1 -right-1 grid min-w-5 place-items-center rounded-full bg-accent px-1 text-[0.7rem] font-medium leading-5 text-paper" aria-hidden>
+                    {mailCount}
+                  </span>
+                )}
               </button>
             )}
             <button
@@ -1138,11 +1139,9 @@ export function CalendarApp({
                 <PrioritiesPanel items={priorities} onAction={priorityAction} />
               ) : tab === "mail" ? (
                 mailCount === 0 ? (
-                  <p className="rounded-2xl border border-line bg-surface p-4 text-sm text-muted">
-                    Nothing waiting from your email. With Read my email on (Settings), meetings, calls and deadlines found in new mail show up here.
-                  </p>
+                  <p className="rounded-2xl border border-line bg-surface p-4 text-sm text-muted">{NO_MAIL}</p>
                 ) : (
-                  <MailFinds email={email} version={gen} onCalendarChange={() => setGen((g) => g + 1)} onCount={countMail} />
+                  <MailFinds email={email} version={gen} onCalendarChange={() => setGen((g) => g + 1)} onCount={setMailCount} />
                 )
               ) : (
                 <TodoBody
@@ -1300,7 +1299,11 @@ export function CalendarApp({
       <AnimatePresence>
         {mailOpen && (
           <Modal key="mail" title="Found in your email" onClose={() => setMailOpen(null)} at={mailOpen}>
-            <MailFinds email={email} version={gen} onCalendarChange={() => setGen((g) => g + 1)} inDialog onCount={countMail} />
+            {mailCount === 0 ? (
+              <p className="text-sm text-muted">{NO_MAIL}</p>
+            ) : (
+              <MailFinds email={email} version={gen} onCalendarChange={() => setGen((g) => g + 1)} inDialog onCount={setMailCount} />
+            )}
           </Modal>
         )}
       </AnimatePresence>
