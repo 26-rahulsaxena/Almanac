@@ -65,7 +65,6 @@ export function Suggestions({ version, onCalendarChange }: { version: number; on
           </button>
         )}
       </div>
-      <p className="text-xs text-muted">Nothing changes on your calendar until you say OK.</p>
       <ul className="mt-3 space-y-2.5">
         <AnimatePresence initial={false}>
           {list.map((s) => (

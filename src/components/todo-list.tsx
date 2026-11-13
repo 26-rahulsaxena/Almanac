@@ -70,10 +70,7 @@ function Details({ d, set, splittable }: { d: Draft; set: (d: Draft) => void; sp
       )}
       <label className="flex items-start gap-2 text-xs">
         <input type="checkbox" checked={d.auto} onChange={(e) => set({ ...d, auto: e.target.checked })} className="mt-0.5 accent-[var(--accent)]" />
-        <span>
-          Let Almanac plan a time for it
-          <span className="block text-muted">It finds free time before it&apos;s due and keeps it clear when plans change. In Ask-first mode you approve each change.</span>
-        </span>
+        <span>Let Almanac plan a time for it</span>
       </label>
     </>
   );
@@ -168,7 +165,7 @@ export function TodoList({
         </button>
       </form>
 
-      {todos?.length === 0 && <p className="text-xs text-muted">Nothing to do. Add things here, or ask the assistant.</p>}
+      {todos?.length === 0 && <p className="text-xs text-muted">Nothing to do.</p>}
       <ul className="space-y-1">
         <AnimatePresence initial={false}>
           {todos?.map((t) => (
@@ -247,7 +244,7 @@ export function TodoList({
                           On calendar {when(t.scheduled_at)}
                         </button>
                       ) : t.auto ? (
-                        <p className="mt-0.5 text-xs text-muted">Not booked yet: approve the time under “Almanac suggests” (or it books itself in Automatic mode).</p>
+                        <p className="mt-0.5 text-xs text-muted">Not booked yet</p>
                       ) : (
                         <button type="button" disabled={busy === t.id} onClick={() => change(t.id, "PATCH", { id: t.id, schedule: true })} className={`mt-1 ${small}`}>
                           {busy === t.id ? "Finding time…" : "Find time"}

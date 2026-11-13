@@ -63,7 +63,7 @@ export function PrioritiesPanel({ items, onAction }: Props) {
               {items === null
                 ? "Reading your calendar…"
                 : open.length
-                  ? `${open.length} thing${open.length === 1 ? "" : "s"} in the next 5 days, most important first`
+                  ? `${open.length} in the next 5 days`
                   : "Nothing coming up in the next 5 days."}
             </p>
           </div>
@@ -92,10 +92,6 @@ export function PrioritiesPanel({ items, onAction }: Props) {
             </li>
           )}
         </ol>
-        <p className="border-t border-line px-4 py-3 text-xs text-muted">
-          Rated by AI from your whole calendar (or by kind of task and time left when it can’t). Pressing Later twice raises it a level. Your choice always wins and applies to every
-          event with the same name.
-        </p>
     </section>
   );
 }
@@ -209,12 +205,10 @@ function Card({ p, onAction }: { p: Priority; onAction: (a: PriorityAction) => P
                         {p.status !== "stuck" && (
                           <button type="button" role="menuitem" autoFocus onClick={() => (setMore(false), act({ action: "stuck" }))} className="block w-full rounded-lg px-3 py-2 text-left text-xs hover:bg-ink/5">
                             I&apos;m stuck
-                            <span className="block text-[11px] text-muted">Check in again in an hour</span>
                           </button>
                         )}
                         <button type="button" role="menuitem" autoFocus={p.status === "stuck"} onClick={() => (setMore(false), act({ action: "deadline", deadline: false }))} className="block w-full rounded-lg px-3 py-2 text-left text-xs hover:bg-ink/5">
                           Hide
-                          <span className="block text-[11px] text-muted">Not a priority; stays on your calendar</span>
                         </button>
                       </motion.div>
                     </>

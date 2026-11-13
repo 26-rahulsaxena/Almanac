@@ -68,7 +68,6 @@ export function MailFinds({ email, version, onCalendarChange, inDialog, onCount 
           Found in your email
         </h2>
       )}
-      <p className="text-xs text-muted">Nothing goes on your calendar until you press Add. Nobody is invited.</p>
       <ul className="mt-3 space-y-3">
         <AnimatePresence initial={false}>
           {list.map((f) => {

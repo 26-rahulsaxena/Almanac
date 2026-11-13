@@ -107,7 +107,7 @@ export function Routines({ onCalendarChange }: { onCalendarChange: () => void })
         )}
       </form>
 
-      {list?.length === 0 && <p className="text-xs text-muted">None yet. Almanac keeps time for these each week and moves them when plans change.</p>}
+      {list?.length === 0 && <p className="text-xs text-muted">None yet.</p>}
       <ul className="space-y-1">
         <AnimatePresence initial={false}>
           {list?.map((r) => (
@@ -119,7 +119,6 @@ export function Routines({ onCalendarChange }: { onCalendarChange: () => void })
                     <input autoFocus value={editing.d.title} onChange={(e) => setEditing({ id: r.id, d: { ...editing.d, title: e.target.value } })} maxLength={100} className={field} />
                   </label>
                   <Fields d={editing.d} set={(d) => setEditing({ id: r.id, d })} />
-                  <p className="text-xs text-muted">Sessions already booked keep their time; missing ones are added.</p>
                   <div className="flex gap-1.5">
                     <button type="submit" disabled={busy === r.id || !editing.d.title.trim()} className="rounded-full bg-ink px-3 py-1 text-xs font-medium text-paper disabled:opacity-50">
                       {busy === r.id ? "Saving…" : "Save"}

@@ -7,7 +7,7 @@ import { GoogleSignIn } from "./google-sign-in";
 import type { Cal, Ev } from "@/lib/calendar";
 import { CATEGORIES, categoryHex } from "@/lib/categories";
 import type { DeleteInput, SaveInput, Scope, SendUpdates } from "@/lib/recurrence";
-import { addDays, atHour, endedToday, formatTime, parseWhen, startOfDay, startOfMonth, startOfWeek } from "@/lib/time";
+import { addDays, atHour, endedToday, formatTime, parseWhen, startOfDay, startOfMonth, startOfWeek, greeting } from "@/lib/time";
 import { Assistant } from "./assistant";
 import { FullScreenAlert } from "./full-screen-alert";
 import { syncPush } from "./notify-settings";
@@ -719,7 +719,6 @@ export function CalendarApp({
               ))}
           </div>
           <div className="flex shrink-0 items-center gap-1 lg:gap-2">
-            <span className="hidden text-sm text-muted lg:inline">{name}</span>
             {/* Search: the round button grows to the left into the search box (over the name and date while open). */}
             <div className="relative size-9 shrink-0 sm:size-10">
               <div
@@ -1050,8 +1049,13 @@ export function CalendarApp({
         >
           <div className="flex min-w-0 flex-col lg:min-h-0">
           {/* Wide screens: the dates shown and What now? (phones have the date at the top and What now? in the bar). */}
+          {/* Wide screens: a greeting on the left, the dates shown (tap for the month) on the right. */}
           <div className="flex flex-wrap items-center gap-2 max-lg:hidden">
-            <h1 className="mr-auto font-serif text-4xl" aria-live="polite">
+            <h1 className="mr-auto font-serif text-4xl">
+              {/* By the browser's clock; "Hello" until it's known, so the server and browser render the same. */}
+              {mounted ? greeting(now.getHours(), name.split(" ")[0]) : `Hello, ${name.split(" ")[0]}`}
+            </h1>
+            <div className="font-serif text-2xl" aria-live="polite">
               {mounted ? (
                 // Opens the month (as on the phone), with a Today button to jump back.
                 <button type="button" onClick={(e) => {
@@ -1068,7 +1072,7 @@ export function CalendarApp({
               ) : (
                 " "
               )}
-            </h1>
+            </div>
           </div>
           {/* Phones: the month when the date at the top is tapped (it pushes the calendar down), otherwise on the
               day view the week as a strip of days. */}

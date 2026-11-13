@@ -143,3 +143,13 @@ export function layoutColumns<T extends Timed>(events: T[]): { event: T; col: nu
   flush();
   return out;
 }
+
+// The greeting on wide screens, by the hour on the browser's clock.
+export function greeting(hour: number, first: string) {
+  if (hour < 5) return `Up late, ${first}?`;
+  if (hour < 8) return `Early start, ${first}`;
+  if (hour < 12) return `Good morning, ${first}`;
+  if (hour < 17) return `Good afternoon, ${first}`;
+  if (hour < 21) return `Good evening, ${first}`;
+  return `Winding down, ${first}?`;
+}
