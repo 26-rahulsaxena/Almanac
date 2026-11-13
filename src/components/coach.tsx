@@ -1,7 +1,7 @@
 "use client";
 import { motion } from "motion/react";
 import { useEffect, useState, type ReactNode } from "react";
-import { length } from "@/lib/time";
+import { length, whenParts } from "@/lib/time";
 import { startChoices, type DayPlan, type NowAnswer, type Pick, type PrepState, type WeekReview } from "@/lib/coach";
 import { TimeWheel } from "./time-wheel";
 import { useDialog } from "./use-dialog";
@@ -12,6 +12,19 @@ const dayTime = (iso: string) => new Date(iso).toLocaleString("en-IN", { weekday
 const RISK_NOT_NOW = "prepRiskNotNow";
 const todayKey = () => new Date().toDateString();
 const hours = (m: number) => length(Math.round(m / 5) * 5); // totals, to the nearest 5 min
+
+// A reason or note with its dates and times in bold ("due tomorrow night", "in 2 days"), so they stand out.
+export function Emph({ text }: { text: string }) {
+  return whenParts(text).map((part, i) =>
+    i % 2 ? (
+      <span key={i} className="font-semibold text-ink">
+        {part}
+      </span>
+    ) : (
+      part
+    ),
+  );
+}
 
 async function load<T>(url: string): Promise<T> {
   const r = await fetch(url);
@@ -248,7 +261,9 @@ export function WhatNowBody({ onCalendarChange, onPick }: { onCalendarChange: ()
             <>
               <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-accent">{i === 0 ? "Do this now" : `Or this (${i + 1} of ${answer.picks.length})`}</p>
               <p className="mt-1 break-words font-serif text-3xl leading-tight lg:text-xl">{pick.title}</p>
-              <p className="mt-2 text-sm text-muted lg:mt-1 lg:text-xs">{pick.why}</p>
+              <p className="mt-2 text-sm text-muted lg:mt-1 lg:text-xs">
+                <Emph text={pick.why} />
+              </p>
             </>
           ) : (
             <p className="break-words font-serif text-2xl leading-snug lg:text-lg">{answer.headline}</p>
@@ -367,8 +382,18 @@ export function TodayCard({ version, onCalendarChange, waiting, inDialog, skip }
       )}
       <p className="mt-0.5 text-sm text-muted lg:text-xs">
         {plan.count ? `${plan.count} event${plan.count === 1 ? "" : "s"}` : "No events"}
-        {plan.first && ` · first “${plan.first.title}” at ${time(plan.first.start)}`}
-        {plan.last && plan.count > 1 && ` · done by ${time(plan.last.end)}`}
+        {plan.first && (
+          <>
+            {` · first “${plan.first.title}” at `}
+            <span className="font-semibold text-ink">{time(plan.first.start)}</span>
+          </>
+        )}
+        {plan.last && plan.count > 1 && (
+          <>
+            {" · done by "}
+            <span className="font-semibold text-ink">{time(plan.last.end)}</span>
+          </>
+        )}
         {` · ${hours(plan.freeMinutes)} free`}
       </p>
       {risks
@@ -377,7 +402,7 @@ export function TodayCard({ version, onCalendarChange, waiting, inDialog, skip }
           <div key={r.key} role="status" className="mt-3 rounded-xl border border-accent/40 bg-accent/10 px-3 py-2 text-sm lg:text-xs">
             <p className="break-words font-medium">{r.level === "risk" ? `⚠ “${r.title}” is at risk` : `Heads-up: “${r.title}” is tight`}</p>
             <p className="mt-0.5 text-muted">
-              {length(r.left)} of prep left, {length(r.free)} free before {dayTime(r.due)}.
+              {length(r.left)} of prep left, {length(r.free)} free before <span className="font-semibold text-ink">{dayTime(r.due)}</span>.
             </p>
             <div className="mt-2 flex flex-wrap gap-1.5">
               <button type="button" disabled={!!busy || r.free < 15} onClick={() => riskAction(r, "fit")} className="rounded-full bg-ink px-3 py-1 text-xs font-medium text-paper disabled:opacity-50">
@@ -403,17 +428,17 @@ export function TodayCard({ version, onCalendarChange, waiting, inDialog, skip }
                   aria-expanded={choosing === b.start}
                   aria-label={`${time(b.start)}. Pick another time for “${b.title}”`}
                   onClick={() => setChoosing(choosing === b.start ? null : b.start)}
-                  className="w-16 shrink-0 pt-0.5 text-left font-mono text-xs text-muted underline decoration-dotted underline-offset-4 hover:text-ink"
+                  className="w-16 shrink-0 pt-0.5 text-left font-mono text-xs text-accent underline decoration-accent/50 decoration-dotted underline-offset-4 hover:opacity-80"
                 >
                   {time(b.start)}
                 </button>
                 <span className="min-w-0 flex-1">
                   <span className="block break-words leading-snug">{b.title}</span>
                   <span className="block text-xs text-muted">
-                    {length(b.minutes)} · {b.why}
+                    <span className="font-semibold text-ink">{length(b.minutes)}</span> · <Emph text={b.why} />
                   </span>
                 </span>
-                <button type="button" disabled={!!busy} onClick={() => bookBlock(b)} className="shrink-0 rounded-full border border-line px-2.5 py-0.5 text-xs hover:border-ink/40 disabled:opacity-50">
+                <button type="button" disabled={!!busy} onClick={() => bookBlock(b)} className="shrink-0 rounded-full border border-accent/50 px-2.5 py-0.5 text-xs text-accent hover:bg-accent/10 disabled:opacity-50">
                   {busy === b.start ? "Booking…" : "Book"}
                 </button>
               </div>

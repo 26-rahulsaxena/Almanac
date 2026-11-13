@@ -1,6 +1,6 @@
 process.env.TZ = "Asia/Kolkata";
 import { describe, expect, test } from "vitest";
-import { bookableWindow, endedToday, freeSlots, layoutColumns, overlapsDay, parseWhen } from "./time";
+import { bookableWindow, endedToday, freeSlots, layoutColumns, overlapsDay, parseWhen, whenParts } from "./time";
 
 const nov = (d: number, h = 0, m = 0) => new Date(2026, 10, d, h, m); // local IST
 const ev = (start: string, end: string, extra: Partial<{ allDay: boolean; busy: boolean }> = {}) => ({
@@ -138,4 +138,11 @@ describe("overlap layout", () => {
     const placed = layoutColumns([a, b, c]);
     expect(placed.map((p) => [p.col, p.cols])).toEqual([[0, 2], [1, 2], [1, 2]]);
   });
+});
+
+test("the dates and times in a sentence, for showing them bold", () => {
+  const times = (s: string) => whenParts(s).filter((_, i) => i % 2);
+  expect(times("Assignment submission due tomorrow night · in 2 days · sitting 1 of 2")).toEqual(["due tomorrow night", "in 2 days"]);
+  expect(times("Overdue since Fri, 13 Nov · starts 5:00 pm")).toEqual(["Overdue", "Fri, 13 Nov", "5:00 pm"]);
+  expect(times("Client pitch with the team")).toEqual([]);
 });

@@ -153,3 +153,9 @@ export function greeting(hour: number, first: string) {
   if (hour < 21) return `Good evening, ${first}`;
   return `Winding down, ${first}?`;
 }
+
+// Splits text so the dates and times in it can be shown bold: odd items are the times ("in 2 days", "due tomorrow
+// night", "5:00 pm", "Sun, 15 Nov"), even items the words around them.
+const WHEN =
+  /(\bin \d+ (?:min|h|days?|weeks?)\b|\b(?:due |by |starts )?(?:today|tomorrow|tonight|overdue)(?: (?:morning|afternoon|evening|night))?\b|\b\d{1,2}(?::\d{2})? ?[ap]m\b|\b(?:mon|tue|wed|thu|fri|sat|sun)[a-z]*,? \d{1,2} [a-z]{3}\b)/gi;
+export const whenParts = (text: string) => text.split(WHEN);

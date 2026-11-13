@@ -2,6 +2,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
 import type { Priority } from "@/lib/priorities";
+import { Emph } from "./coach";
 import { latestSafe, laterOptions, SEVERITIES, type Severity } from "@/lib/priority";
 
 export const SEVERITY_LABEL: Record<Severity, string> = { critical: "Critical", high: "High", medium: "Medium", low: "Low" };
@@ -220,9 +221,14 @@ function Card({ p, onAction }: { p: Priority; onAction: (a: PriorityAction) => P
         </div>
         <h3 className={`mt-2.5 text-sm font-medium leading-snug ${p.status === "done" ? "line-through" : ""}`}>{title}</h3>
         <p className="mt-1.5 text-xs text-muted">
-          {p.category === "deadline" ? "Due" : "Starts"} {p.allDay ? `${day(due, now)}, all day` : `${day(due, now)}, ${clock(due)}`}
+          {p.category === "deadline" ? "Due" : "Starts"}{" "}
+          <span className="font-semibold text-ink">{p.allDay ? `${day(due, now)}, all day` : `${day(due, now)}, ${clock(due)}`}</span>
         </p>
-        {why && <p className="mt-0.5 text-xs text-muted/80">{why}</p>}
+        {why && (
+          <p className="mt-0.5 text-xs text-muted/80">
+            <Emph text={why} />
+          </p>
+        )}
         {status && (
           <p className="mt-1 text-xs font-medium" style={{ color: p.status === "stuck" ? "var(--sev-critical)" : undefined }}>
             {status}

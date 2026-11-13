@@ -242,14 +242,18 @@ export function TodoList({
                     {!t.done && (
                       <p className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-muted">
                         <span>{length(t.minutes)}</span>
-                        {t.due_at && <span className={soon(t.due_at) ? "font-medium text-accent" : ""}>Due {when(t.due_at)}</span>}
+                        {t.due_at && (
+                          <span className={soon(t.due_at) ? "text-accent" : ""}>
+                            Due <span className={`font-semibold ${soon(t.due_at) ? "" : "text-ink"}`}>{when(t.due_at)}</span>
+                          </span>
+                        )}
                         {t.auto && <span title="Almanac keeps a time for it">Auto</span>}
                       </p>
                     )}
                     {!t.done &&
                       (t.scheduled_at ? (
                         <button type="button" onClick={() => onOpenDay(new Date(t.scheduled_at!))} className="mt-0.5 text-xs underline decoration-line underline-offset-2 hover:text-ink">
-                          On calendar {when(t.scheduled_at)}
+                          On calendar <span className="font-semibold">{when(t.scheduled_at)}</span>
                         </button>
                       ) : t.auto ? (
                         <p className="mt-0.5 text-xs text-muted">Not booked yet</p>

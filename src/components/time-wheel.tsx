@@ -18,6 +18,7 @@ export function formatClock(value: string) {
 export function TimeWheel({ value, onChange, className = "", "aria-label": ariaLabel }: { value: string; onChange: (v: string) => void; className?: string; "aria-label"?: string }) {
   const [open, setOpen] = useState(false);
   const [up, setUp] = useState(false);
+  const [toRight, setToRight] = useState(false); // opens to the right of a field near the left edge, so it stays on screen
   const box = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
   const [h, m] = (value || "09:00").split(":").map(Number);
@@ -41,6 +42,7 @@ export function TimeWheel({ value, onChange, className = "", "aria-label": ariaL
   function show() {
     const r = box.current!.getBoundingClientRect();
     setUp(innerHeight - r.bottom < 230 && r.top > innerHeight - r.bottom);
+    setToRight(r.right - 192 < 8); // 192 = w-48, the popup's width
     setOpen(true);
   }
 
@@ -73,7 +75,7 @@ export function TimeWheel({ value, onChange, className = "", "aria-label": ariaL
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: up ? 6 : -6, scale: 0.98 }}
             transition={{ duration: 0.12 }}
-            className={`absolute right-0 z-30 w-48 rounded-2xl border border-line bg-surface p-1.5 shadow-xl ${up ? "bottom-full mb-1" : "top-full mt-1"}`}
+            className={`absolute ${toRight ? "left-0" : "right-0"} z-30 w-48 rounded-2xl border border-line bg-surface p-1.5 shadow-xl ${up ? "bottom-full mb-1" : "top-full mt-1"}`}
           >
             <div className="relative grid grid-cols-[1fr_1fr_0.9fr]">
               <span className="pointer-events-none absolute inset-x-0 top-1/2 h-8 -translate-y-1/2 rounded-lg bg-ink/5" aria-hidden />

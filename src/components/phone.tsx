@@ -190,7 +190,7 @@ export function MonthPanel({
             aria-expanded={year !== null}
             aria-label={year === null ? `${fmt(month, { month: "long", year: "numeric" })}. Change the month or year` : `${year}. Back to the days`}
             onClick={() => setYear(year === null ? month.getFullYear() : null)}
-            className="rounded-lg font-serif text-2xl leading-none hover:text-accent lg:text-xl"
+            className="rounded-lg font-serif text-2xl leading-none text-accent hover:opacity-80 lg:text-xl"
           >
             <span aria-live="polite">{year === null ? `${fmt(month, { month: "long" })}, ${month.getFullYear()}` : year}</span>
           </button>
