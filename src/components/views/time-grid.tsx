@@ -210,7 +210,7 @@ export function TimeGrid({ days, events, color, severityOf, now, onPickDay, onOp
   }, [todoId]);
 
   return (
-    <div className={`overflow-hidden rounded-2xl border border-line bg-surface max-lg:rounded-b-none max-lg:border-b-0 lg:flex lg:h-full lg:flex-col ${drag ? "cursor-grabbing select-none" : ""}`}>
+    <div className={`overflow-hidden rounded-2xl rounded-b-none border border-b-0 border-line bg-surface lg:flex lg:h-full lg:flex-col ${drag ? "cursor-grabbing select-none" : ""}`}>
       <div className={`grid border-b border-line ${hideHead ? "hidden" : ""}`} style={{ gridTemplateColumns: cols }}>
         <div />
         {days.map((d) => (

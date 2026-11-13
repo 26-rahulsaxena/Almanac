@@ -18,7 +18,7 @@ type Props = {
 export function MonthGrid({ days, month, events, color, severityOf, now, onPickDay }: Props) {
   const today = +startOfDay(now);
   return (
-    <div className="overflow-hidden rounded-2xl border border-line bg-surface lg:flex lg:h-full lg:flex-col lg:overflow-y-auto">
+    <div className="overflow-hidden rounded-2xl border border-line bg-surface lg:flex lg:h-full lg:flex-col lg:overflow-y-auto lg:rounded-b-none lg:border-b-0">
       <div className="grid grid-cols-7 border-b border-line">
         {days.slice(0, 7).map((d) => (
           <span key={+d} className="py-2 text-center font-mono text-[10px] uppercase tracking-widest text-muted">

@@ -835,9 +835,9 @@ export function CalendarApp({
         </div>
       </header>
 
-      {/* Phones: the calendar runs to the bottom of the screen, under the bar (it scrolls clear of it); other pages
-          get room at the bottom so nothing ends up under the bar and the + / Ask Almanac buttons. */}
-      <div className={`w-full flex-1 px-3 py-4 sm:px-6 ${tab === "calendar" ? "max-lg:pb-0" : "max-lg:pb-48"}`}>
+      {/* The calendar runs to the bottom of the screen (on wide screens Priorities too) and scrolls on underneath;
+          phones' other pages get room at the bottom so nothing ends up under the bar and the + / Ask Almanac buttons. */}
+      <div className={`w-full flex-1 px-3 py-4 sm:px-6 lg:pb-0 ${tab === "calendar" ? "max-lg:pb-0" : "max-lg:pb-48"}`}>
         {/* The side panel slides out over the calendar. It stays mounted while closed (inert), so its panels
             keep their state and don't reload every time it opens. */}
         <AnimatePresence>
@@ -1045,7 +1045,7 @@ export function CalendarApp({
             where you drag the divider (70/30 to start). Narrower: the side column follows below. */}
         <main
           ref={mainRef}
-          className="grid min-w-0 items-start gap-4 lg:h-[calc(100dvh-6.25rem)] lg:grid-cols-[minmax(0,var(--l))_auto_minmax(0,var(--r))] lg:items-stretch lg:gap-0"
+          className="grid min-w-0 items-start gap-4 lg:h-[calc(100dvh-5rem)] lg:grid-cols-[minmax(0,var(--l))_auto_minmax(0,var(--r))] lg:items-stretch lg:gap-0"
           style={{ "--l": `${shownSplit}fr`, "--r": `${100 - shownSplit}fr` } as React.CSSProperties}
         >
           <div className="flex min-w-0 flex-col lg:min-h-0">

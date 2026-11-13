@@ -52,7 +52,7 @@ export function PrioritiesPanel({ items, onAction }: Props) {
       id="priorities"
       aria-labelledby="pri-title"
       tabIndex={-1}
-      className="flex flex-col rounded-2xl border border-line bg-surface focus:outline-none lg:min-h-[18rem] lg:flex-1"
+      className="flex flex-col rounded-2xl border border-line bg-surface focus:outline-none lg:min-h-[18rem] lg:flex-1 lg:rounded-b-none lg:border-b-0"
     >
         <div className="border-b border-line px-4 pb-3 pt-4">
           <div>
@@ -69,7 +69,7 @@ export function PrioritiesPanel({ items, onAction }: Props) {
           </div>
         </div>
 
-        <ol className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+        <ol className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 lg:pb-28">
           <AnimatePresence initial={false}>
             {shown?.map((p, i) => (
               <motion.li
