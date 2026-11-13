@@ -2,17 +2,17 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
+const pad = (n: number) => String(n).padStart(2, "0");
 const ROW = 40; // px per row; 5 rows show, the middle one is the choice
 const HOURS = Array.from({ length: 12 }, (_, i) => String(i + 1));
-const STEPS = Array.from({ length: 12 }, (_, i) => i * 5);
-const pad = (n: number) => String(n).padStart(2, "0");
+const MINUTES = Array.from({ length: 60 }, (_, i) => pad(i));
 
 export function formatClock(value: string) {
   const [h, m] = value.split(":").map(Number);
   return `${h % 12 || 12}:${pad(m)} ${h < 12 ? "am" : "pm"}`;
 }
 
-// Almanac's time picker, in place of the browser's: hour, minutes (5-minute steps, plus the minute already set)
+// Almanac's time picker, in place of the browser's: hour, minutes (every minute, 00–59)
 // and am/pm as wheels you flick or scroll; hours and minutes go round and round. value/onChange use "HH:MM" (24 h),
 // like <input type="time">. ↑ ↓ on a wheel move it, Escape or Done closes.
 export function TimeWheel({ value, onChange, className = "", "aria-label": ariaLabel }: { value: string; onChange: (v: string) => void; className?: string; "aria-label"?: string }) {
@@ -21,7 +21,6 @@ export function TimeWheel({ value, onChange, className = "", "aria-label": ariaL
   const box = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
   const [h, m] = (value || "09:00").split(":").map(Number);
-  const minutes = [...new Set([...STEPS, m])].sort((a, b) => a - b);
   const pm = h >= 12;
 
   useEffect(() => {
@@ -79,7 +78,7 @@ export function TimeWheel({ value, onChange, className = "", "aria-label": ariaL
             <div className="relative grid grid-cols-[1fr_1fr_0.9fr]">
               <span className="pointer-events-none absolute inset-x-0 top-1/2 h-10 -translate-y-1/2 rounded-lg bg-ink/5" aria-hidden />
               <Wheel label="Hour" items={HOURS} index={hour12 - 1} loop onPick={(i) => set(i + 1, m, pm)} />
-              <Wheel label="Minutes" items={minutes.map(pad)} index={minutes.indexOf(m)} loop onPick={(i) => set(hour12, minutes[i], pm)} />
+              <Wheel label="Minutes" items={MINUTES} index={m} loop onPick={(i) => set(hour12, i, pm)} />
               <Wheel label="am or pm" items={["am", "pm"]} index={pm ? 1 : 0} onPick={(i) => set(hour12, m, i === 1)} />
             </div>
             <button type="button" onClick={close} className="mt-2 w-full rounded-full bg-ink py-1.5 text-sm font-medium text-paper">
