@@ -37,7 +37,7 @@ export async function setHiddenCalendars(ids: unknown) {
   await sql`update users set hidden_calendars = ${ids} where id = ${session.user.id}`;
 }
 
-// Events and to-do blocks ticked Done, as "calendarId:eventId", so the Agenda (and the phone widget) leave them out.
+// Events and to-do blocks ticked Done, as "calendarId:eventId": the views draw a line through them, the phone widget leaves them out.
 export async function doneEventKeys() {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Not signed in");

@@ -247,7 +247,7 @@ export function TimeGrid({ days, events, color, severityOf, now, onPickDay, onOp
                     initial={{ opacity: 0, y: -4 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.9 }}
-                    className="line-clamp-2 w-full hyphens-auto break-words rounded px-1.5 py-0.5 text-left text-[11px] font-medium leading-tight hover:brightness-95"
+                    className={`line-clamp-2 w-full hyphens-auto break-words rounded px-1.5 py-0.5 text-left text-[11px] font-medium leading-tight hover:brightness-95 ${e.done ? "line-through opacity-60" : ""}`}
                     style={{ background: `color-mix(in srgb, ${color(e)} 28%, var(--surface))` }}
                     title={e.title}
                   >
@@ -424,7 +424,7 @@ function DayColumn({ day, index, colRef, events, color, severityOf, now, onOpen,
             >
               {/* Title, then time, wrapped over as many lines (about 15px each) as the block has room for. */}
               <div className="hyphens-auto break-words" style={{ display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: Math.max(1, Math.floor((h - 4) / 15)), overflow: "hidden" }}>
-                <p className="font-medium">
+                <p className={`font-medium ${e.done ? "line-through opacity-60" : ""}`}>
                   <Flag severity={sev} />
                   {e.meetLink && (
                     <span className="mr-1" aria-label="has video call">

@@ -68,7 +68,7 @@ export function MonthGrid({ days, month, events, color, severityOf, now, onPickD
                       title={severityOf(e) && `${SEVERITY_LABEL[severityOf(e)!]} deadline`}
                     />
                     {!e.allDay && <span className="shrink-0 font-mono text-muted">{formatTime(parseWhen(e.start, false)).replace(" ", "")}</span>}
-                    <span className="truncate">{e.title}</span>
+                    <span className={`truncate ${e.done ? "line-through opacity-60" : ""}`}>{e.title}</span>
                   </span>
                 ))}
                 {dayEvents.length > 3 && <span className="text-[11px] text-muted">+{dayEvents.length - 3} more</span>}

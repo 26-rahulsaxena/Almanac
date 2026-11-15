@@ -24,6 +24,7 @@ export type Ev = {
   plan?: string; // set on blocks the auto-planner booked: "todo:<id>" or "routine:<id>"
   prep?: string; // set on "Prepare for …" blocks booked from a suggestion: the deadline's "<calendarId>:<eventId>"
   away?: "ooo" | "focus"; // out of office or focus time (Google's own kind, or Almanac's busy block on personal Gmail)
+  done?: boolean; // in the browser only: ticked Done, so the views draw a line through it
 };
 
 type GCal = {

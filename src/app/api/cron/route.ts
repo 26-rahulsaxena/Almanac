@@ -40,6 +40,13 @@ export async function GET(req: Request) {
     }
   }
 
+  // Ticked Done (in Priorities, a check-in or the to-do list): its reminders still showing or snoozed are closed.
+  await sql`
+    update reminder_deliveries r set status = 'done', snooze_until = null
+    from deadline_states d
+    where d.user_id = r.user_id and d.calendar_id = r.calendar_id and d.event_id = r.event_id
+      and d.status = 'done' and r.status <> 'done'`;
+
   // Stage 2: whatever is left unanswered comes back after each snooze time, as if Snooze was pressed, until it's
   // answered (so one the phone missed, or that was silenced, isn't lost). A reminder stops when its event starts
   // (the start alarm takes over); the start alarm stops an hour after the start.
@@ -219,10 +226,14 @@ async function remindUser(u: Settings, now: Date) {
   const defaults = new Map(calendars.map((c) => [c.id, c.defaultReminders]));
   const events = await listEvents(userId, calendars.map((c) => c.id), now.toISOString(), new Date(+now + LOOKAHEAD_MS).toISOString());
   const stages = { remind: u.remind_popup, alarm: u.alarm_at_start };
+  const done = new Set(
+    (await sql<{ key: string }[]>`select calendar_id || ':' || event_id as key from deadline_states where user_id = ${userId} and status = 'done'`).map((r) => r.key),
+  );
 
   let sent = 0;
   for (const e of events) {
     if (e.attendees?.find((a) => a.self)?.responseStatus === "declined") continue;
+    if (done.has(`${e.calendarId}:${e.id}`)) continue; // ticked Done: no reminders or start alarm
     if (e.away === "ooo") continue; // no reminders or start alarm for being out of office
     for (const due of dueReminders(e, defaults.get(e.calendarId) ?? [], now, timeZone, stages)) {
       const body = describe(e, now, timeZone);

@@ -308,12 +308,13 @@ export function CalendarApp({
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, []);
 
-  // What's ticked Done, reloaded with the calendar and after any answer in Priorities. The Agenda and the phone
-  // widget list what's still ahead, so they leave these out (and, today, what's already over).
+  // What's ticked Done, reloaded with the calendar and after any answer in Priorities. The views keep these, with a
+  // line through them; the phone widget lists what's still ahead, so it leaves them out. The Agenda leaves out
+  // what's already over today.
   useEffect(() => {
     doneEventKeys().then((keys) => setDoneKeys(new Set(keys)), () => {});
   }, [gen, priorities]);
-  const agendaDone = useCallback((e: Ev) => doneKeys.has(`${e.calendarId}:${e.id}`) || endedToday(e, now), [doneKeys, now]);
+  const agendaDone = useCallback((e: Ev) => endedToday(e, now), [now]);
 
   // The Android home-screen Agenda widget: the next two weeks of shown calendars, saved on the phone each time the
   // calendar reloads (opening the app, coming back to it, any change).
@@ -670,8 +671,9 @@ export function CalendarApp({
     () =>
       [...(entry?.events ?? []), ...todoEvents]
         .filter(shown)
+        .map((e) => (doneKeys.has(`${e.calendarId}:${e.id}`) ? { ...e, done: true } : e))
         .sort((a, b) => +parseWhen(a.start, a.allDay) - +parseWhen(b.start, b.allDay) || Number(b.allDay) - Number(a.allDay)),
-    [entry, todoEvents, shown],
+    [entry, todoEvents, shown, doneKeys],
   );
   const found = results?.q === q ? results.events.filter(shown) : null;
   const openEvent = (e: Ev) => (e.calendarId === TODO_CAL ? openTodos() : setPanel({ form: draftFromEvent(e), event: e }));

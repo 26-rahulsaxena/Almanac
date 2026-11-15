@@ -15,7 +15,7 @@ type Props = {
   now: Date;
   onOpen: (e: Ev) => void;
   showFree?: boolean;
-  isDone?: (e: Ev) => boolean; // left out of the list: ticked Done, or already over today
+  isDone?: (e: Ev) => boolean; // left out of the list: already over today
 };
 
 // A day-by-day list of what's still ahead. Also used for search results (showFree off, only days with matches,
@@ -65,7 +65,7 @@ export function Agenda({ days, events, color, severityOf, now, onOpen, showFree 
                             <SeverityChip severity={severityOf(e)!} />
                           </span>
                         )}
-                        <span className={`font-medium ${myReply(e).className}`}>{e.title}</span>
+                        <span className={`font-medium ${myReply(e).className} ${e.done ? "text-muted line-through" : ""}`}>{e.title}</span>
                         {e.recurringEventId && <span className="ml-2 text-xs text-muted" aria-label="repeats">↻</span>}
                         {myReply(e).note && <span className="ml-2 text-xs text-muted">{myReply(e).note.slice(3)}</span>}
                         <Details e={e} />
