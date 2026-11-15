@@ -7,7 +7,7 @@ import { listCalendars } from "./calendar";
 import { dayPlan, fitPrep, prepStates, weekReview, whatNow, workList, type WeekReview } from "./coach";
 import { sql } from "./db";
 import { ymdIn } from "./plan";
-import { bookBlock, listTodos, upcoming, type User } from "./planner";
+import { bookBlock, doneKeys, listTodos, upcoming, type User } from "./planner";
 import { dueAt, loadPriorities } from "./priorities";
 import { classify, WINDOW_DAYS, type Status } from "./priority";
 import { midnightIn } from "./reminders";
@@ -21,14 +21,16 @@ const PREP_LOOKBACK_DAYS = 6; // prep blocks booked this far back still count to
 // each deadline), Priorities, to-dos with the AI's ratings, and booked prep minutes by deadline.
 async function gather(u: User, now: Date) {
   const from = new Date(+midnightIn(ymdIn(now, u.timezone), u.timezone) - PREP_LOOKBACK_DAYS * DAY);
-  const [{ events }, priorities, todos, rated] = await Promise.all([
+  const [{ events: all }, priorities, todos, rated, done] = await Promise.all([
     upcoming(u, from, PREP_LOOKBACK_DAYS + WINDOW_DAYS + 1),
     loadPriorities(u.id, u.timezone, u.hidden_calendars, now),
     listTodos(u.id),
     savedRatings(u.id),
+    doneKeys(u.id),
   ]);
-  const prepped = new Map<string, number>();
-  for (const e of events) if (e.prep) prepped.set(e.prep, (prepped.get(e.prep) ?? 0) + Math.round((+new Date(e.end) - +new Date(e.start)) / 60_000));
+  const prepped = new Map<string, number>(); // prep blocks ticked Done still count as prep done
+  for (const e of all) if (e.prep) prepped.set(e.prep, (prepped.get(e.prep) ?? 0) + Math.round((+new Date(e.end) - +new Date(e.start)) / 60_000));
+  const events = all.filter((e) => !done.has(`${e.calendarId}:${e.id}`)); // finished: not "now", not today's plan, not busy
   const withAi = todos.map((t) => {
     const r = rated.get(`todo:${t.id}|${t.due_at ? new Date(t.due_at).toISOString() : ""}`);
     return { ...t, ai: r && { severity: r.severity, reason: r.reason } };
@@ -49,7 +51,7 @@ export async function coachToday(u: User, now = new Date()) {
 
 // When you pick your own time: what a block then would overlap, e.g. "“Class” 2:00 pm–3:00 pm", or null.
 export async function clashAt(u: User, start: Date, end: Date) {
-  const { events } = await upcoming(u, start, (+end - +start) / DAY);
+  const { events } = await upcoming(u, start, (+end - +start) / DAY, true);
   const hit = events.find((e) => e.busy && !e.allDay && new Date(e.start) < end && new Date(e.end) > start);
   const time = (iso: string) => new Date(iso).toLocaleTimeString("en-IN", { timeZone: u.timezone, hour: "numeric", minute: "2-digit" });
   return hit ? `“${hit.title}” ${time(hit.start)}–${time(hit.end)}` : null;

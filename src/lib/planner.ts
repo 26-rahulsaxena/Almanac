@@ -37,11 +37,19 @@ export async function me(id: string | undefined): Promise<User | null> {
   return u ?? null;
 }
 
-// Events on the visible calendars from `from` for `days` days, leaving out invites you declined.
-export async function upcoming(u: User, from: Date, days: number) {
-  const calendars = (await listCalendars(u.id)).filter((c) => !u.hidden_calendars.includes(c.id));
-  const events = await listEvents(u.id, calendars.map((c) => c.id), from.toISOString(), new Date(+from + days * DAY).toISOString());
-  return { calendars, events: events.filter((e) => e.attendees?.find((a) => a.self)?.responseStatus !== "declined") };
+// "calendarId:eventId" of events ticked Done (until Undo): finished, so they take up no time and need nothing more.
+export async function doneKeys(userId: string) {
+  const rows = await sql<{ key: string }[]>`select calendar_id || ':' || event_id as key from deadline_states where user_id = ${userId} and status = 'done'`;
+  return new Set(rows.map((r) => r.key));
+}
+
+// Events on the visible calendars from `from` for `days` days, leaving out invites you declined, and with open,
+// what's ticked Done. (The week review and the planner's own-block lookups need those too.)
+export async function upcoming(u: User, from: Date, days: number, open = false) {
+  const [calendars, done] = await Promise.all([listCalendars(u.id), open ? doneKeys(u.id) : new Set<string>()]);
+  const shown = calendars.filter((c) => !u.hidden_calendars.includes(c.id));
+  const events = await listEvents(u.id, shown.map((c) => c.id), from.toISOString(), new Date(+from + days * DAY).toISOString());
+  return { calendars: shown, events: events.filter((e) => e.attendees?.find((a) => a.self)?.responseStatus !== "declined" && !done.has(`${e.calendarId}:${e.id}`)) };
 }
 
 // A plain block of time on your main calendar. Never has guests, so nobody else is ever emailed.
@@ -96,7 +104,7 @@ export async function scheduleTodo(u: User, todoId: string, start?: Date) {
   if (!t) throw new InvalidInput("That to-do no longer exists.");
   if (t.event_id) throw new InvalidInput("It's already on your calendar.");
   const now = new Date();
-  const { calendars, events } = await upcoming(u, now, 7);
+  const { calendars, events } = await upcoming(u, now, 7, true);
   const slot = start
     ? { start, end: new Date(+start + t.minutes * 60_000) }
     : pickSlot(events, now, u.timezone, t.minutes, t.due_at);
@@ -325,7 +333,7 @@ export async function approveSuggestion(u: User, id: string) {
 // The morning check (once a day, in either planning mode, since it's about your own events): today's clashes
 // become suggestions to move one of the pair. Returns the new ones in words.
 export async function morningCheck(u: User, now = new Date()) {
-  const { calendars, events } = await upcoming(u, midnightIn(ymdIn(now, u.timezone), u.timezone), 1);
+  const { calendars, events } = await upcoming(u, midnightIn(ymdIn(now, u.timezone), u.timezone), 1, true);
   const editable = new Set(calendars.filter((c) => c.canEdit).map((c) => c.id));
   const fixes: Change[] = clashFixes(events, editable, now, u.timezone).map(({ event: e, to }) => ({
     key: `event:${e.calendarId}/${e.id}|${+to.start}`,

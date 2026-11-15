@@ -85,7 +85,7 @@ async function scanUser(u: MailUser, now: Date) {
   if (!finds.length) return 0;
 
   // What's on the calendar over the days the finds are on, to put a meeting "sometime tomorrow" in free time.
-  const { calendars, events } = await upcoming(u, midnightIn(finds.map((x) => x.f.day).sort()[0], u.timezone), 61);
+  const { calendars, events } = await upcoming(u, midnightIn(finds.map((x) => x.f.day).sort()[0], u.timezone), 61, true);
   const busy = events.filter((e) => e.busy && !e.allDay).map(({ start, end }) => ({ start, end, allDay: false, busy: true }));
   const free = (from: Date, to: Date, minutes: number) => freeSlots(busy, from, to, minutes)[0]?.start ?? null;
 

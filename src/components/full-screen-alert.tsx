@@ -2,6 +2,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import type { Alert } from "@/app/api/alerts/route";
+import { Emph } from "./coach";
 import { useDialog } from "./use-dialog";
 
 const CHECK_MS = 30_000;
@@ -175,7 +176,9 @@ function PopUp({ alert, left, secondsLeft, soundOn, onAnswer }: ViewProps & { se
       )}
       <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-accent">{label(alert, left)}</p>
       <p className="mt-1.5 break-words font-serif text-2xl leading-snug">{alert.title}</p>
-      <p className="mt-1 text-sm text-muted">{alert.body}</p>
+      <p className="mt-1 text-sm text-muted">
+        <Emph text={alert.body} />
+      </p>
       <div className="mt-3 flex flex-wrap gap-1.5">
         {answersFor(alert).map((a) => (
           <button

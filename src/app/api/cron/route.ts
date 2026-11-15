@@ -2,7 +2,7 @@ import { healthCheck, sql } from "@/lib/db";
 import { listCalendars, listEvents, type Ev } from "@/lib/calendar";
 import { ReauthError } from "@/lib/google";
 import { scanAll } from "@/lib/mail";
-import { morningCheck, replan } from "@/lib/planner";
+import { doneKeys, morningCheck, replan } from "@/lib/planner";
 import { dayPlanText, riskText } from "@/lib/coach";
 import { coachToday, coachWeek } from "@/lib/coach-data";
 import { checkinText } from "@/lib/priorities";
@@ -226,9 +226,7 @@ async function remindUser(u: Settings, now: Date) {
   const defaults = new Map(calendars.map((c) => [c.id, c.defaultReminders]));
   const events = await listEvents(userId, calendars.map((c) => c.id), now.toISOString(), new Date(+now + LOOKAHEAD_MS).toISOString());
   const stages = { remind: u.remind_popup, alarm: u.alarm_at_start };
-  const done = new Set(
-    (await sql<{ key: string }[]>`select calendar_id || ':' || event_id as key from deadline_states where user_id = ${userId} and status = 'done'`).map((r) => r.key),
-  );
+  const done = await doneKeys(userId);
 
   let sent = 0;
   for (const e of events) {

@@ -12,7 +12,6 @@ const dayTime = (iso: string) => new Date(iso).toLocaleString("en-IN", { weekday
 const RISK_NOT_NOW = "prepRiskNotNow";
 const todayKey = () => new Date().toDateString();
 const hours = (m: number) => length(Math.round(m / 5) * 5); // totals, to the nearest 5 min
-
 // A reason or note with its dates and times in bold ("due tomorrow night", "in 2 days"), so they stand out.
 export function Emph({ text }: { text: string }) {
   return whenParts(text).map((part, i) =>
@@ -266,11 +265,16 @@ export function WhatNowBody({ onCalendarChange, onPick }: { onCalendarChange: ()
               </p>
             </>
           ) : (
-            <p className="break-words font-serif text-2xl leading-snug lg:text-lg">{answer.headline}</p>
+            // What to do ("It's late. Rest now.", "You're in …"), in orange so it stands out.
+            <p className="break-words font-serif text-2xl leading-snug text-accent lg:text-lg">{answer.headline}</p>
           )}
-          <p className="mt-3 text-sm lg:mt-1.5 lg:text-xs">{answer.detail}</p>
+          <p className="mt-3 text-sm lg:mt-1.5 lg:text-xs">
+            <Emph text={answer.detail} />
+          </p>
           {booked ? (
-            <p className="mt-4 rounded-xl bg-ink/5 px-3 py-2 text-sm">{booked}</p>
+            <p className="mt-4 rounded-xl bg-ink/5 px-3 py-2 text-sm">
+              <Emph text={booked} />
+            </p>
           ) : (
             pick && (
               <div className="mt-5 flex flex-wrap gap-2 lg:mt-3">
@@ -394,7 +398,9 @@ export function TodayCard({ version, onCalendarChange, waiting, inDialog, skip }
             <span className="font-semibold text-ink">{time(plan.last.end)}</span>
           </>
         )}
-        {` · ${hours(plan.freeMinutes)} free`}
+        {" · "}
+        <span className="font-semibold text-ink">{hours(plan.freeMinutes)}</span>
+        {" free"}
       </p>
       {risks
         .filter((r) => !hidden.includes(r.key))

@@ -145,4 +145,5 @@ test("the dates and times in a sentence, for showing them bold", () => {
   expect(times("Assignment submission due tomorrow night · in 2 days · sitting 1 of 2")).toEqual(["due tomorrow night", "in 2 days"]);
   expect(times("Overdue since Fri, 13 Nov · starts 5:00 pm")).toEqual(["Overdue", "Fri, 13 Nov", "5:00 pm"]);
   expect(times("Client pitch with the team")).toEqual([]);
+  expect(times("Next up: “Class”, Mon, 9:00 am.")).toEqual(["Mon, 9:00 am"]);
 });

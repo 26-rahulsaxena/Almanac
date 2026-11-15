@@ -103,7 +103,7 @@ export async function run(u: User, name: string, input: Record<string, unknown>,
   switch (name) {
     case "get_schedule": {
       const days = Math.min(14, Math.max(1, Number(input.days) || 1));
-      const { events } = await upcoming(u, now, days);
+      const { events } = await upcoming(u, now, days, true);
       const free = freeByDay(events, now, tz, days);
       const lines = free.flatMap(({ day, slots }) => {
         const evs = events.filter((e) => (e.allDay ? e.start <= day && e.end > day : toLocal(new Date(e.start), tz).slice(0, 10) === day));

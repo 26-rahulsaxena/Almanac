@@ -1,6 +1,7 @@
 "use server";
 import { auth, signIn, signOut, withGmail } from "@/auth";
 import { sql } from "@/lib/db";
+import { doneKeys } from "@/lib/planner";
 import { cleanProfile, EMPTY_PROFILE } from "@/lib/profile";
 import { SNOOZE_CHOICES } from "@/lib/reminders";
 
@@ -41,9 +42,7 @@ export async function setHiddenCalendars(ids: unknown) {
 export async function doneEventKeys() {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Not signed in");
-  const rows = await sql<{ key: string }[]>`
-    select calendar_id || ':' || event_id as key from deadline_states where user_id = ${session.user.id} and status = 'done'`;
-  return rows.map((r) => r.key);
+  return [...(await doneKeys(session.user.id))];
 }
 
 // Almanac's own colour for a calendar ("#rrggbb"), or null for its Google colour again.
