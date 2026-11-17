@@ -1,6 +1,6 @@
 "use client";
-import { motion } from "motion/react";
-import { useEffect, useState, type ReactNode } from "react";
+import { animate, motion, useMotionValue, useReducedMotion, useTransform } from "motion/react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { Ev } from "@/lib/calendar";
 import { addDays, parseWhen, startOfDay, startOfMonth, startOfWeek } from "@/lib/time";
 
@@ -10,6 +10,68 @@ import { addDays, parseWhen, startOfDay, startOfMonth, startOfWeek } from "@/lib
 export type Tab = "today" | "priorities" | "mail" | "todo" | "calendar";
 
 export const TAB_TITLE: Record<Exclude<Tab, "calendar">, string> = { today: "Today", priorities: "Priorities", mail: "Email", todo: "To-do" };
+
+// The "liquid" spring: quick, with a little overshoot that settles, so highlights and pages flow rather than snap.
+export const LIQUID = { type: "spring", stiffness: 380, damping: 28, mass: 0.8 } as const;
+// A page or a stretch of days flowing in from the side you moved towards (dir 1: next / to the right, -1: back),
+// leaning into the move like something dragged; dir 0 just fades in.
+export const FLOW = {
+  enter: (dir: number) => ({ opacity: 0, x: dir * 64, skewX: dir * -3, scale: dir ? 1 : 0.985 }),
+  center: { opacity: 1, x: 0, skewX: 0, scale: 1 },
+  exit: (dir: number) => ({ opacity: 0, x: dir * -64, skewX: dir * 3, scale: dir ? 1 : 0.985 }),
+};
+export const FLOW_SPRING = { type: "spring", stiffness: 260, damping: 26, mass: 0.9 } as const;
+
+// The two edges of the liquid highlight: the one in the direction of travel races ahead, the other follows.
+const LEAD = { type: "spring", stiffness: 520, damping: 38, mass: 0.7 } as const;
+const TRAIL = { type: "spring", stiffness: 170, damping: 20, mass: 1 } as const;
+
+// A highlight that flows like liquid to whatever `target` is (any element inside this one's positioned parent): its
+// front edge races to the new item while the back edge lags, so it stretches across the gap, thinning a little as it
+// does, then gathers at the new item with a soft wobble. Jumps without moving when "reduce motion" is on.
+export function LiquidBlob({ target, className }: { target: HTMLElement | null; className: string }) {
+  const self = useRef<HTMLSpanElement>(null);
+  const left = useMotionValue(0);
+  const right = useMotionValue(0);
+  const top = useMotionValue(0);
+  const height = useMotionValue(0);
+  const rest = useMotionValue(1); // its width when it's still, to tell how stretched it is
+  const width = useTransform(() => right.get() - left.get());
+  const scaleY = useTransform(() => 1 - Math.min(0.22, Math.max(0, width.get() / (rest.get() || 1) - 1) * 0.12));
+  const placed = useRef(false);
+  const calm = useReducedMotion();
+
+  useLayoutEffect(() => {
+    const parent = self.current?.offsetParent;
+    if (!target || !parent) return;
+    const place = (move: boolean) => {
+      // Where the target is within the parent's padding box, which is what absolute positions count from.
+      const t = target.getBoundingClientRect();
+      const p = parent.getBoundingClientRect();
+      const l = t.left - p.left - parent.clientLeft;
+      const r = l + t.width;
+      top.set(t.top - p.top - parent.clientTop);
+      height.set(t.height);
+      rest.set(t.width);
+      if (!move || calm) {
+        left.jump(l);
+        right.jump(r);
+        return;
+      }
+      const forward = l >= left.get();
+      animate(left, l, forward ? TRAIL : LEAD);
+      animate(right, r, forward ? LEAD : TRAIL);
+    };
+    place(placed.current);
+    placed.current = true;
+    const onResize = () => place(false);
+    addEventListener("resize", onResize);
+    return () => removeEventListener("resize", onResize);
+  }, [target, calm, left, right, top, height, rest]);
+
+  if (!target) return null;
+  return <motion.span ref={self} aria-hidden className={`pointer-events-none absolute ${className}`} style={{ left, width, top, height, scaleY }} />;
+}
 
 const icon = (children: ReactNode) => (
   <svg className="size-[21px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -26,11 +88,14 @@ const TABS: [Tab, string, ReactNode][] = [
 ];
 
 export function BottomBar({ tab, onTab, open, mail, todayDot }: { tab: Tab; onTab: (t: Tab) => void; open: number; mail: number; todayDot: boolean }) {
+  const [current, setCurrent] = useState<HTMLSpanElement | null>(null); // the spot under the tab you're on
   return (
     <nav
       aria-label="Main"
       className="fixed inset-x-4 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-20 flex h-[4.25rem] items-center justify-around rounded-[1.6rem] border border-line bg-surface px-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.14)] lg:hidden"
     >
+      {/* A small red drop under the tab you're on, stretching like liquid to the next one you tap. */}
+      <LiquidBlob target={current} className="rounded-full bg-accent" />
       {TABS.map(([id, label, svg]) => {
         const on = tab === id;
         const count = id === "priorities" ? open : id === "mail" ? mail : 0;
@@ -40,17 +105,20 @@ export function BottomBar({ tab, onTab, open, mail, todayDot }: { tab: Tab; onTa
             type="button"
             aria-current={on ? "page" : undefined}
             onClick={() => onTab(id)}
-            className={`relative flex h-14 min-w-0 flex-1 flex-col items-center justify-center gap-1 ${on ? "text-accent" : "text-muted"}`}
+            className={`relative flex h-14 min-w-0 flex-1 flex-col items-center justify-center gap-1 transition-colors duration-300 ${on ? "text-accent" : "text-muted"}`}
           >
-            {svg}
-            <span className={`whitespace-nowrap text-[11px] ${on ? "font-semibold" : ""}`}>{label}</span>
+            {on && <span ref={setCurrent} aria-hidden className="absolute bottom-0.5 left-1/2 h-1 w-5 -translate-x-1/2" />}
+            <motion.span className="relative" animate={{ y: on ? -1.5 : 0, scale: on ? 1.08 : 1 }} transition={LIQUID}>
+              {svg}
+            </motion.span>
+            <span className={`relative whitespace-nowrap text-[11px] ${on ? "font-semibold" : ""}`}>{label}</span>
             {/* What's still open in Priorities, and email finds waiting for an answer, in red. */}
             {/* Today: a plain red dot (no number) while it has a suggestion you haven't seen. */}
             {id === "today" && todayDot && (
               <span className="absolute left-1/2 top-1.5 ml-2 size-2.5 rounded-full ring-2 ring-surface" style={{ background: "var(--sev-critical)" }} aria-label="New suggestion" />
             )}
             {count > 0 && (
-              <span className="absolute left-1/2 top-1 ml-1.5 grid min-w-4 place-items-center rounded-full px-1 text-[10px] font-semibold text-white" style={{ background: "var(--sev-critical)" }}>
+              <span className="absolute left-1/2 top-1 ml-1.5 grid min-w-4 place-items-center rounded-full px-1 text-[10px] font-semibold text-white ring-2 ring-surface" style={{ background: "var(--sev-critical)" }}>
                 {count}
               </span>
             )}
@@ -122,15 +190,23 @@ const Dots = ({ colors }: { colors?: string[] }) => (
 export function WeekStrip({ day, now, onPick, load, color, version }: { day: Date; now: Date; onPick: (d: Date) => void; load: Load; color: (e: Ev) => string; version: number }) {
   const first = startOfWeek(day);
   const dots = useDots(first, addDays(first, 7), load, color, version);
+  const [picked, setPicked] = useState<HTMLSpanElement | null>(null);
   return (
-    <div className="-mx-1 mb-2 grid grid-cols-7">
+    <div className="relative -mx-1 mb-2 grid grid-cols-7">
+      {/* The dark marker on the day you're on, flowing like liquid to the day you pick. */}
+      <LiquidBlob target={picked} className="rounded-[11px] bg-ink" />
       {Array.from({ length: 7 }, (_, i) => addDays(first, i)).map((d) => {
         const here = +d === +startOfDay(day);
         const today = +d === +startOfDay(now);
         return (
           <button key={+d} type="button" onClick={() => onPick(d)} aria-pressed={here} aria-label={fmt(d, { weekday: "long", day: "numeric", month: "long" }) + (today ? ", today" : "")} className="flex flex-col items-center gap-1.5 pb-1">
             <span className={`border-b-2 pb-1 text-xs ${here ? "border-ink font-semibold" : "border-transparent text-muted"}`}>{fmt(d, { weekday: "short" })}</span>
-            <span className={`grid h-[34px] w-[38px] place-items-center rounded-[11px] text-[15px] ${here ? "bg-ink font-medium text-paper" : today ? "font-semibold text-accent" : ""}`}>{d.getDate()}</span>
+            <span
+              ref={here ? setPicked : undefined}
+              className={`relative grid h-[34px] w-[38px] place-items-center rounded-[11px] text-[15px] transition-colors duration-300 ${here ? "font-medium text-paper" : today ? "font-semibold text-accent" : ""}`}
+            >
+              {d.getDate()}
+            </span>
             <Dots colors={dots.get(+d)} />
           </button>
         );
@@ -262,3 +338,6 @@ export function MonthPanel({
     </motion.div>
   );
 }
+
+// Which way a tab is from another in the bottom bar: 1 to the right, -1 to the left.
+export const tabDirection = (from: Tab, to: Tab) => Math.sign(TABS.findIndex(([t]) => t === to) - TABS.findIndex(([t]) => t === from));

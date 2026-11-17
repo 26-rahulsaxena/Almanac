@@ -26,7 +26,7 @@ import { PrioritiesPanel, type PriorityAction } from "./priorities-panel";
 import { AddCalendarHelp } from "./add-calendar";
 import { MailFinds } from "./mail-finds";
 import { Modal, Review, TodayCard, WhatNowBody } from "./coach";
-import { BottomBar, DateButton, MonthPanel, TAB_TITLE, WeekStrip, type Tab } from "./phone";
+import { BottomBar, DateButton, FLOW, FLOW_SPRING, MonthPanel, TAB_TITLE, tabDirection, WeekStrip, type Tab } from "./phone";
 import { Suggestions, type PlanMode } from "./suggestions";
 import { ThemeToggle } from "./theme-toggle";
 import { TodoBody, TodoDialog } from "./todo-dialog";
@@ -116,12 +116,6 @@ const useWide = () =>
     () => matchMedia(WIDE).matches,
     () => true,
   );
-
-const slide = {
-  enter: (dir: number) => ({ opacity: 0, x: dir * 48, scale: dir ? 1 : 0.985 }),
-  center: { opacity: 1, x: 0, scale: 1 },
-  exit: (dir: number) => ({ opacity: 0, x: dir * -48, scale: dir ? 1 : 0.985 }),
-};
 
 export function CalendarApp({
   name,
@@ -229,6 +223,7 @@ export function CalendarApp({
   }, [gen, setMailCount]);
   // Phones: the page picked in the bottom bar, and the month dropped down from the date at the top.
   const [tab, setTab] = useState<Tab>("calendar");
+  const [tabDir, setTabDir] = useState(0); // which side the page you just picked in the bottom bar comes from
   const [monthOpen, setMonthOpen] = useState(false);
   const phone = mounted && !wide;
   // A red dot on Today (the header icon, the phone's tab) while it has a suggestion you haven't opened it to see:
@@ -1131,7 +1126,7 @@ export function CalendarApp({
                     transition={{ duration: 0.3, ease }}
                     className="overflow-hidden"
                   >
-                    <WeekStrip day={anchor} now={now} onPick={(d) => (setDir(0), setAnchor(d))} load={loadShown} color={color} version={gen} />
+                    <WeekStrip day={anchor} now={now} onPick={(d) => (setDir(Math.sign(+d - +anchor)), setAnchor(d))} load={loadShown} color={color} version={gen} />
                   </motion.div>
                 )
               )}
@@ -1151,8 +1146,8 @@ export function CalendarApp({
           )}
 
           {phone && tab !== "calendar" && !searching ? (
-            // Phones: the page picked in the bottom bar, in place of the calendar.
-            <div className="mt-1">
+            // Phones: the page picked in the bottom bar, in place of the calendar, flowing in from that tab's side.
+            <motion.div key={tab} className="mt-1" custom={tabDir} variants={FLOW} initial="enter" animate="center" transition={FLOW_SPRING}>
               {tab === "today" ? (
                 // What now? on top, then the rest of the day (the same as the Today bubble on wide screens).
                 <div className="space-y-4">
@@ -1177,14 +1172,23 @@ export function CalendarApp({
                   onCalendarChange={() => setGen((g) => g + 1)}
                   onOpenDay={(d) => {
                     openDay(startOfDay(d));
+                    setTabDir(tabDirection("todo", "calendar"));
                     setTab("calendar");
                   }}
                   onDragStart={dragTodo}
                 />
               )}
-            </div>
+            </motion.div>
           ) : (
-          <div className="relative lg:mt-4 lg:min-h-0 lg:flex-1">
+          // Back to the calendar from another tab (phones), it flows in the same way; on wide screens it's always here.
+          <motion.div
+            className="relative lg:mt-4 lg:min-h-0 lg:flex-1"
+            custom={tabDir}
+            variants={FLOW}
+            initial={phone && tabDir ? "enter" : false}
+            animate="center"
+            transition={FLOW_SPRING}
+          >
             {mounted && !searching && !entry && (
               <motion.div
                 className="absolute inset-x-4 -top-2 z-10 h-0.5 origin-left rounded-full bg-accent"
@@ -1236,11 +1240,11 @@ export function CalendarApp({
                   <motion.div
                     key={`${view}:${key}`}
                     custom={dir}
-                    variants={slide}
+                    variants={FLOW}
                     initial="enter"
                     animate="center"
                     exit="exit"
-                    transition={{ duration: 0.35, ease }}
+                    transition={FLOW_SPRING}
                     className="lg:h-full lg:overflow-y-auto"
                   >
                     {view === "month" ? (
@@ -1268,7 +1272,7 @@ export function CalendarApp({
                 </AnimatePresence>
               </div>
             )}
-          </div>
+          </motion.div>
           )}
           </div>
           <div
@@ -1441,6 +1445,7 @@ export function CalendarApp({
           onTab={(t) => {
             if (t === "today" || tab === "today") seeToday(); // opened it, or leaving it after seeing it
             if (t === "calendar" && tab === "calendar") goToday(); // tapped again while on it: back to today
+            setTabDir(tabDirection(tab, t));
             setTab(t);
             setMonthOpen(false);
             setQuery("");
