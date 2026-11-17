@@ -1,5 +1,8 @@
 "use server";
+import { cookies } from "next/headers";
 import { auth, signIn, signOut, withGmail } from "@/auth";
+import { LINK_COOKIE, makeTicket } from "@/lib/accounts";
+import { decrypt } from "@/lib/crypto";
 import { sql } from "@/lib/db";
 import { doneKeys } from "@/lib/planner";
 import { cleanProfile, EMPTY_PROFILE } from "@/lib/profile";
@@ -26,6 +29,7 @@ export async function setMailOn(on: unknown) {
 }
 
 export async function signOutNow() {
+  (await cookies()).delete(LINK_COOKIE); // an unfinished Add mustn't attach the next sign-in to this Almanac
   await signOut({ redirectTo: "/" });
 }
 
@@ -95,4 +99,36 @@ export async function saveProfile(raw: unknown) {
   const p = raw === null ? EMPTY_PROFILE : cleanProfile(raw);
   await sql`update users set profile = ${sql.json(p)} where id = ${session.user.id}`;
   return p;
+}
+
+// Settings → Account → Add: where to go to pick another Google account (see accounts.ts). app: from the Android app,
+// which opens it in the phone's browser. gmail: also ask to read its Gmail.
+export async function linkUrl(app: unknown, gmail?: unknown) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Not signed in");
+  return `/api/link?t=${encodeURIComponent(makeTicket(session.user.id, app === true, gmail === true))}`;
+}
+
+// Takes an added account out of Almanac (never the main one) and tells Google to forget Almanac's access to it. Its
+// events stay in Google; they just stop showing here.
+export async function removeAccount(id: unknown) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Not signed in");
+  if (typeof id !== "string" || id.length > 64) throw new Error("Invalid account");
+  const [gone] = await sql<{ refresh_token_enc: string }[]>`
+    delete from google_accounts where id = ${id}::uuid and user_id = ${session.user.id} and not is_main returning refresh_token_enc`;
+  if (gone) {
+    await fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(decrypt(gone.refresh_token_enc))}`, {
+      method: "POST",
+      signal: AbortSignal.timeout(10_000),
+    }).catch(() => {}); // best effort: it's already gone from Almanac, and the person can revoke it in their Google account
+  }
+}
+
+// Settings → Account → "New events go to" (a calendar id). Google decides at write time whether it can be added to.
+export async function setDefaultCalendar(id: unknown) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Not signed in");
+  if (typeof id !== "string" || !id || id.length > 300) throw new Error("Invalid calendar");
+  await sql`update users set default_calendar = ${id} where id = ${session.user.id}`;
 }

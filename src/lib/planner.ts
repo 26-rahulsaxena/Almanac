@@ -52,13 +52,28 @@ export async function upcoming(u: User, from: Date, days: number, open = false) 
   return { calendars: shown, events: events.filter((e) => e.attendees?.find((a) => a.self)?.responseStatus !== "declined" && !done.has(`${e.calendarId}:${e.id}`)) };
 }
 
-// A plain block of time on your main calendar. Never has guests, so nobody else is ever emailed.
+// Where Almanac adds something: a prep block goes in the deadline's own Google account (its own calendar), anything
+// else in the calendar picked in Settings → "New events go to", else the main account's own calendar.
+// prep: the deadline's "<calendarId>:<eventId>".
+export function blockCalendar(calendars: Cal[], defaultId: string | null, prep?: string) {
+  const writable = calendars.filter((c) => c.canEdit);
+  const prepAccount = prep && calendars.find((c) => c.id === prep.slice(0, prep.lastIndexOf(":")))?.accountId;
+  return (
+    (prepAccount && writable.find((c) => c.accountId === prepAccount && c.primary)) ||
+    writable.find((c) => c.id === defaultId) ||
+    writable.find((c) => c.primary) ||
+    writable[0]
+  );
+}
+
+// A plain block of time (see blockCalendar for which calendar). Never has guests, so nobody else is ever emailed.
 export async function bookBlock(
   u: User,
   calendars: Cal[],
   b: { title: string; start: Date; end: Date; description?: string; reminderMinutes?: number; plan?: string; prep?: string },
 ) {
-  const cal = calendars.find((c) => c.primary && c.canEdit) ?? calendars.find((c) => c.canEdit);
+  const [pref] = await sql<{ default_calendar: string | null }[]>`select default_calendar from users where id = ${u.id}`;
+  const cal = blockCalendar(calendars, pref?.default_calendar ?? null, b.prep);
   if (!cal) throw new InvalidInput("There's no calendar you can add to.");
   const e = await gcal<{ id: string }>(u.id, `/calendars/${encodeURIComponent(cal.id)}/events`, {
     method: "POST",

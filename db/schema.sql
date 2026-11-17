@@ -252,3 +252,45 @@ alter table mail_seen enable row level security;
 
 -- The AI's short note at the top of the week in review, written at most once a day: {"on": "YYYY-MM-DD", "text": "..."}.
 alter table users add column if not exists week_note jsonb;
+
+-- Several Google accounts in one Almanac. Each connected account has its own login here (encrypted like above); the
+-- one you sign in with is the main one, more can be attached. Replaces google_tokens, which stays (unused) until
+-- this is confirmed working; the insert copies today's logins over and does nothing when run again.
+create table if not exists google_accounts (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id) on delete cascade,
+  google_sub text unique not null,
+  email text not null,
+  is_main boolean not null default false,
+  refresh_token_enc text not null,
+  access_token_enc text,
+  access_expires_at timestamptz,
+  scope text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create unique index if not exists google_accounts_one_main on google_accounts (user_id) where is_main;
+alter table google_accounts enable row level security;
+insert into google_accounts (user_id, google_sub, email, is_main, refresh_token_enc, access_token_enc, access_expires_at, scope, updated_at)
+select u.id, u.google_sub, u.email, true, t.refresh_token_enc, t.access_token_enc, t.access_expires_at, t.scope, t.updated_at
+from google_tokens t join users u on u.id = t.user_id
+on conflict (google_sub) do nothing;
+
+-- Which connected account each calendar comes from, so a change to an event goes through that account's login.
+-- Saved whenever the calendars are listed.
+create table if not exists account_calendars (
+  user_id uuid not null references users(id) on delete cascade,
+  calendar_id text not null,
+  account_id uuid not null references google_accounts(id) on delete cascade,
+  primary key (user_id, calendar_id)
+);
+alter table account_calendars enable row level security;
+-- When Google stopped accepting an added account's login (Settings → Account shows Reconnect); cleared on reconnecting.
+alter table google_accounts add column if not exists broken_at timestamptz;
+-- Settings → Account → "New events go to": the calendar (any connected account's) that new events, to-dos and
+-- Almanac's own blocks are added to. Null = the main account's own calendar.
+alter table users add column if not exists default_calendar text;
+-- Reading every connected inbox: when each was last read (null: never, so the first look goes back a week; a main
+-- account without one yet uses users.mail_checked_at), and which inbox each find came from (null: the main one).
+alter table google_accounts add column if not exists mail_checked_at timestamptz;
+alter table mail_finds add column if not exists account_email text;

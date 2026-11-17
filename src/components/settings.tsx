@@ -1,7 +1,12 @@
 "use client";
 import { motion } from "motion/react";
 import { useEffect, useState } from "react";
-import { signOutNow, type AlertStages } from "@/app/actions";
+import { removeAccount, setDefaultCalendar, signOutNow, type AlertStages } from "@/app/actions";
+import { startLink } from "./google-sign-in";
+import type { Account, LinkResult } from "@/lib/accounts";
+import type { Cal } from "@/lib/calendar";
+import { writableOptions } from "./event-panel";
+import { Select } from "./select";
 import { appBuild, isAndroidApp, LATEST_BUILD } from "@/lib/android-app";
 import { AlertStageSettings, forgetDevice, NotifySettings } from "./notify-settings";
 import { PlanModeSetting, type PlanMode } from "./suggestions";
@@ -40,7 +45,12 @@ export function Settings(props: {
   onMail: (on: boolean) => void;
   profile: Profile | null;
   onEditProfile: () => void;
-  onAddAccount: () => void;
+  accounts: Account[];
+  linked?: LinkResult;
+  calendars: Cal[];
+  defaultCalendar?: string; // where new events go now
+  onDefaultCalendar: (id: string) => void;
+  onShareHelp: () => void;
   startTab?: Tab;
 }) {
   const [tab, setTab] = useState<Tab>(props.startTab ?? "General");
@@ -145,7 +155,7 @@ export function Settings(props: {
             <h3 className={h3}>Planning mode</h3>
             <PlanModeSetting initial={props.planMode} onChange={props.onPlanMode} />
             <h3 className={`${h3} mt-6`}>Read my email</h3>
-            <MailSetting gmail={props.mail.gmail} on={props.mail.on} onChange={props.onMail} />
+            <MailSetting gmail={props.mail.gmail} on={props.mail.on} onChange={props.onMail} accounts={props.accounts} />
           </>
         )}
         {tab === "App" && (
@@ -181,16 +191,27 @@ export function Settings(props: {
                 <p className="truncate text-sm text-muted">{props.email}</p>
               </div>
             </div>
-            <div className="mt-6 flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <h3 className={h3}>Other Google accounts</h3>
-                <p className="mt-1 text-sm">See their calendars here too, next to yours</p>
-              </div>
-              <button type="button" onClick={props.onAddAccount} className="shrink-0 rounded-full border border-line px-3 py-1.5 text-sm hover:border-ink/40">
-                Add
-              </button>
-            </div>
-            <p className="mt-6 text-sm">Signing out stops notifications on this device. To switch to another Google account, sign out, then sign in with it.</p>
+            <h3 className={`${h3} mt-6`}>Google accounts</h3>
+            <p className="mt-1 text-sm">Calendars from all of them show together in Almanac, and you can change their events here.</p>
+            <GoogleAccounts accounts={props.accounts} linked={props.linked} />
+            <button type="button" onClick={props.onShareHelp} className="mt-2 text-xs text-muted underline-offset-2 hover:text-ink hover:underline">
+              Can&rsquo;t add one? Share a single calendar instead
+            </button>
+            <h3 className={`${h3} mt-6`}>New events go to</h3>
+            <p className="mt-1 text-sm">Also where Almanac adds to-dos and planned time. You can pick another calendar on each new event.</p>
+            <Select
+              aria-label="New events go to"
+              fit
+              value={props.defaultCalendar ?? ""}
+              placeholder="No calendar you can add to"
+              onChange={(id) => {
+                props.onDefaultCalendar(id);
+                setDefaultCalendar(id).catch(() => {});
+              }}
+              className="mt-3 w-full rounded-xl border border-line bg-surface px-3 py-2 text-left text-sm"
+              options={writableOptions(props.calendars)}
+            />
+            <p className="mt-6 text-sm">Signing out stops notifications on this device. Signing in with any of the accounts above opens this same Almanac.</p>
             {/* This device stops getting the account's notifications before the session ends; a slow phone or
                 network never holds up signing out for more than 3 seconds. */}
             <form action={async () => { await Promise.race([forgetDevice(), new Promise((r) => setTimeout(r, 3000))]); await signOutNow(); }} className="mt-4">
@@ -247,6 +268,90 @@ function AppUpdate() {
         version is out, you&rsquo;ll get a notification.
       </p>
       {error && <p className="mt-2 text-sm text-[var(--cat-1)]">Couldn&rsquo;t open the download. Go to almanac-tau-orcin.vercel.app/download instead.</p>}
+    </>
+  );
+}
+
+const LINKED: Record<LinkResult, string> = {
+  added: "Account added. Its calendars are in the menu now.",
+  moved: "Account added. It had its own Almanac before; signing in with it now opens this one.",
+  again: "Done. That account is connected again, with what you just allowed.",
+  main: "That's the account you sign in with, so there was nothing to add.",
+  error: "That didn't work. Try Add again.",
+};
+
+// The connected Google accounts: Add (Google's account chooser; in the Android app, in the phone's browser, and the
+// app reloads once that's closed), Reconnect for one Google stopped accepting, Remove for any but the main one.
+function GoogleAccounts({ accounts, linked }: { accounts: Account[]; linked?: LinkResult }) {
+  const [removing, setRemoving] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(false);
+
+  async function add() {
+    setBusy(true);
+    setError(false);
+    try {
+      await startLink();
+    } catch {
+      setError(true);
+    }
+    setBusy(false);
+  }
+  async function remove(id: string) {
+    setBusy(true);
+    try {
+      await removeAccount(id);
+      location.reload(); // the calendars come from the server
+    } catch {
+      setError(true);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      {linked && LINKED[linked] && <p className="mt-3 rounded-xl bg-accent/10 px-3 py-2 text-sm">{LINKED[linked]}</p>}
+      <ul className="mt-3 divide-y divide-line rounded-2xl border border-line bg-surface">
+        {accounts.map((a) => (
+          <li key={a.id} className="px-4 py-3">
+            <div className="flex items-center gap-3">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm">{a.email}</p>
+                <p className={`text-xs ${a.broken ? "text-accent" : "text-muted"}`}>
+                  {a.main ? "Main · you sign in with this one" : a.broken ? "Google stopped letting Almanac in. Reconnect to see its calendars again." : "Added"}
+                </p>
+              </div>
+              {a.broken && (
+                <button type="button" disabled={busy} onClick={add} className="shrink-0 rounded-full bg-accent px-3 py-1.5 text-sm font-medium text-white disabled:opacity-60">
+                  Reconnect
+                </button>
+              )}
+              {!a.main && removing !== a.id && (
+                <button type="button" disabled={busy} onClick={() => setRemoving(a.id)} className="shrink-0 rounded-full border border-line px-3 py-1.5 text-sm hover:border-ink/40 disabled:opacity-60">
+                  Remove
+                </button>
+              )}
+            </div>
+            {removing === a.id && (
+              <div className="mt-2 rounded-xl bg-ink/5 p-3 text-sm">
+                <p>Its calendars leave Almanac. Nothing is deleted in Google.</p>
+                <div className="mt-2 flex gap-2">
+                  <button type="button" disabled={busy} onClick={() => remove(a.id)} className="rounded-full bg-ink px-3 py-1.5 text-paper disabled:opacity-60">
+                    Remove
+                  </button>
+                  <button type="button" onClick={() => setRemoving(null)} className="rounded-full border border-line px-3 py-1.5 hover:border-ink/40">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+      <button type="button" disabled={busy} onClick={add} className="mt-3 w-full rounded-full border border-line px-4 py-2 text-sm font-medium hover:border-ink/40 disabled:opacity-60">
+        + Add another Google account
+      </button>
+      {error && <p className="mt-2 text-sm text-[var(--cat-1)]">Something went wrong. Try again.</p>}
     </>
   );
 }

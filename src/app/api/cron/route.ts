@@ -28,7 +28,7 @@ export async function GET(req: Request) {
   // shortcut: checks every user one after another, each minute; fine for a handful of users, batch or queue it for hundreds.
   const users = await sql<{ id: string; timezone: string; hidden_calendars: string[]; remind_popup: boolean; snooze_minutes: number; alarm_at_start: boolean }[]>`
     select u.id, u.timezone, u.hidden_calendars, u.remind_popup, u.snooze_minutes, u.alarm_at_start from users u
-    where exists (select 1 from google_tokens t where t.user_id = u.id)`;
+    where exists (select 1 from google_accounts t where t.user_id = u.id)`;
 
   let sent = 0;
   for (const u of users) {

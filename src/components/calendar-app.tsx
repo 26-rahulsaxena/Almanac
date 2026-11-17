@@ -1,10 +1,11 @@
 "use client";
 import { AnimatePresence, motion } from "motion/react";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { doneEventKeys, setCalendarColor, setHiddenCalendars, setRemovedCalendars, type AlertStages } from "@/app/actions";
 import { appHasWidget, saveAgenda } from "@/lib/android-app";
 import { GoogleSignIn } from "./google-sign-in";
 import type { Cal, Ev } from "@/lib/calendar";
+import type { Account, LinkResult } from "@/lib/accounts";
 import { CATEGORIES, categoryHex } from "@/lib/categories";
 import type { DeleteInput, SaveInput, Scope, SendUpdates } from "@/lib/recurrence";
 import { addDays, atHour, endedToday, formatTime, parseWhen, startOfDay, startOfMonth, startOfWeek, greeting } from "@/lib/time";
@@ -125,6 +126,8 @@ const slide = {
 export function CalendarApp({
   name,
   email,
+  accounts,
+  defaultCalendar,
   calendars: googleCalendars,
   hidden: initialHidden,
   colors: initialColors,
@@ -136,6 +139,8 @@ export function CalendarApp({
 }: {
   name: string;
   email: string;
+  accounts: Account[]; // the connected Google accounts, main first
+  defaultCalendar: string | null; // Settings → Account → "New events go to"
   calendars: Cal[];
   hidden: string[];
   colors: Record<string, string>;
@@ -269,10 +274,12 @@ export function CalendarApp({
   const swipe = useRef<{ x: number; y: number; t: number } | null>(null);
   const wheel = useRef({ dx: 0, last: 0, until: 0 });
   const [settings, setSettings] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<"App" | "Planning">(); // from the "new version" notification, or back from allowing Gmail
+  const [settingsTab, setSettingsTab] = useState<"App" | "Planning" | "Account">(); // from the "new version" notification, or back from allowing Gmail or adding an account
+  const [linked, setLinked] = useState<LinkResult>(); // back from adding a Google account: how it went
   // The latest saved settings, so the Settings window shows them when it's opened again.
   const [stagesNow, setStagesNow] = useState(stages);
   const [planModeNow, setPlanModeNow] = useState(planMode);
+  const [defaultCal, setDefaultCal] = useState(defaultCalendar);
   const [mailNow, setMailNow] = useState(mail);
   const [profileNow, setProfileNow] = useState(profile);
   const [about, setAbout] = useState(profile === null);
@@ -286,7 +293,8 @@ export function CalendarApp({
   const calIds = useMemo(() => calendars.map((c) => c.id), [calendars]);
   const colorOf = useMemo(() => new Map(calendars.map((c) => [c.id, c.color])), [calendars]);
   const color = useCallback((e: Ev) => categoryHex(e.colorId) ?? colorOf.get(e.calendarId) ?? "var(--muted)", [colorOf]);
-  const writable = calendars.find((c) => c.primary && c.canEdit) ?? calendars.find((c) => c.canEdit);
+  // Where new events go: the calendar picked in Settings → Account, else the main account's own calendar.
+  const writable = calendars.find((c) => c.id === defaultCal && c.canEdit) ?? calendars.find((c) => c.primary && c.canEdit) ?? calendars.find((c) => c.canEdit);
   // The shown calendars' events in a range, for the dots under the days in the week strip and the month.
   const loadShown = (f: Date, t: Date) => fetchEvents({ from: f.toISOString(), to: t.toISOString() }, calIds.filter((id) => !hidden.has(id)));
   const { from, to, days } = useMemo(() => rangeOf(view, anchor), [view, anchor]);
@@ -552,6 +560,13 @@ export function CalendarApp({
       if (q.has("update") || q.has("mail")) {
         setSettingsTab(q.has("mail") ? "Planning" : "App");
         setSettings(true);
+      }
+      // Back from adding a Google account (?account=added): Settings → Account, saying how it went (once).
+      if (q.has("account")) {
+        setLinked(q.get("account") as LinkResult);
+        setSettingsTab("Account");
+        setSettings(true);
+        history.replaceState(null, "", "/");
       }
     });
     return () => {
@@ -903,11 +918,19 @@ export function CalendarApp({
 
           <h2 className="mt-6 font-mono text-xs uppercase tracking-[0.2em] text-muted">Calendars</h2>
           <ul className="mt-3 flex flex-col gap-0.5">
-            {calendars.filter((c) => !removed.has(c.id)).map((c, i) => {
+            {calendars.filter((c) => !removed.has(c.id)).map((c, i, list) => {
               const on = !hidden.has(c.id);
               const editing = editCal === c.id;
+              // With more than one Google account, each one's calendars sit under its email.
+              const heading = accounts.length > 1 && list[i - 1]?.account !== c.account;
               return (
-                <motion.li key={c.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04, ease }}>
+                <Fragment key={c.id}>
+                {heading && (
+                  <li className={`truncate px-3 pb-1 text-xs text-muted ${i ? "pt-3" : ""}`} title={c.account}>
+                    {c.account}
+                  </li>
+                )}
+                <motion.li initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04, ease }}>
                   <div className="flex items-center">
                   <button
                     type="button"
@@ -964,6 +987,7 @@ export function CalendarApp({
                     </div>
                   )}
                 </motion.li>
+                </Fragment>
               );
             })}
           </ul>
@@ -991,11 +1015,12 @@ export function CalendarApp({
             type="button"
             onClick={() => {
               setMenu(false);
-              setAddCal(true);
+              setSettingsTab("Account");
+              setSettings(true);
             }}
             className="mt-1 px-3 py-1.5 text-left text-sm text-muted hover:text-ink"
           >
-            + Add from another Google account
+            + Add another Google account
           </button>
 
           <button
@@ -1366,6 +1391,7 @@ export function CalendarApp({
             onClose={() => {
               setSettings(false);
               setSettingsTab(undefined);
+              setLinked(undefined);
             }}
             startTab={settingsTab}
             stages={stagesNow}
@@ -1382,7 +1408,12 @@ export function CalendarApp({
               setSettings(false);
               setAbout(true);
             }}
-            onAddAccount={() => {
+            accounts={accounts}
+            linked={linked}
+            calendars={calendars}
+            defaultCalendar={writable?.id}
+            onDefaultCalendar={setDefaultCal}
+            onShareHelp={() => {
               setSettings(false);
               setAddCal(true);
             }}

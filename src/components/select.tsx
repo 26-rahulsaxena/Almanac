@@ -13,6 +13,7 @@ export function Select({
   className = "",
   id,
   disabled,
+  fit,
   "aria-label": ariaLabel,
 }: {
   value: string;
@@ -22,6 +23,7 @@ export function Select({
   className?: string;
   id?: string;
   disabled?: boolean;
+  fit?: boolean; // the list stays as wide as the button and long labels wrap (otherwise it grows to fit them)
   "aria-label"?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -99,7 +101,7 @@ export function Select({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: up ? 6 : -6, scale: 0.98 }}
             transition={{ duration: 0.12 }}
-            className={`absolute left-0 z-30 max-h-64 min-w-full overflow-y-auto rounded-xl border border-line bg-surface p-1 text-sm shadow-xl ${up ? "bottom-full mb-1" : "top-full mt-1"}`}
+            className={`absolute left-0 z-30 max-h-64 min-w-full ${fit ? "max-w-full" : ""} overflow-y-auto rounded-xl border border-line bg-surface p-1 text-sm shadow-xl ${up ? "bottom-full mb-1" : "top-full mt-1"}`}
           >
             {options.map(([v, label], i) => (
               <li
@@ -109,9 +111,9 @@ export function Select({
                 onPointerEnter={() => setActive(i)}
                 onPointerDown={(e) => e.preventDefault()} // focus stays on the button, so it doesn't close first
                 onClick={() => pick(i)}
-                className={`flex cursor-pointer items-center justify-between gap-3 whitespace-nowrap rounded-lg px-3 py-2 ${i === active ? "bg-ink/5" : ""}`}
+                className={`flex cursor-pointer items-center justify-between gap-3 rounded-lg px-3 py-2 ${fit ? "break-words" : "whitespace-nowrap"} ${i === active ? "bg-ink/5" : ""}`}
               >
-                {label}
+                <span className="min-w-0">{label}</span>
                 {v === value && <span className="text-accent" aria-hidden>✓</span>}
               </li>
             ))}

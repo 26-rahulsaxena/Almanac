@@ -54,6 +54,14 @@ const EMAIL = /^[^\s@<>,;"]+@[^\s@<>,;"]+\.[^\s@<>,;"]+$/;
 const pad = (n: number) => String(n).padStart(2, "0");
 const hhmm = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 
+// A calendar's name, with its Google account when more than one is connected (unless it's named after it already).
+export function calLabel(c: Cal, calendars: Cal[]) {
+  const many = calendars.some((o) => o.account !== c.account);
+  return many && c.name !== c.account ? `${c.name} · ${c.account}` : c.name;
+}
+// The calendars new events can go in, for a dropdown.
+export const writableOptions = (calendars: Cal[]): [string, string][] => calendars.filter((c) => c.canEdit).map((c) => [c.id, calLabel(c, calendars)]);
+
 export function draftFromSlot(start: Date, end: Date, calendarId: string): Form {
   return {
     calendarId,
@@ -525,16 +533,17 @@ export function EventPanel({ initial, event, calendars, priority, onDeadline, on
               {event ? (
                 <p className="flex items-center gap-2 text-sm">
                   <span className="size-3 rounded-full" style={{ background: cal?.color }} />
-                  {cal?.name}
+                  {cal && calLabel(cal, calendars)}
                   {readOnly && <span className="text-muted">· read-only</span>}
                 </p>
               ) : (
                 <Select
                   id="cal"
+                  fit
                   value={f.calendarId}
                   onChange={(v) => set("calendarId", v)}
                   className={field}
-                  options={calendars.filter((c) => c.canEdit).map((c) => [c.id, c.name])}
+                  options={writableOptions(calendars)}
                 />
               )}
             </div>

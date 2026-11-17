@@ -3,6 +3,7 @@ import { connection } from "next/server";
 import { auth, GMAIL_SCOPE } from "@/auth";
 import { sql } from "@/lib/db";
 import { listCalendars } from "@/lib/calendar";
+import { listAccounts } from "@/lib/accounts";
 import { ReauthError } from "@/lib/google";
 import { Landing } from "@/components/landing";
 import { CalendarApp } from "@/components/calendar-app";
@@ -31,12 +32,13 @@ async function Content({ searchParams }: PageProps<"/">) {
   });
   if (!calendars) return <Landing error="Reauth" />;
 
-  const [user] = await sql<{ hidden_calendars: string[]; calendar_colors: Record<string, string>; removed_calendars: string[]; remind_popup: boolean; snooze_minutes: number; alarm_at_start: boolean; plan_mode: "ask" | "auto"; profile: Profile | null; mail_on: boolean; gmail: boolean }[]>`
-    select hidden_calendars, calendar_colors, removed_calendars, remind_popup, snooze_minutes, alarm_at_start, plan_mode, profile, mail_on,
-      exists (select 1 from google_tokens t where t.user_id = users.id and t.scope like ${"%" + GMAIL_SCOPE + "%"}) as gmail
+  const [user] = await sql<{ hidden_calendars: string[]; calendar_colors: Record<string, string>; removed_calendars: string[]; remind_popup: boolean; snooze_minutes: number; alarm_at_start: boolean; plan_mode: "ask" | "auto"; profile: Profile | null; mail_on: boolean; default_calendar: string | null; gmail: boolean }[]>`
+    select hidden_calendars, calendar_colors, removed_calendars, remind_popup, snooze_minutes, alarm_at_start, plan_mode, profile, mail_on, default_calendar,
+      exists (select 1 from google_accounts t where t.user_id = users.id and t.broken_at is null and t.scope like ${"%" + GMAIL_SCOPE + "%"}) as gmail
     from users where id = ${session.user.id}`;
+  const accounts = await listAccounts(session.user.id);
   const stages = { remind: user?.remind_popup ?? true, snooze: user?.snooze_minutes ?? 5, alarm: user?.alarm_at_start ?? true };
   return (
-    <CalendarApp name={session.user.name ?? ""} email={session.user.email ?? ""} calendars={calendars} hidden={user?.hidden_calendars ?? []} colors={user?.calendar_colors ?? {}} removed={user?.removed_calendars ?? []} stages={stages} planMode={user?.plan_mode ?? "ask"} mail={{ gmail: !!user?.gmail, on: !!user?.mail_on }} profile={!user ? EMPTY_PROFILE : user.profile && cleanProfile(user.profile)} />
+    <CalendarApp name={session.user.name ?? ""} email={session.user.email ?? ""} accounts={accounts} calendars={calendars} defaultCalendar={user?.default_calendar ?? null} hidden={user?.hidden_calendars ?? []} colors={user?.calendar_colors ?? {}} removed={user?.removed_calendars ?? []} stages={stages} planMode={user?.plan_mode ?? "ask"} mail={{ gmail: !!user?.gmail, on: !!user?.mail_on }} profile={!user ? EMPTY_PROFILE : user.profile && cleanProfile(user.profile)} />
   );
 }
