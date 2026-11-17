@@ -2,8 +2,6 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { setMailOn } from "@/app/actions";
-import { isAndroidApp } from "@/lib/android-app";
-import { gmailLink } from "@/lib/mail-parse";
 import type { Account } from "@/lib/accounts";
 import { GoogleSignIn, startLink } from "./google-sign-in";
 import { TimeWheel } from "./time-wheel";
@@ -19,15 +17,6 @@ const localParts = (iso: string) => {
   return { date: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`, time: `${p(d.getHours())}:${p(d.getMinutes())}` };
 };
 
-// The whole email in Gmail: on a computer in a new tab (the link itself), in the Android app in a browser page over
-// the app. Not handed to the Gmail app: it can't follow this link and closed itself and Almanac.
-async function openInGmail(e: React.MouseEvent, url: string) {
-  if (!isAndroidApp()) return;
-  e.preventDefault();
-  const { Browser } = await import("@capacitor/browser");
-  await Browser.open({ url });
-}
-
 const when = (f: Find) => {
   const d = (iso: string, o: Intl.DateTimeFormatOptions) => new Date(iso).toLocaleString("en-IN", o);
   const at = d(f.start_at, { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
@@ -35,10 +24,11 @@ const when = (f: Find) => {
 };
 
 // "Found in your email" (Ask-first mode): meetings, calls and deadlines the AI spotted in new mail, each with a few
-// words on what's wanted; Show words reveals the email's own words, Open in Gmail the whole email. Nothing goes on
+// words on what's wanted; Show words reveals the email's own words. (No Open in Gmail: on phones the link wouldn't
+// open the email.) Nothing goes on
 // the calendar until Add. Shows nothing when there's nothing waiting. inDialog: inside the header mail button's
 // pop-up, which has its own title, so no card or heading; onCount hears how many are waiting.
-export function MailFinds({ email, version, onCalendarChange, inDialog, onCount }: { email: string; version: number; onCalendarChange: () => void; inDialog?: boolean; onCount?: (n: number) => void }) {
+export function MailFinds({ version, onCalendarChange, inDialog, onCount }: { version: number; onCalendarChange: () => void; inDialog?: boolean; onCount?: (n: number) => void }) {
   const [list, setList] = useState<Find[] | null>(null);
   const [shown, setShown] = useState<Set<string>>(new Set()); // cards showing the email's own words
   const [busy, setBusy] = useState<string | null>(null);
@@ -115,16 +105,11 @@ export function MailFinds({ email, version, onCalendarChange, inDialog, onCount 
                   </motion.p>
                 )}
               </AnimatePresence>
-              <div className="mt-1 flex gap-3 text-xs">
-                {f.summary && f.quote && (
-                  <button type="button" aria-expanded={open} onClick={toggle} className="font-medium text-accent hover:underline">
-                    {open ? "Hide words" : "Show words"}
-                  </button>
-                )}
-                <a href={gmailLink(f.account_email ?? email, f.thread_id)} target="_blank" rel="noopener noreferrer" onClick={(e) => openInGmail(e, gmailLink(f.account_email ?? email, f.thread_id))} className="font-medium text-accent hover:underline">
-                  Open in Gmail
-                </a>
-              </div>
+              {f.summary && f.quote && (
+                <button type="button" aria-expanded={open} onClick={toggle} className="mt-1 text-xs font-medium text-accent hover:underline">
+                  {open ? "Hide words" : "Show words"}
+                </button>
+              )}
               {choose && (
                 <div className="mt-2 rounded-xl bg-ink/[0.04] p-2.5">
                   <p className="text-xs text-muted">The email doesn&rsquo;t say when. Pick a time (Almanac suggested a free one):</p>

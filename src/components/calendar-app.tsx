@@ -1168,7 +1168,7 @@ export function CalendarApp({
                 mailCount === 0 ? (
                   <p className="rounded-2xl border border-line bg-surface p-4 text-sm text-muted">{NO_MAIL}</p>
                 ) : (
-                  <MailFinds email={email} version={gen} onCalendarChange={() => setGen((g) => g + 1)} onCount={setMailCount} />
+                  <MailFinds version={gen} onCalendarChange={() => setGen((g) => g + 1)} onCount={setMailCount} />
                 )
               ) : (
                 <TodoBody
@@ -1329,7 +1329,7 @@ export function CalendarApp({
             {mailCount === 0 ? (
               <p className="text-sm text-muted">{NO_MAIL}</p>
             ) : (
-              <MailFinds email={email} version={gen} onCalendarChange={() => setGen((g) => g + 1)} inDialog onCount={setMailCount} />
+              <MailFinds version={gen} onCalendarChange={() => setGen((g) => g + 1)} inDialog onCount={setMailCount} />
             )}
           </Modal>
         )}
@@ -1440,6 +1440,7 @@ export function CalendarApp({
           tab={tab}
           onTab={(t) => {
             if (t === "today" || tab === "today") seeToday(); // opened it, or leaving it after seeing it
+            if (t === "calendar" && tab === "calendar") goToday(); // tapped again while on it: back to today
             setTab(t);
             setMonthOpen(false);
             setQuery("");

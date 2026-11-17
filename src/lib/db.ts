@@ -4,11 +4,13 @@ import postgres from "postgres";
 // postgres.js asks the server to describe a query before sending its values, and through that pooler the
 // description sometimes never came back, leaving both sides waiting (pg_stat_activity: active / ClientRead).
 // Session mode holds one server connection per open app connection, and the free plan's pooler allows only 15 in
-// all. On Vercel every running copy of the app has its own pool, so each keeps at most 2 and lets go after 5 s idle.
-// shortcut: still 15 in all; under heavy use raise "Pool size" in Supabase (Database > Connection pooling).
+// all. On Vercel every running copy of the app has its own pool, so each keeps 1 (2 locally) and lets go after 5 s
+// idle. A paused copy can't let go (its timers stop), so after deploys the paused ones filled all 15 at 2 each.
+// shortcut: still 15 in all; under heavy use raise "Pool size" in Supabase (Database > Connection pooling), or close
+// connections before Vercel pauses a copy (attachDatabasePool in @vercel/functions).
 // Closing idle ones also means none are left dead after the computer sleeps or the network drops;
 // connecting gives up after 10 s instead of waiting forever.
-const open = () => postgres(process.env.DATABASE_URL!, { prepare: false, max: 2, idle_timeout: 5, connect_timeout: 10 });
+const open = () => postgres(process.env.DATABASE_URL!, { prepare: false, max: process.env.VERCEL ? 1 : 2, idle_timeout: 5, connect_timeout: 10 });
 
 // One pool, reused across hot reloads in development, and replaceable when it gets stuck (see healthCheck).
 const g = globalThis as unknown as { sql?: postgres.Sql };
