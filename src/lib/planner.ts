@@ -66,21 +66,23 @@ export function blockCalendar(calendars: Cal[], defaultId: string | null, prep?:
   );
 }
 
-// A plain block of time (see blockCalendar for which calendar). Never has guests, so nobody else is ever emailed.
+// A block of time (see blockCalendar for which calendar). No guests unless asked (guests), so nobody is emailed otherwise.
 export async function bookBlock(
   u: User,
   calendars: Cal[],
-  b: { title: string; start: Date; end: Date; description?: string; reminderMinutes?: number; plan?: string; prep?: string },
+  b: { title: string; start: Date; end: Date; description?: string; reminderMinutes?: number; plan?: string; prep?: string; guests?: string[] },
 ) {
   const [pref] = await sql<{ default_calendar: string | null }[]>`select default_calendar from users where id = ${u.id}`;
   const cal = blockCalendar(calendars, pref?.default_calendar ?? null, b.prep);
   if (!cal) throw new InvalidInput("There's no calendar you can add to.");
-  const e = await gcal<{ id: string }>(u.id, `/calendars/${encodeURIComponent(cal.id)}/events`, {
+  // guests: only when you asked for it (Add on an email find with Invite ticked); Google emails them the invite.
+  const e = await gcal<{ id: string }>(u.id, `/calendars/${encodeURIComponent(cal.id)}/events${b.guests?.length ? "?sendUpdates=all" : ""}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       summary: b.title,
       description: b.description,
+      ...(b.guests?.length && { attendees: b.guests.map((email) => ({ email })) }),
       start: { dateTime: b.start.toISOString() },
       end: { dateTime: b.end.toISOString() },
       ...(b.reminderMinutes != null && { reminders: { useDefault: false, overrides: [{ method: "popup", minutes: b.reminderMinutes }] } }),

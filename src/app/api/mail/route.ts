@@ -15,13 +15,17 @@ export async function GET() {
   return Response.json(await waitingFinds(u.id));
 }
 
-// POST /api/mail {id, action: "add" | "dismiss"} → answers with the fresh list.
+// POST /api/mail {id, action: "add" | "dismiss", start?: ISO, invite?: boolean} → answers with the fresh list. invite:
+// send the sender a calendar invite (meetings and calls). start: the time you
+// picked for a meeting or call (it keeps its length), in place of the one Almanac suggested.
 export async function POST(req: Request) {
   const session = await auth();
   const u = await me(session?.user?.id);
   if (!u) return fail("signin", 401);
   const b = await req.json().catch(() => null);
   if (!UUID.test(b?.id ?? "") || !["add", "dismiss"].includes(b?.action)) return fail("Invalid request");
+  const start = b.start === undefined ? null : new Date(typeof b.start === "string" ? b.start : NaN);
+  if (start && (isNaN(+start) || +start < Date.now() - 60_000 || +start > Date.now() + 400 * 86_400_000)) return fail("Pick a time that's still to come.");
   try {
     // Taken off the waiting list first, so a double tap can't add it twice.
     const [f] = await sql<MailFind[]>`
@@ -30,7 +34,8 @@ export async function POST(req: Request) {
     if (!f) throw new InvalidInput("That's already been answered. The list has been refreshed.");
     if (b.action === "add") {
       const [{ email }] = await sql<{ email: string }[]>`select email from users where id = ${u.id}`;
-      await addFind({ ...u, email }, f).catch(async (err) => {
+      const at = start && f.end_at ? { ...f, start_at: start, end_at: new Date(+start + (+f.end_at - +f.start_at)) } : f;
+      await addFind({ ...u, email }, at, undefined, b.invite === true).catch(async (err) => {
         await sql`update mail_finds set status = 'waiting' where id = ${f.id}`; // still there to try again
         throw err;
       });

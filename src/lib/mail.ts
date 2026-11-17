@@ -8,11 +8,12 @@ import { askJson, hasAi } from "./ai";
 import { listCalendars, type Cal } from "./calendar";
 import { sql } from "./db";
 import { googleAs, type GoogleAccount } from "./google";
-import { gmailLink, header, parseFinds, prompt, senderName, skip, SYSTEM, textOf, whenOf, type Find, type Kind, type Mail, type Part } from "./mail-parse";
+import { gmailLink, header, parseFinds, prompt, senderEmail, senderName, skip, SYSTEM, textOf, whenOf, type Find, type Kind, type Mail, type Part } from "./mail-parse";
 import { midnightIn } from "./reminders";
 import { bookBlock, upcoming, type User } from "./planner";
 import { sendPush } from "./push";
 import { freeSlots } from "./time";
+import { InvalidInput } from "./validate";
 
 const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me";
 const FIRST_LOOK_DAYS = 7; // when switched on, how far back it reads
@@ -24,8 +25,9 @@ type MailUser = User & { email: string; plan_mode: "ask" | "auto"; since: Date |
 type Inbox = GoogleAccount & { email: string; since: Date | null };
 // thread_id: the email's conversation (finds from before it was kept use the email itself, the same for a first message).
 // account_email: the inbox it came from (null: from before more than one could be read, so the main one).
-export type MailFind = { id: string; message_id: string; thread_id: string; kind: Kind; title: string; start_at: Date; end_at: Date | null; summary: string; quote: string; sender: string; account_email: string | null };
-export const FIELDS = "id, message_id, coalesce(thread_id, message_id) as thread_id, kind, title, start_at, end_at, summary, quote, sender, account_email";
+// pick_time: a meeting or call the email gave no time for; start_at is only Almanac's suggestion, you pick.
+export type MailFind = { id: string; message_id: string; thread_id: string; kind: Kind; title: string; start_at: Date; end_at: Date | null; summary: string; quote: string; sender: string; account_email: string | null; pick_time: boolean; sender_email: string | null };
+export const FIELDS = "id, message_id, coalesce(thread_id, message_id) as thread_id, kind, title, start_at, end_at, summary, quote, sender, account_email, pick_time, sender_email";
 
 // Users whose mail is due a read (switched on, Gmail allowed in at least one of their Google accounts, not already
 // read this minute), each claimed so two minute-jobs never read the same mail twice. since: when it was last checked.
@@ -75,12 +77,15 @@ async function scanUser(u: MailUser, now: Date) {
   }
   if (!saved.length) return 0;
 
-  const line = saved.map((s) => `${s.title} · ${whenText(s, u.timezone)}`).join(" · ");
+  // Automatic adds what has a time; one you pick a time for waits either way.
+  const waiting = saved.filter((s) => u.plan_mode !== "auto" || s.pick_time);
+  const added = saved.length - waiting.length;
+  const line = saved.map((s) => `${s.title} · ${s.pick_time ? "pick a time" : whenText(s, u.timezone)}`).join(" · ");
   await sendPush(
     u.id,
-    u.plan_mode === "auto"
-      ? { kind: "digest", title: `Added from your email (${saved.length})`, body: line }
-      : { kind: "digest", title: `Found in your email: ${saved.length} to add. Add ${saved.length === 1 ? "it" : "them"}?`, body: line },
+    !waiting.length
+      ? { kind: "digest", title: `Added from your email (${added})`, body: line }
+      : { kind: "digest", title: `Found in your email: ${waiting.length} to add${added ? ` (${added} added)` : ""}. Add ${waiting.length === 1 ? "it" : "them"}?`, body: line },
   );
   return saved.length;
 }
@@ -127,13 +132,13 @@ async function scanInbox(u: MailUser, inbox: Inbox, now: Date): Promise<MailFind
     const when = whenOf(f, now, u.timezone, free);
     if (!when) continue;
     const [row] = await sql<MailFind[]>`
-      insert into mail_finds (user_id, message_id, thread_id, kind, title, start_at, end_at, summary, quote, sender, account_email)
-      values (${u.id}, ${m.id}, ${m.thread ?? null}, ${f.kind}, ${f.title}, ${when.start}, ${when.end}, ${f.summary}, ${f.quote}, ${senderName(m.from).slice(0, 120)}, ${inbox.main ? null : inbox.email})
+      insert into mail_finds (user_id, message_id, thread_id, kind, title, start_at, end_at, summary, quote, sender, account_email, pick_time, sender_email)
+      values (${u.id}, ${m.id}, ${m.thread ?? null}, ${f.kind}, ${f.title}, ${when.start}, ${when.end}, ${f.summary}, ${f.quote}, ${senderName(m.from).slice(0, 120)}, ${inbox.main ? null : inbox.email}, ${f.kind !== "deadline" && !f.time}, ${senderEmail(m.from)})
       on conflict do nothing
       returning ${sql.unsafe(FIELDS)}`;
     if (!row) continue;
     if (when.end) busy.push({ start: when.start.toISOString(), end: when.end.toISOString(), allDay: false, busy: true }); // the next find won't take this time
-    if (u.plan_mode === "auto") await addFind(u, row, calendars);
+    if (u.plan_mode === "auto" && !row.pick_time) await addFind(u, row, calendars);
     saved.push(row);
   }
   return saved;
@@ -145,20 +150,40 @@ export function whenText(s: Pick<MailFind, "start_at" | "end_at">, timeZone: str
   return s.end_at ? at : `due ${at}`;
 }
 
-// Puts a find on the calendar: a meeting or call as an event on your main calendar (no guests, so nobody is
-// emailed), a deadline as a to-do due then. Marked added either way.
-export async function addFind(u: User & { email: string }, f: MailFind, calendars?: Cal[]) {
+// Puts a find on the calendar: a meeting or call as an event, a deadline as a to-do due then. Marked added either way.
+// invite (you pressed Add with Invite ticked): the sender becomes a guest and Google emails them the invite, sent from
+// the inbox they wrote to (its own calendar), with no notes of yours in it. Otherwise no guests, and your notes and
+// the email's link go in the description; it goes where new events go.
+export async function addFind(u: User & { email: string }, f: MailFind, calendars?: Cal[], invite = false) {
   if (f.end_at) {
-    await bookBlock(u, calendars ?? (await listCalendars(u.id)), {
+    const cals = calendars ?? (await listCalendars(u.id));
+    const inbox = f.account_email ?? u.email;
+    const guest = invite ? await senderOf(u, f) : null;
+    if (invite && !guest) throw new InvalidInput("Couldn't find the sender's address. Untick Invite to add it without one.");
+    const asked = guest && guest !== inbox.toLowerCase() ? guest : null; // you emailed this inbox yourself: no invite to send
+    const own = asked && cals.find((c) => c.account === inbox && c.primary && c.canEdit);
+    await bookBlock(u, own ? [own] : cals, {
       title: f.title,
       start: new Date(f.start_at),
       end: new Date(f.end_at),
-      description: `${f.summary || `“${f.quote}”`} (email from ${f.sender})\n${gmailLink(f.account_email ?? u.email, f.thread_id)}`,
+      description: asked ? undefined : `${f.summary || `“${f.quote}”`} (email from ${f.sender})\n${gmailLink(inbox, f.thread_id)}`,
+      guests: asked ? [asked] : undefined,
     });
   } else {
     await sql`insert into todos (user_id, title, due_at, minutes) values (${u.id}, ${f.title}, ${f.start_at}, 60)`;
   }
   await sql`update mail_finds set status = 'added' where id = ${f.id}`;
+}
+
+// The sender's address: kept with the find, or (found before addresses were kept) read again from the email's From.
+async function senderOf(u: User, f: MailFind) {
+  if (f.sender_email) return f.sender_email;
+  const [inbox] = await sql<GoogleAccount[]>`
+    select id, is_main as main from google_accounts
+    where user_id = ${u.id} and (email = ${f.account_email} or (${f.account_email}::text is null and is_main))`;
+  if (!inbox) return null;
+  const m = await googleAs<{ payload: Part }>(inbox, `${GMAIL}/messages/${f.message_id}?format=metadata&metadataHeaders=From`).catch(() => null);
+  return m ? senderEmail(header(m.payload, "From")) : null;
 }
 
 export const waitingFinds = (userId: string) =>

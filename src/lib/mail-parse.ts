@@ -56,6 +56,12 @@ export function textOf(p: Part) {
 }
 
 // "Priya Shah <priya@x.com>" → "Priya Shah"
+// The sender's address ("Priya <Priya@x.com>" → "priya@x.com"), or null when there isn't a usable one.
+export function senderEmail(from: string) {
+  const a = (/<([^>]+)>/.exec(from)?.[1] ?? from).trim().toLowerCase();
+  return /^[^\s@<>",]+@[^\s@<>",]+\.[^\s@<>",]+$/.test(a) ? a : null;
+}
+
 export const senderName = (from: string) => from.replace(/<[^>]*>/, "").replace(/"/g, "").trim() || from.replace(/[<>]/g, "").trim();
 
 const weekday = (d: Date, timeZone: string) => d.toLocaleDateString("en-GB", { timeZone, weekday: "long" });

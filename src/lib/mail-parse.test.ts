@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseFinds, senderName, skip, textOf, whenOf, type Find, type Part } from "./mail-parse";
+import { parseFinds, senderEmail, senderName, skip, textOf, whenOf, type Find, type Part } from "./mail-parse";
 
 const TZ = "Asia/Kolkata";
 const now = new Date("2026-11-12T11:20:00+05:30"); // Thursday
@@ -23,6 +23,12 @@ describe("the text that's read", () => {
     expect(textOf({ mimeType: "text/html", body: { data: b64("<p>Meet me <b>tomorrow</b></p><style>p{}</style>") } })).toBe("Meet me tomorrow");
   });
   it("names the sender", () => expect(senderName('"Priya Shah" <priya@x.com>')).toBe("Priya Shah"));
+  it("finds the sender's address, for the invite", () => {
+    expect(senderEmail('"Priya Shah" <Priya@X.com>')).toBe("priya@x.com");
+    expect(senderEmail("priya@x.com")).toBe("priya@x.com");
+    expect(senderEmail("Priya Shah")).toBeNull();
+    expect(senderEmail("<not an address>")).toBeNull();
+  });
 });
 
 describe("checking the AI's answer", () => {

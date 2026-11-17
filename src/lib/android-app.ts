@@ -10,7 +10,6 @@ const appVersion = () => Number(navigator.userAgent.match(/AlmanacAndroid\/(\d+)
 export const appHasReminders = () => appVersion() >= 2;
 export const appCanListen = () => appVersion() >= 3;
 export const appHasWidget = () => appVersion() >= 4;
-export const appOpensGmail = () => appVersion() >= 6;
 // The newest app on the site (written by the Android build), and this phone's (0 = older than version 5, so
 // older than any build that could say). An update is out when the site's is higher.
 export const LATEST_BUILD = latest.build;

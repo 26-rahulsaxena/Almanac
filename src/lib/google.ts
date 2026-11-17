@@ -73,26 +73,46 @@ async function accessToken(account: GoogleAccount) {
   }
 }
 
+// Which account each of a user's calendars comes from, read in one query and kept in server memory for a minute.
+// Loading a week asks Google about every calendar at once; a lookup each would fill both of this copy's database
+// connections, and Vercel keeps a paused copy's connections open, so a handful of copies used up the pooler's 15.
+type Routes = { main: GoogleAccount; byCalendar: Map<string, GoogleAccount> };
+const ROUTES_MS = 60_000;
+const routes = new Map<string, { at: number; p: Promise<Routes> }>();
+
+async function loadRoutes(userId: string): Promise<Routes> {
+  const rows = await sql<(GoogleAccount & { calendar_id: string | null })[]>`
+    select a.id, a.is_main as main, c.calendar_id from google_accounts a
+    left join account_calendars c on c.account_id = a.id and c.user_id = a.user_id
+    where a.user_id = ${userId}`;
+  const main = rows.find((r) => r.main);
+  if (!main) throw new ReauthError();
+  const byCalendar = new Map(rows.filter((r) => r.calendar_id).map((r) => [r.calendar_id!, { id: r.id, main: r.main }]));
+  return { main: { id: main.id, main: true }, byCalendar };
+}
+
 // Which of the user's Google accounts a call goes through: the one the calendar comes from, otherwise the main one
 // (for Gmail, the calendar list, and Google's "primary" shortcut, which is the main account's own calendar).
 async function accountFor(userId: string, calendarId?: string): Promise<GoogleAccount> {
-  const [a] = await sql<GoogleAccount[]>`
-    select a.id, a.is_main as main from google_accounts a
-    left join account_calendars c on c.account_id = a.id and c.user_id = ${userId} and c.calendar_id = ${calendarId ?? null}
-    where a.user_id = ${userId} and (c.calendar_id is not null or a.is_main)
-    order by c.calendar_id is null
-    limit 1`;
-  if (!a) throw new ReauthError();
-  return a;
+  let hit = routes.get(userId);
+  if (!hit || Date.now() - hit.at > ROUTES_MS) {
+    hit = { at: Date.now(), p: loadRoutes(userId) };
+    routes.set(userId, hit);
+    hit.p.catch(() => routes.delete(userId));
+  }
+  const r = await hit.p;
+  return (calendarId && r.byCalendar.get(calendarId)) || r.main;
 }
 
 // Remembers which account each calendar comes from, for accountFor (a write only when one changed account).
 export async function rememberCalendars(userId: string, cals: { id: string; accountId: string }[]) {
-  await sql`
+  const changed = await sql`
     insert into account_calendars (user_id, calendar_id, account_id)
     select ${userId}, c, a::uuid from unnest(${cals.map((c) => c.id)}::text[], ${cals.map((c) => c.accountId)}::text[]) as t(c, a)
     on conflict (user_id, calendar_id) do update set account_id = excluded.account_id
-      where account_calendars.account_id <> excluded.account_id`;
+      where account_calendars.account_id <> excluded.account_id
+    returning 1`;
+  if (changed.length) routes.delete(userId); // a new or moved calendar: read the map again next time
 }
 
 // The calendar a Calendar API path is about ("/calendars/<id>/events…"), which decides the account it goes through.

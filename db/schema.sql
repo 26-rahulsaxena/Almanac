@@ -294,3 +294,8 @@ alter table users add column if not exists default_calendar text;
 -- account without one yet uses users.mail_checked_at), and which inbox each find came from (null: the main one).
 alter table google_accounts add column if not exists mail_checked_at timestamptz;
 alter table mail_finds add column if not exists account_email text;
+-- The email asked for a meeting or call but gave no time: Almanac suggests one, and you pick before it's added
+-- (never added by itself, even in Automatic mode).
+alter table mail_finds add column if not exists pick_time boolean not null default false;
+-- Who sent the email (their address), so Add can send them a calendar invite. Null on finds from before this.
+alter table mail_finds add column if not exists sender_email text;
