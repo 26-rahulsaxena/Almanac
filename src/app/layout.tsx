@@ -20,6 +20,8 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
+  // Draw behind the status and gesture bars (no empty strips on phones); edge-touching parts pad by env(safe-area-inset-*).
+  viewportFit: "cover",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#f4f1ea" },
     { media: "(prefers-color-scheme: dark)", color: "#141311" },

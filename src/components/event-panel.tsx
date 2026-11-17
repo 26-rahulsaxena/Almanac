@@ -240,7 +240,7 @@ export function EventPanel({ initial, event, calendars, priority, onDeadline, on
         animate={{ x: 0, y: 0 }}
         exit={phone ? { y: "100%" } : { x: "100%" }}
         transition={{ type: "spring", damping: 34, stiffness: 340 }}
-        className="fixed inset-x-0 bottom-0 z-50 flex max-h-[92dvh] flex-col overflow-hidden rounded-t-3xl border border-line bg-surface shadow-2xl sm:inset-y-0 sm:left-auto sm:max-h-none sm:w-[27rem] sm:rounded-none sm:rounded-l-3xl"
+        className="fixed inset-x-0 bottom-0 z-50 flex max-h-[92dvh] flex-col overflow-hidden rounded-t-3xl border border-line bg-surface pb-[env(safe-area-inset-bottom)] shadow-2xl sm:pt-[env(safe-area-inset-top)] sm:inset-y-0 sm:left-auto sm:max-h-none sm:w-[27rem] sm:rounded-none sm:rounded-l-3xl"
       >
         {/* The category colour along the top, clipped to the panel's rounded corners (overflow-hidden above). */}
         <div className="h-1.5 shrink-0" style={{ background: CATEGORIES.find((c) => c.id === f.colorId)?.hex ?? cal?.color }} />

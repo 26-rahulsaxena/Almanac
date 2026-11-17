@@ -90,7 +90,7 @@ export function Assistant({ open, onOpenChange, onChanged }: { open: boolean; on
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 24, scale: 0.97 }}
             transition={{ type: "spring", damping: 28, stiffness: 340 }}
-            className="fixed bottom-4 right-4 z-30 flex h-[min(38rem,calc(100dvh-6rem))] w-[min(26rem,calc(100vw-2rem))] origin-bottom-right flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl"
+            className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] right-4 z-30 flex h-[min(38rem,calc(100dvh-6rem-env(safe-area-inset-top)-env(safe-area-inset-bottom)))] w-[min(26rem,calc(100vw-2rem))] origin-bottom-right flex-col overflow-hidden rounded-2xl border border-line bg-surface shadow-2xl"
           >
             <header className="flex items-center justify-between border-b border-line px-4 py-3">
               <div>

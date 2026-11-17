@@ -699,7 +699,7 @@ export function CalendarApp({
 
   return (
     <div className="flex flex-1 flex-col">
-      <header className="sticky top-0 z-20 border-b border-line bg-paper/85 backdrop-blur">
+      <header className="sticky top-0 z-20 border-b border-line bg-paper/85 pt-[env(safe-area-inset-top)] backdrop-blur">
         <div className="flex w-full items-center justify-between gap-2 px-3 py-3 sm:gap-4 sm:px-6">
           <div className="flex min-w-0 flex-1 items-center gap-1 lg:flex-none lg:gap-2">
             <button
@@ -849,7 +849,8 @@ export function CalendarApp({
 
       {/* The calendar runs to the bottom of the screen (on wide screens Priorities too) and scrolls on underneath;
           phones' other pages get room at the bottom so nothing ends up under the bar and the + / Ask Almanac buttons. */}
-      <div className={`w-full flex-1 px-3 py-4 sm:px-6 lg:pb-0 ${tab === "calendar" ? "max-lg:pb-0" : "max-lg:pb-48"}`}>
+      {/* overflow-x-clip: pages sliding in from the side mustn't widen the page, or phones zoom out and the bar drops off-screen. */}
+      <div className={`w-full flex-1 overflow-x-clip px-3 py-4 sm:px-6 lg:pb-0 ${tab === "calendar" ? "max-lg:pb-0" : "max-lg:pb-48"}`}>
         {/* The side panel slides out over the calendar. It stays mounted while closed (inert), so its panels
             keep their state and don't reload every time it opens. */}
         <AnimatePresence>
@@ -873,7 +874,7 @@ export function CalendarApp({
           animate={{ x: menu ? 0 : "-105%" }}
           transition={{ type: "spring", damping: 32, stiffness: 340 }}
           onKeyDown={(e) => e.key === "Escape" && setMenu(false)}
-          className="fixed inset-y-0 left-0 z-50 w-[min(22rem,88vw)] overflow-y-auto border-r border-line bg-paper px-5 pb-8 pt-3 shadow-2xl"
+          className="fixed inset-y-0 left-0 z-50 w-[min(22rem,88vw)] overflow-y-auto border-r border-line bg-paper px-5 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-[calc(0.75rem+env(safe-area-inset-top))] shadow-2xl"
         >
           <div className="mb-4 flex items-center justify-between">
             <span className="font-serif text-2xl">Almanac</span>

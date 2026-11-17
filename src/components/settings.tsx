@@ -70,7 +70,7 @@ export function Settings(props: {
         animate={{ x: 0 }}
         exit={{ x: "105%" }}
         transition={{ type: "spring", damping: 32, stiffness: 340 }}
-        className="fixed inset-y-0 right-0 z-50 flex w-[min(26rem,92vw)] flex-col border-l border-line bg-paper shadow-2xl"
+        className="fixed inset-y-0 right-0 z-50 flex w-[min(26rem,92vw)] flex-col border-l border-line bg-paper pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] shadow-2xl"
       >
       <div className="flex items-center justify-between px-5 pb-4 pt-3">
         <h2 id="settings-title" className="font-serif text-2xl">

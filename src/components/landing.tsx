@@ -22,7 +22,7 @@ export function Landing({ error }: { error?: string }) {
   const today = useSyncExternalStore(noChanges, browserToday, () => "");
   const inApp = useSyncExternalStore(noChanges, isAndroidApp, () => false);
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="flex flex-1 flex-col pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]">
       <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4 sm:px-8">
         <span className="font-serif text-2xl">Almanac</span>
         <ThemeToggle />
