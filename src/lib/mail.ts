@@ -7,7 +7,7 @@ import { GMAIL_SCOPE } from "@/auth";
 import { askJson, hasAi } from "./ai";
 import { listCalendars, type Cal } from "./calendar";
 import { sql } from "./db";
-import { googleAs, type GoogleAccount } from "./google";
+import { GoogleError, googleAs, type GoogleAccount } from "./google";
 import { gmailLink, header, parseFinds, prompt, senderEmail, senderName, skip, SYSTEM, textOf, whenOf, type Find, type Kind, type Mail, type Part } from "./mail-parse";
 import { midnightIn } from "./reminders";
 import { bookBlock, upcoming, type User } from "./planner";
@@ -70,6 +70,12 @@ async function scanUser(u: MailUser, now: Date) {
       saved.push(...(await scanInbox(u, inbox, now)));
       await sql`update google_accounts set mail_checked_at = ${now} where id = ${inbox.id}`;
     } catch (err) {
+      // Google says this login can't read Gmail (unticked on its screen): stop trying it, and Settings → Read my
+      // email offers Allow for it.
+      if (err instanceof GoogleError && err.status === 403 && err.body.includes("ACCESS_TOKEN_SCOPE_INSUFFICIENT")) {
+        await sql`update google_accounts set scope = trim(replace(scope, ${GMAIL_SCOPE}, '')) where id = ${inbox.id}`;
+        continue;
+      }
       // Nothing was marked read, so the next check tries the same mail again (the very first look, over the last
       // week, starts over).
       console.error(`Reading mail in account ${inbox.id} failed:`, err);

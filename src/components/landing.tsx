@@ -85,7 +85,7 @@ export function Landing({ error }: { error?: string }) {
                 </motion.a>
               )}
             </div>
-            <p className="mt-4 max-w-md text-sm text-muted">Asks only to manage your Google Calendar. Never your email or files.</p>
+            <p className="mt-4 max-w-md text-sm text-muted">Asks to manage your Google Calendar and to read your Gmail, so meetings and deadlines in your email reach your calendar. You can untick Gmail on Google&rsquo;s screen. Never your files.</p>
             {error && (
               <p role="alert" className="mt-6 max-w-md rounded-xl border border-accent/40 bg-accent/10 px-4 py-3 text-sm">
                 {errors[error] ?? `Sign-in failed (${error}). Try again.`}

@@ -5,19 +5,20 @@ import { cookies } from "next/headers";
 import { encrypt } from "@/lib/crypto";
 import { attachAccount, linkDone, LINK_COOKIE, readTicket } from "@/lib/accounts";
 
-// Minimum scopes: sign-in, list calendars, read/write events. Nothing else from the Google account.
+// Scopes: sign-in, list calendars, read/write events, and read Gmail ("Read my email": meetings, calls and deadlines
+// in new mail). All on one Google screen, at sign-in and when adding another account; Google lets people untick
+// Gmail there, and then Settings offers Allow later. Nothing else from the Google account.
 // Free/busy is computed from the events we already read, so the separate free/busy scope isn't needed.
+export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 const scope = [
   "openid",
   "email",
   "profile",
   "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
   "https://www.googleapis.com/auth/calendar.events",
+  GMAIL_SCOPE,
 ].join(" ");
-
-// Reading Gmail is asked for only when someone switches on "Read my email" in Settings (pass this to signIn).
-export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
-export const withGmail = { scope: `${scope} ${GMAIL_SCOPE}` };
+export const withGmail = { scope }; // shortcut: the same as the default now; kept for Settings' Connect Gmail and the app
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
@@ -48,8 +49,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           attached?.user_id ??
           (
             await sql<{ id: string }[]>`
-              insert into users (google_sub, email, name)
-              values (${profile.sub}, ${profile.email}, ${profile.name ?? null})
+              -- New here and Gmail allowed on the sign-in screen: "Read my email" starts on (Settings can turn it off).
+              insert into users (google_sub, email, name, mail_on)
+              values (${profile.sub}, ${profile.email}, ${profile.name ?? null}, ${!!account.scope?.includes(GMAIL_SCOPE)})
               on conflict (google_sub) do update set email = excluded.email, name = excluded.name
               returning id`
           )[0].id;
