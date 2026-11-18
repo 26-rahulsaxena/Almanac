@@ -2,13 +2,15 @@ import Anthropic from "@anthropic-ai/sdk";
 import { auth } from "@/auth";
 import { plainText, run, system, tools } from "@/lib/assistant";
 import { ReauthError } from "@/lib/google";
+import { sql } from "@/lib/db";
 import { me } from "@/lib/planner";
+import { profileLine } from "@/lib/profile";
 import { InvalidInput } from "@/lib/validate";
 
 // The planning assistant's chat. Uses Claude when ANTHROPIC_API_KEY is set, otherwise any OpenAI-style provider
 // set by AI_API_KEY (+ AI_BASE_URL, AI_MODEL): Groq's free tier by default, or Google Gemini.
 // Chat history lives only in the browser tab; each question sends the visible chat plus what the tools read
-// (event titles and times) to that provider.
+// (event titles and times, and the emails it searches or reads) to that provider.
 
 const CLAUDE_MODEL = "claude-opus-5-5";
 const MAX_STEPS = 8; // tool rounds per question
@@ -146,7 +148,8 @@ export async function POST(req: Request) {
   try {
     // shortcut: only the last 30 messages of the chat are sent; earlier ones are forgotten.
     const history = turns.slice(turns.findIndex((t) => t.role === "user")).map((t) => ({ role: t.role, text: t.text }));
-    const sys = system(session?.user?.name ?? "the user", u, now);
+    const [extra] = await sql<{ profile: unknown; memories: string[] }[]>`select profile, memories from users where id = ${u.id}`;
+    const sys = system(session?.user?.name ?? "the user", u, now, profileLine(extra?.profile), extra?.memories ?? []);
     const reply = await (claude ? askClaude : askOpenAiStyle)(sys, history, act);
     const text = reply === null ? "That took too many steps. Try asking in smaller parts." : plainText(reply) || "Done.";
     return Response.json({ reply: text, changed });

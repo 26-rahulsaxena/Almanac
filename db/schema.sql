@@ -299,3 +299,24 @@ alter table mail_finds add column if not exists account_email text;
 alter table mail_finds add column if not exists pick_time boolean not null default false;
 -- Who sent the email (their address), so Add can send them a calendar invite. Null on finds from before this.
 alter table mail_finds add column if not exists sender_email text;
+-- People: everyone you email with, from Gmail's headers only (never the email text): who you write to and who
+-- writes to your Primary inbox, newsletters and automated senders left out. sent / received: emails each way that
+-- Almanac has counted; last_at: the latest of them. hidden: taken off the list (it isn't counted again either).
+create table if not exists people (
+  user_id uuid not null references users(id) on delete cascade,
+  email text not null,
+  name text not null default '',
+  sent int not null default 0,
+  received int not null default 0,
+  last_at timestamptz,
+  hidden boolean not null default false,
+  primary key (user_id, email)
+);
+alter table people enable row level security;
+-- Gathering people from each inbox: the newest email counted (null: never looked, so the first look takes the
+-- latest 150 each way from the last 6 months) and when it was last looked at (every 10 minutes).
+alter table google_accounts add column if not exists people_cursor timestamptz;
+alter table google_accounts add column if not exists people_checked_at timestamptz;
+-- What the assistant was asked to remember ("Remember that I have gym on Tuesdays"): short lines it reads with
+-- every question, which they can ask it to forget. At most 30.
+alter table users add column if not exists memories jsonb not null default '[]';

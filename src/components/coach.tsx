@@ -315,9 +315,10 @@ export function WhatNowBody({ onCalendarChange, onPick }: { onCalendarChange: ()
 }
 
 // Today at a glance, above Priorities: events, free time, and the most important work for each free stretch.
-// inDialog: inside the header Today button's bubble, which has its own title, so no card or heading.
-// skip: the task What now? is already suggesting above it, so it isn't offered twice.
-export function TodayCard({ version, onCalendarChange, waiting, inDialog, skip }: { version: number; onCalendarChange: () => void; waiting?: boolean; inDialog?: boolean; skip?: string | null }) {
+// inDialog: inside something with its own title (Home's Today group), so no card or heading.
+// skip: the task What now? is already suggesting above it, so it isn't offered twice. skipTodos: to-dos that have
+// their own card next to this one (Home's list), with their own Book.
+export function TodayCard({ version, onCalendarChange, waiting, inDialog, skip, skipTodos = [] }: { version: number; onCalendarChange: () => void; waiting?: boolean; inDialog?: boolean; skip?: string | null; skipTodos?: string[] }) {
   const [plan, setPlan] = useState<DayPlan | null>(null);
   const [risks, setRisks] = useState<PrepState[]>([]);
   const [hidden, setHidden] = useState<string[]>(() => {
@@ -377,6 +378,7 @@ export function TodayCard({ version, onCalendarChange, waiting, inDialog, skip }
   }
 
   if (!plan) return waiting ? <p className="text-sm text-muted">Looking at your day…</p> : null;
+  const offered = plan.blocks.filter((b) => b.title !== skip && !(b.todoId && skipTodos.includes(b.todoId)));
   return (
     <section aria-labelledby={inDialog ? undefined : "today-title"} className={inDialog ? "" : "rounded-2xl border border-line bg-surface p-4"}>
       {!inDialog && (
@@ -423,9 +425,9 @@ export function TodayCard({ version, onCalendarChange, waiting, inDialog, skip }
             </div>
           </div>
         ))}
-      {plan.blocks.some((b) => b.title !== skip) && (
+      {offered.length > 0 && (
         <ul className="mt-3 space-y-2">
-          {plan.blocks.filter((b) => b.title !== skip).map((b) => (
+          {offered.map((b) => (
             <li key={b.start} className="text-sm lg:text-xs">
               <div className="flex items-start gap-3">
                 {/* The suggested time; tap it to pick your own. */}

@@ -5,7 +5,7 @@ import { TIMES_OF_DAY, type TimeOfDay } from "./autoplan";
 import { fromLocal, toLocal, ymdIn } from "./plan";
 import { shiftDate } from "./recurrence";
 
-export type Part = { mimeType?: string; filename?: string; body?: { data?: string }; parts?: Part[]; headers?: { name: string; value: string }[] };
+export type Part = { mimeType?: string; filename?: string; body?: { data?: string; attachmentId?: string; size?: number }; parts?: Part[]; headers?: { name: string; value: string }[] };
 export type Mail = { id: string; thread?: string; from: string; subject: string; sent: Date; text: string };
 export type Kind = "meeting" | "call" | "deadline";
 

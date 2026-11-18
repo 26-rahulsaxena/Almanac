@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
-import { auth, GMAIL_SCOPE } from "@/auth";
+import { auth, MAIL_READ } from "@/auth";
 import { sql } from "@/lib/db";
 import { listCalendars } from "@/lib/calendar";
 import { listAccounts } from "@/lib/accounts";
@@ -34,7 +34,7 @@ async function Content({ searchParams }: PageProps<"/">) {
 
   const [user] = await sql<{ hidden_calendars: string[]; calendar_colors: Record<string, string>; removed_calendars: string[]; remind_popup: boolean; snooze_minutes: number; alarm_at_start: boolean; plan_mode: "ask" | "auto"; profile: Profile | null; mail_on: boolean; default_calendar: string | null; gmail: boolean }[]>`
     select hidden_calendars, calendar_colors, removed_calendars, remind_popup, snooze_minutes, alarm_at_start, plan_mode, profile, mail_on, default_calendar,
-      exists (select 1 from google_accounts t where t.user_id = users.id and t.broken_at is null and t.scope like ${"%" + GMAIL_SCOPE + "%"}) as gmail
+      exists (select 1 from google_accounts t where t.user_id = users.id and t.broken_at is null and t.scope like ${MAIL_READ}) as gmail
     from users where id = ${session.user.id}`;
   const accounts = await listAccounts(session.user.id);
   const stages = { remind: user?.remind_popup ?? true, snooze: user?.snooze_minutes ?? 5, alarm: user?.alarm_at_start ?? true };

@@ -18,8 +18,8 @@ const DAY = 86_400_000;
 const PREP_LOOKBACK_DAYS = 6; // prep blocks booked this far back still count toward a deadline's prep
 
 // Events from a few days back (for prep already done) to the end of Priorities' window (for free time before
-// each deadline), Priorities, to-dos with the AI's ratings, and booked prep minutes by deadline.
-async function gather(u: User, now: Date) {
+// each deadline), Priorities, to-dos with the AI's ratings, and booked prep minutes by deadline. Also Home's list.
+export async function gather(u: User, now: Date) {
   const from = new Date(+midnightIn(ymdIn(now, u.timezone), u.timezone) - PREP_LOOKBACK_DAYS * DAY);
   const [{ events: all }, priorities, todos, rated, done] = await Promise.all([
     upcoming(u, from, PREP_LOOKBACK_DAYS + WINDOW_DAYS + 1),

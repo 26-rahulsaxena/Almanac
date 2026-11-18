@@ -7,9 +7,9 @@ import { addDays, parseWhen, startOfDay, startOfMonth, startOfWeek } from "@/lib
 // Phones and tablets (below the wide layout): a bar of five pages at the bottom, the day you're on at the top
 // (tap it for the month), and the week as a strip of days above the calendar.
 
-export type Tab = "today" | "priorities" | "mail" | "todo" | "calendar";
+export type Tab = "today" | "people" | "mail" | "todo" | "calendar";
 
-export const TAB_TITLE: Record<Exclude<Tab, "calendar">, string> = { today: "Today", priorities: "Priorities", mail: "Email", todo: "To-do" };
+export const TAB_TITLE: Record<Exclude<Tab, "calendar">, string> = { today: "Home", people: "People", mail: "Email", todo: "To-do" };
 
 // The "liquid" spring: quick, with a little overshoot that settles, so highlights and pages flow rather than snap.
 export const LIQUID = { type: "spring", stiffness: 380, damping: 28, mass: 0.8 } as const;
@@ -80,8 +80,8 @@ const icon = (children: ReactNode) => (
 );
 
 const TABS: [Tab, string, ReactNode][] = [
-  ["today", "Today", icon(<><rect x="4" y="4" width="16" height="16" rx="5" /><circle cx="17" cy="7" r="2.2" fill="currentColor" stroke="none" /></>)],
-  ["priorities", "Priorities", icon(<path d="M5 21V4M5 4h11l-2 4 2 4H5" />)],
+  ["today", "Home", icon(<path d="M4 11 12 4l8 7v8a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1z" />)],
+  ["people", "People", icon(<><circle cx="12" cy="8" r="3.5" /><path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5" /></>)],
   ["mail", "Email", icon(<><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3.5 6.5 8.5 6 8.5-6" /></>)],
   ["todo", "To-do", icon(<path d="m4 7 2 2 3-3M4 15l2 2 3-3M12 8h8M12 16h8" />)],
   ["calendar", "Calendar", icon(<><rect x="3.5" y="5" width="17" height="15" rx="3" /><path d="M3.5 10h17M8 3v4M16 3v4" /></>)],
@@ -98,7 +98,7 @@ export function BottomBar({ tab, onTab, open, mail, todayDot }: { tab: Tab; onTa
       <LiquidBlob target={current} className="rounded-full bg-accent" />
       {TABS.map(([id, label, svg]) => {
         const on = tab === id;
-        const count = id === "priorities" ? open : id === "mail" ? mail : 0;
+        const count = id === "today" ? open : id === "mail" ? mail : 0; // Home holds Priorities
         return (
           <button
             key={id}
@@ -114,7 +114,7 @@ export function BottomBar({ tab, onTab, open, mail, todayDot }: { tab: Tab; onTa
             <span className={`relative whitespace-nowrap text-[11px] ${on ? "font-semibold" : ""}`}>{label}</span>
             {/* What's still open in Priorities, and email finds waiting for an answer, in red. */}
             {/* Today: a plain red dot (no number) while it has a suggestion you haven't seen. */}
-            {id === "today" && todayDot && (
+            {id === "today" && todayDot && !count && (
               <span className="absolute left-1/2 top-1.5 ml-2 size-2.5 rounded-full ring-2 ring-surface" style={{ background: "var(--sev-critical)" }} aria-label="New suggestion" />
             )}
             {count > 0 && (

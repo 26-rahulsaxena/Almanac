@@ -3,7 +3,7 @@
 // straight onto the calendar (meetings and calls as events, deadlines as to-dos). Never invites anyone.
 // The email text is only passed to the AI; nothing of it is kept except a short quote of what was found.
 
-import { GMAIL_SCOPE } from "@/auth";
+import { MAIL_READ } from "@/auth";
 import { askJson, hasAi } from "./ai";
 import { listCalendars, type Cal } from "./calendar";
 import { sql } from "./db";
@@ -38,7 +38,7 @@ export async function scanAll(now = new Date()) {
       select u.id, u.mail_checked_at as since from users u
       -- every minute-job (50 s, as runs land a hair under a minute apart); the AI only runs when there's new mail
       where u.mail_on and (u.mail_checked_at is null or u.mail_checked_at < now() - interval '50 seconds')
-        and exists (select 1 from google_accounts t where t.user_id = u.id and t.broken_at is null and t.scope like ${"%" + GMAIL_SCOPE + "%"})
+        and exists (select 1 from google_accounts t where t.user_id = u.id and t.broken_at is null and t.scope like ${MAIL_READ})
       for update skip locked
     )
     update users u set mail_checked_at = now() from due where u.id = due.id
@@ -62,7 +62,7 @@ async function scanUser(u: MailUser, now: Date) {
   const inboxes = await sql<Inbox[]>`
     select id, is_main as main, email, coalesce(mail_checked_at, case when is_main then ${u.since}::timestamptz end) as since
     from google_accounts
-    where user_id = ${u.id} and broken_at is null and scope like ${"%" + GMAIL_SCOPE + "%"}
+    where user_id = ${u.id} and broken_at is null and scope like ${MAIL_READ}
     order by is_main desc, created_at`;
   const saved: MailFind[] = [];
   for (const inbox of inboxes) {
@@ -73,7 +73,7 @@ async function scanUser(u: MailUser, now: Date) {
       // Google says this login can't read Gmail (unticked on its screen): stop trying it, and Settings → Read my
       // email offers Allow for it.
       if (err instanceof GoogleError && err.status === 403 && err.body.includes("ACCESS_TOKEN_SCOPE_INSUFFICIENT")) {
-        await sql`update google_accounts set scope = trim(replace(scope, ${GMAIL_SCOPE}, '')) where id = ${inbox.id}`;
+        await sql`update google_accounts set scope = trim(regexp_replace(scope, '\\S*/auth/gmail\\.\\S*', '', 'g')) where id = ${inbox.id}`;
         continue;
       }
       // Nothing was marked read, so the next check tries the same mail again (the very first look, over the last
