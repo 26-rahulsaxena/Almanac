@@ -28,11 +28,11 @@ type Item = {
 type Group = "today" | "overdue" | "week" | "month";
 type List = Record<Group, Item[]>;
 
-const GROUPS: [Group, string, string][] = [
-  ["overdue", "Overdue", ""],
-  ["today", "Today", "Nothing due today."],
-  ["week", "This week", ""],
-  ["month", "This month", ""],
+// The groups shown: Overdue and This month. Today and This week are left out (today's plan is in the card above);
+// /api/home still sends them.
+const GROUPS: [Group, string][] = [
+  ["overdue", "Overdue"],
+  ["month", "This month"],
 ];
 const SOURCE: Record<Item["source"], string> = { todo: "To-do", calendar: "Calendar", email: "Email", plan: "Suggestion" };
 const SEVERITY_DOT: Record<NonNullable<Item["severity"]>, string> = { critical: "var(--sev-critical)", high: "var(--sev-high)", medium: "var(--sev-medium)", low: "var(--sev-low)" };
@@ -109,8 +109,8 @@ export function Home({
 }
 
 // Everything to do, grouped. Each card has one main button: Book (it fits free time), Add (from email), or Done;
-// one that can't be booked says why and offers the next step instead. onListed: the to-dos with a card in Today or
-// Overdue, each time the list is read.
+// one that can't be booked says why and offers the next step instead. onListed: the to-dos with a card in Overdue,
+// each time the list is read.
 function ActionList({ version, onCalendarChange, onOpen, onListed }: { version: number; onCalendarChange: () => void; onOpen: (t: TileTarget, mail?: MailTarget) => void; onListed: (todos: string[]) => void }) {
   const [list, setList] = useState<List | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -141,7 +141,7 @@ function ActionList({ version, onCalendarChange, onOpen, onListed }: { version: 
           if (r.ok && d?.today) {
             setList(d);
             setError(null);
-            onListed([...d.today, ...d.overdue].flatMap((it: Item) => (it.act.kind === "todo" ? [it.act.id] : [])));
+            onListed(d.overdue.flatMap((it: Item) => (it.act.kind === "todo" ? [it.act.id] : [])));
           } else setError(d?.error === "reauth" ? "Google needs you to sign in again." : (d?.error ?? "Couldn't load your list."));
         })
         .catch(() => {
@@ -215,8 +215,8 @@ function ActionList({ version, onCalendarChange, onOpen, onListed }: { version: 
           {error}
         </p>
       )}
-      {GROUPS.map(([g, label, empty]) =>
-        !list[g].length && g !== "today" ? null : ( // Today shows even when empty, to say so
+      {GROUPS.map(([g, label]) =>
+        !list[g].length ? null : (
           <div key={g}>
             <h2>
               <button
@@ -231,7 +231,6 @@ function ActionList({ version, onCalendarChange, onOpen, onListed }: { version: 
                 {label} {list[g].length > 0 && <span>· {list[g].length}</span>}
               </button>
             </h2>
-            {shown.has(g) && !list[g].length && <p className="mt-2 text-sm text-muted">{empty}</p>}
             {shown.has(g) && (
             <ul className="mt-2 space-y-2">
               <AnimatePresence initial={false}>
