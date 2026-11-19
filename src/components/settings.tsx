@@ -10,7 +10,7 @@ import { Select } from "./select";
 import { appBuild, isAndroidApp, LATEST_BUILD } from "@/lib/android-app";
 import { AlertStageSettings, forgetDevice, NotifySettings } from "./notify-settings";
 import { PlanModeSetting, type PlanMode } from "./suggestions";
-import { ThemeToggle } from "./theme-toggle";
+import { LookSettings, ThemeMode } from "./theme-toggle";
 import { HowItWorks } from "./tour";
 import { MailSetting } from "./mail-finds";
 import { useDialog } from "./use-dialog";
@@ -130,8 +130,9 @@ export function Settings(props: {
                 <h3 className={h3}>Appearance</h3>
                 <p className="mt-1 text-sm">Light or dark</p>
               </div>
-              <ThemeToggle />
+              <ThemeMode />
             </div>
+            <LookSettings />
             <h3 className={`${h3} mt-6`}>Keyboard</h3>
             <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
               {KEYS.map(([k, what]) => (

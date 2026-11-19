@@ -4,6 +4,10 @@ import { useEffect, useState, type ReactNode } from "react";
 import { TodayCard, WhatNowBody } from "./coach";
 import { TodayTiles, type Counts, type TileTarget } from "./today-tiles";
 
+// An email to open in Mail: its conversation, the inbox it came to (its email; null: the main one), and a title for
+// the conversation's heading until it loads.
+export type MailTarget = { thread: string; inbox: string | null; title: string };
+
 // The same shape as lib/home.ts sends.
 type Item = {
   key: string;
@@ -18,15 +22,15 @@ type Item = {
   act:
     | { kind: "todo"; id: string; suggestion?: string }
     | { kind: "priority"; calendarId: string; eventId: string; prep?: string }
-    | { kind: "find"; id: string; pickTime: boolean }
+    | { kind: "find"; id: string; pickTime: boolean; quote: string; thread: string; inbox: string | null }
     | { kind: "suggestion"; id: string; move: boolean };
 };
 type Group = "today" | "overdue" | "week" | "month";
 type List = Record<Group, Item[]>;
 
 const GROUPS: [Group, string, string][] = [
-  ["today", "Today", "Nothing due today."],
   ["overdue", "Overdue", ""],
+  ["today", "Today", "Nothing due today."],
   ["week", "This week", ""],
   ["month", "This month", ""],
 ];
@@ -39,6 +43,11 @@ const dayTime = (iso: string, allDay = false) => {
   const today = d.toDateString() === new Date().toDateString();
   const day = today ? "" : d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
   return allDay ? day || "Today" : `${day}${day ? ", " : ""}${time(iso)}`;
+};
+// An instant as this device's "YYYY-MM-DDTHH:MM", for a date-and-time box.
+const localInput = (iso: string) => {
+  const d = new Date(iso);
+  return new Date(+d - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
 };
 const whenText = (it: Item) => (it.source === "todo" || it.source === "calendar" ? `${it.source === "todo" ? "Due " : ""}${dayTime(it.when, it.allDay)}` : dayTime(it.when));
 
@@ -55,9 +64,9 @@ export function Home({
 }: {
   version: number;
   wide: boolean;
-  greeting: string;
+  greeting: ReactNode;
   onCalendarChange: () => void;
-  onOpen: (t: TileTarget) => void;
+  onOpen: (t: TileTarget, mail?: MailTarget) => void;
   children?: ReactNode;
 }) {
   const [nowPick, setNowPick] = useState<string | null>(null); // What now?'s pick, left out of the plan under it
@@ -77,7 +86,8 @@ export function Home({
   }, [version]);
 
   return (
-    <div className="lg:grid lg:h-[calc(100dvh-5rem)] lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:gap-6">
+    // 5.25rem: the header and the space above Home (81 px), so the page itself never scrolls; each column does.
+    <div className="lg:grid lg:h-[calc(100dvh-5.25rem)] lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:gap-6">
       <div className="min-w-0 space-y-4 lg:min-h-0 lg:overflow-y-auto lg:pr-1 lg:pb-24">
         {wide && <h1 className="font-serif text-4xl">{greeting}</h1>}
         {/* What now? and today's plan as one card, so nothing is suggested twice: the plan leaves out What now?'s
@@ -92,7 +102,8 @@ export function Home({
         <ActionList version={version} onCalendarChange={onCalendarChange} onOpen={onOpen} onListed={setListed} />
         {!wide && children}
       </div>
-      {wide && <aside className="min-w-0 space-y-4 lg:min-h-0 lg:overflow-y-auto lg:pb-24">{children}</aside>}
+      {/* A column the Priorities panel fills to the bottom of the screen (it scrolls inside itself). */}
+      {wide && <aside className="flex min-w-0 min-h-0 flex-col">{children}</aside>}
     </div>
   );
 }
@@ -100,13 +111,16 @@ export function Home({
 // Everything to do, grouped. Each card has one main button: Book (it fits free time), Add (from email), or Done;
 // one that can't be booked says why and offers the next step instead. onListed: the to-dos with a card in Today or
 // Overdue, each time the list is read.
-function ActionList({ version, onCalendarChange, onOpen, onListed }: { version: number; onCalendarChange: () => void; onOpen: (t: TileTarget) => void; onListed: (todos: string[]) => void }) {
+function ActionList({ version, onCalendarChange, onOpen, onListed }: { version: number; onCalendarChange: () => void; onOpen: (t: TileTarget, mail?: MailTarget) => void; onListed: (todos: string[]) => void }) {
   const [list, setList] = useState<List | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [mine, setMine] = useState(0); // bumps after this list's own changes, to read it again
-  // Which groups are open: Today and Overdue to start with; This week and This month folded until tapped.
-  const [shown, setShown] = useState<Set<Group>>(() => new Set(["today", "overdue"]));
+  const [words, setWords] = useState<Set<string>>(() => new Set()); // email cards showing the email's own words
+  // Email cards' own picked start ("YYYY-MM-DDTHH:MM", this device's time), when Change time was used.
+  const [picked, setPicked] = useState<Record<string, string>>({});
+  // Which groups are open: Today, Overdue and This week to start with; This month folded until tapped.
+  const [shown, setShown] = useState<Set<Group>>(() => new Set(["today", "overdue", "week"]));
   const fold = (g: Group) =>
     setShown((s) => {
       const next = new Set(s);
@@ -146,28 +160,29 @@ function ActionList({ version, onCalendarChange, onOpen, onListed }: { version: 
     }
   }
 
-  // The buttons for one item: [label, primary, action].
+  // The buttons for one item: [label, primary, action]. Where there's a Done, it's the one filled button; Book and
+  // the like stay outlined (rows without Done fill their main action: Add, Book).
   const buttons = (it: Item): [string, boolean, () => void][] => {
     const a = it.act;
     switch (a.kind) {
       case "todo":
         return [
           ...(!it.booked
-            ? [[it.fit ? "Book" : "Book a time", !!it.fit, () =>
+            ? [[it.fit ? "Book" : "Book a time", false, () =>
                 a.suggestion
                   ? run(it, "Book", "/api/suggestions", "POST", { id: a.suggestion, action: "approve" })
                   : run(it, "Book", "/api/todos", "PATCH", { id: a.id, schedule: true, ...(it.fit && { start: it.fit.start }) })] as [string, boolean, () => void]]
             : []),
-          ["Done", !!it.booked, () => run(it, "Done", "/api/todos", "PATCH", { id: a.id, done: true })],
+          ["Done", true, () => run(it, "Done", "/api/todos", "PATCH", { id: a.id, done: true })],
         ];
       case "priority":
         return [
-          ...(a.prep ? [["Book prep", true, () => run(it, "Book prep", "/api/coach", "POST", { fit: a.prep })] as [string, boolean, () => void]] : []),
-          ["Done", !a.prep, () => run(it, "Done", "/api/priorities", "POST", { calendarId: a.calendarId, eventId: a.eventId, action: "done" })],
+          ...(a.prep ? [["Book prep", false, () => run(it, "Book prep", "/api/coach", "POST", { fit: a.prep })] as [string, boolean, () => void]] : []),
+          ["Done", true, () => run(it, "Done", "/api/priorities", "POST", { calendarId: a.calendarId, eventId: a.eventId, action: "done" })],
         ];
       case "find":
         return [
-          a.pickTime ? ["Pick a time", true, () => onOpen("mail")] : ["Add", true, () => run(it, "Add", "/api/mail", "POST", { id: a.id, action: "add" })],
+          ["Add", true, () => run(it, "Add", "/api/mail", "POST", { id: a.id, action: "add", ...(picked[it.key] && { start: new Date(picked[it.key]).toISOString() }) })],
           ["Not now", false, () => run(it, "Not now", "/api/mail", "POST", { id: a.id, action: "dismiss" })],
         ];
       case "suggestion":
@@ -223,6 +238,65 @@ function ActionList({ version, onCalendarChange, onOpen, onListed }: { version: 
                           <span className="font-semibold text-ink">{whenText(it)}</span> · {SOURCE[it.source]}
                         </p>
                         <p className="mt-0.5 break-words text-xs text-muted">{it.note}</p>
+                        {it.act.kind === "find" && (() => {
+                          const a = it.act;
+                          const shown = words.has(it.key);
+                          return (
+                            <>
+                              {shown && a.quote && (
+                                <p className="mt-1 break-words border-l-2 border-line pl-2 text-xs italic text-muted">“{a.quote}”</p>
+                              )}
+                              <p className="mt-1 flex gap-3 text-xs">
+                                {a.quote && (
+                                  <button
+                                    type="button"
+                                    aria-expanded={shown}
+                                    onClick={() =>
+                                      setWords((s) => {
+                                        const next = new Set(s);
+                                        if (!next.delete(it.key)) next.add(it.key);
+                                        return next;
+                                      })
+                                    }
+                                    className="font-medium text-accent hover:underline"
+                                  >
+                                    {shown ? "Hide words" : "Show words"}
+                                  </button>
+                                )}
+                                {it.fit && (
+                                  <button
+                                    type="button"
+                                    aria-expanded={it.key in picked}
+                                    onClick={() =>
+                                      setPicked((p) => {
+                                        const next = { ...p };
+                                        if (it.key in next) delete next[it.key];
+                                        else next[it.key] = localInput(it.fit!.start);
+                                        return next;
+                                      })
+                                    }
+                                    className="font-medium text-accent hover:underline"
+                                  >
+                                    {it.key in picked ? "Keep this time" : "Change time"}
+                                  </button>
+                                )}
+                                <button type="button" onClick={() => onOpen("mail", { thread: a.thread, inbox: a.inbox, title: it.title })} className="font-medium text-accent hover:underline">
+                                  Open in Mail
+                                </button>
+                              </p>
+                              {it.key in picked && (
+                                <input
+                                  type="datetime-local"
+                                  aria-label={`Time for ${it.title}`}
+                                  value={picked[it.key]}
+                                  min={localInput(new Date().toISOString())}
+                                  onChange={(e) => e.target.value && setPicked((p) => ({ ...p, [it.key]: e.target.value }))}
+                                  className="mt-1.5 rounded-lg border border-line bg-surface px-2 py-1 text-xs"
+                                />
+                              )}
+                            </>
+                          );
+                        })()}
                         {(it.fit || it.booked) && (
                           <p className="mt-1 text-xs">
                             {it.booked ? (

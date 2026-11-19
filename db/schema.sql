@@ -320,3 +320,6 @@ alter table google_accounts add column if not exists people_checked_at timestamp
 -- What the assistant was asked to remember ("Remember that I have gym on Tuesdays"): short lines it reads with
 -- every question, which they can ask it to forget. At most 30.
 alter table users add column if not exists memories jsonb not null default '[]';
+-- The accounts Almanac works with (the ☰ menu): Home, Calendar, Mail and the assistant use only these. Empty: all of
+-- them. Background reminders and email reading still cover every account, so nothing slips while one is switched off.
+alter table users add column if not exists active_accounts uuid[] not null default '{}';

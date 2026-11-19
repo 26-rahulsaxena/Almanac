@@ -18,7 +18,8 @@ export const VIEWS = {
   inbox: "in:inbox",
   starred: "is:starred",
   sent: "in:sent",
-  all: "", // anywhere but Spam and Bin (a person's emails, with a search)
+  trash: "in:trash", // what you moved to Trash (Gmail empties it after 30 days)
+  all: "", // anywhere but Spam and Trash (a person's emails, with a search)
 } as const;
 export type View = keyof typeof VIEWS;
 
@@ -33,6 +34,7 @@ export type ThreadRow = {
   unread: boolean;
   starred: boolean;
   inbox: boolean;
+  trash: boolean; // in Trash: it can be restored
   count: number;
 };
 // cid: the picture's Content-ID, when the email's HTML shows it inline ("<img src=cid:…>").
@@ -56,6 +58,8 @@ export const inboxAccounts = (userId: string) =>
   sql<InboxAccount[]>`
     select id, is_main as main, email, scope like '%/gmail.modify%' as send from google_accounts
     where user_id = ${userId} and broken_at is null and scope like '%/auth/gmail.%'
+      -- only the accounts switched on in the ☰ menu (none chosen: all)
+      and (select cardinality(active_accounts) = 0 or google_accounts.id = any(active_accounts) from users where users.id = google_accounts.user_id)
     order by is_main desc, created_at`;
 
 export async function inboxAccount(userId: string, id: unknown, act = false) {
@@ -76,8 +80,8 @@ export class AllowError extends Error {
 // Gmail said the login lacks the permission (allowed reading only, or unticked on Google's screen).
 export const scopeMissing = (err: unknown) => err instanceof GoogleError && err.status === 403 && err.body.includes("ACCESS_TOKEN_SCOPE_INSUFFICIENT");
 
-// Runs fn over items, PARALLEL at a time (also used by people.ts).
-export async function pool<T, R>(items: T[], fn: (t: T) => Promise<R>): Promise<R[]> {
+// Runs fn over items, `at` at a time (also used by people.ts).
+export async function pool<T, R>(items: T[], fn: (t: T) => Promise<R>, at = PARALLEL): Promise<R[]> {
   const out: R[] = new Array(items.length);
   let next = 0;
   const worker = async () => {
@@ -86,7 +90,7 @@ export async function pool<T, R>(items: T[], fn: (t: T) => Promise<R>): Promise<
       out[i] = await fn(items[i]);
     }
   };
-  await Promise.all(Array.from({ length: Math.min(PARALLEL, items.length) }, worker));
+  await Promise.all(Array.from({ length: Math.min(at, items.length) }, worker));
   return out;
 }
 
@@ -114,9 +118,16 @@ export function rowOf(a: InboxAccount, id: string, msgs: RawMsg[], snippet: stri
     unread: labels.has("UNREAD"),
     starred: labels.has("STARRED"),
     inbox: labels.has("INBOX"),
+    trash: labels.has("TRASH"),
     count: msgs.length,
   };
 }
+
+// Each conversation's row as last read, with the historyId it was read at ("accountId:threadId"), in this server
+// copy's memory. Rows hold subjects and senders, so it's never sent anywhere; it goes when the server restarts.
+// shortcut: emptied whole when it passes ROW_CACHE_MAX rather than dropping the oldest; plenty for a few users.
+const ROW_CACHE_MAX = 20_000;
+const rowCache = new Map<string, { history: string; row: ThreadRow }>();
 
 // One page of conversations from every account, newest first. page: each account's next-page token from the last
 // call (an account missing from it has no more). failed: accounts Gmail wouldn't list right now.
@@ -132,12 +143,26 @@ export async function listThreads(userId: string, view: View, search: string, pa
     accounts.map(async (a) => {
       try {
         const token = page?.[a.id] ? `&pageToken=${encodeURIComponent(page[a.id])}` : "";
-        const l = await googleAs<{ threads?: { id: string; snippet: string }[]; nextPageToken?: string }>(a, `${GMAIL}/threads?maxResults=${PAGE}&q=${encodeURIComponent(q)}${token}`);
-        if (l.nextPageToken) next[a.id] = l.nextPageToken;
-        return await pool(l.threads ?? [], async (t) => {
-          const full = await googleAs<{ messages: RawMsg[] }>(a, `${GMAIL}/threads/${t.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject`);
-          return rowOf(a, t.id, full.messages, t.snippet);
-        });
+        const l = await googleAs<{ threads?: { id: string; snippet: string; historyId: string }[]; nextPageToken?: string }>(a, `${GMAIL}/threads?maxResults=${PAGE}&q=${encodeURIComponent(q)}${token}`);
+        // Only conversations that changed since they were last read here (Gmail's historyId moves with any new
+        // message, label, read or star) are fetched again: each costs 10 of the 6,000 units a person gets a minute.
+        // All of a page at once (~350 ms per call, so one round instead of three): at most 20 × 10 + the list's 10,
+        // under Gmail's 250 per second per account.
+        const rows = await pool(
+          l.threads ?? [],
+          async (t) => {
+            const known = rowCache.get(`${a.id}:${t.id}`);
+            if (known?.history === t.historyId) return { ...known.row, snippet: unentity(t.snippet) };
+            const full = await googleAs<{ messages: RawMsg[] }>(a, `${GMAIL}/threads/${t.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject`);
+            const row = rowOf(a, t.id, full.messages, t.snippet);
+            if (rowCache.size > ROW_CACHE_MAX) rowCache.clear();
+            rowCache.set(`${a.id}:${t.id}`, { history: t.historyId, row });
+            return row;
+          },
+          PAGE,
+        );
+        if (l.nextPageToken) next[a.id] = l.nextPageToken; // only once the page loaded, so a failed one offers no Load more
+        return rows;
       } catch (err) {
         console.error(`Listing mail in account ${a.id} failed:`, err);
         failed.push(a.email);
@@ -218,7 +243,7 @@ export async function getAttachment(a: InboxAccount, messageId: string, attachme
   return Buffer.from(r.data, "base64url");
 }
 
-// Each action and its undo. Trash goes to Gmail's Bin (kept 30 days), never deleted for good.
+// Each action and its undo. Trash goes to Gmail's Trash (kept 30 days), never deleted for good.
 export const ACTIONS = {
   archive: { remove: ["INBOX"] },
   unarchive: { add: ["INBOX"] },

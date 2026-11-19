@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
+import { Geist, Geist_Mono, Instrument_Serif, Unbounded } from "next/font/google";
 import { Providers } from "@/components/providers";
 import { Intro, INTRO_SCRIPT } from "@/components/intro";
 import "./globals.css";
@@ -12,6 +12,7 @@ const instrumentSerif = Instrument_Serif({
   weight: "400",
   style: ["normal", "italic"],
 });
+const unbounded = Unbounded({ variable: "--font-unbounded", subsets: ["latin"], weight: ["300", "400", "500"] }); // headings and big numbers (font-serif), every look
 
 export const metadata: Metadata = {
   title: "Almanac",
@@ -28,15 +29,16 @@ export const viewport: Viewport = {
   ],
 };
 
-// Runs before paint so the page never flashes the wrong theme.
-const themeScript = `try{var t=localStorage.theme;if(t==='dark'||(!t&&matchMedia('(prefers-color-scheme: dark)').matches))document.documentElement.classList.add('dark')}catch(e){}`;
+// Runs before paint so the page never flashes the wrong theme or look (Paper or Ember: see globals.css). Ember is
+// always dark, coloured by its hue (--ember-hue). With no saved theme (System), light/dark follows the device live.
+const themeScript = `try{var d=document.documentElement,t=localStorage.theme,e=localStorage.look==='ember';if(e||t==='dark'||(!t&&matchMedia('(prefers-color-scheme: dark)').matches))d.classList.add('dark');if(e)d.classList.add('ember');d.style.setProperty('--ember-hue',localStorage.emberHue||'44')}catch(x){}matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(m){try{if(!localStorage.theme&&localStorage.look!=='ember')document.documentElement.classList.toggle('dark',m.matches)}catch(x){}});`;
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} ${instrumentSerif.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${instrumentSerif.variable} ${unbounded.variable} h-full antialiased`}
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript + INTRO_SCRIPT }} />

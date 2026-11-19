@@ -1,7 +1,7 @@
 "use client";
 import { AnimatePresence, motion } from "motion/react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { doneEventKeys, setCalendarColor, setHiddenCalendars, setRemovedCalendars, type AlertStages } from "@/app/actions";
+import { doneEventKeys, setActiveAccounts, setCalendarColor, setHiddenCalendars, setRemovedCalendars, type AlertStages } from "@/app/actions";
 import { appHasWidget, saveAgenda } from "@/lib/android-app";
 import { GoogleSignIn } from "./google-sign-in";
 import type { Cal, Ev } from "@/lib/calendar";
@@ -24,13 +24,12 @@ import type { AwayKind } from "@/lib/away";
 import { EMPTY_PROFILE, type Profile } from "@/lib/profile";
 import { PrioritiesPanel, type PriorityAction } from "./priorities-panel";
 import { AddCalendarHelp } from "./add-calendar";
-import { MailFinds } from "./mail-finds";
 import { Inbox } from "./inbox";
 import { People } from "./people";
 import { type TileTarget } from "./today-tiles";
-import { Home } from "./home";
+import { Home, type MailTarget } from "./home";
 import { Modal, Review } from "./coach";
-import { BottomBar, DateButton, FLOW, FLOW_SPRING, MonthPanel, TAB_TITLE, tabDirection, WeekStrip, type Tab } from "./phone";
+import { BottomBar, DateButton, FLOW, FLOW_SPRING, LiquidBlob, MonthPanel, TAB_TITLE, tabDirection, WeekStrip, type Tab } from "./phone";
 import { type PlanMode } from "./suggestions";
 import { ThemeToggle } from "./theme-toggle";
 import { TodoBody, TodoDialog } from "./todo-dialog";
@@ -182,7 +181,9 @@ export function CalendarApp({
   const [doneKeys, setDoneKeys] = useState<Set<string>>(() => new Set()); // "calendarId:eventId" of what's ticked Done
   const firstPriorities = useRef(true);
   const [showAssistant, setShowAssistant] = useState(false);
-  const [menu, setMenu] = useState(false);
+  const [menu, setMenu] = useState(false); // ☰: the accounts Almanac works with, and their calendars
+  const [calMenu, setCalMenu] = useState(false); // the Calendar page's own drawer: view, categories, week in review
+  const [switching, setSwitching] = useState(false); // saving a change of accounts (the page reloads with it)
   const [moved, setMoved] = useState<{ key: number; title: string; undo: () => void } | null>(null);
   const [todoDrag, setTodoDrag] = useState<TodoDrag | null>(null);
   const menuButton = useRef<HTMLButtonElement>(null);
@@ -211,6 +212,8 @@ export function CalendarApp({
   const [tab, setTab] = useState<Tab>("today");
   const [section, setSection] = useState<"home" | "calendar" | "mail" | "people">("home");
   const home = section === "home";
+  const [mailTarget, setMailTarget] = useState<(MailTarget & { key: number }) | null>(null); // an email for Mail to open
+  const [navAt, setNavAt] = useState<HTMLSpanElement | null>(null); // the header button of the section you're on
   const mailOpen = section === "mail";
   const [tabDir, setTabDir] = useState(0); // which side the page you just picked in the bottom bar comes from
   const [monthOpen, setMonthOpen] = useState(false);
@@ -369,11 +372,64 @@ export function CalendarApp({
     if (writable) setPanel({ form: draftFromSlot(start, end, writable.id) });
   }
 
+  // The greeting, with the first name set apart (.greet-name in globals.css). By the browser's clock; "Hello" until
+  // it's known, so the server and browser render the same.
+  const first = name.split(" ")[0];
+  const helloText = mounted ? greeting(now.getHours(), first) : `Hello, ${first}`;
+  const at = first ? helloText.lastIndexOf(first) : -1;
+  const hello =
+    at < 0 ? helloText : (
+      <>
+        {helloText.slice(0, at)}
+        <span className="greet-name">{first}</span>
+        {helloText.slice(at + first.length)}
+      </>
+    );
+
+  // The ☰ menu's account switches. Saving reloads the page, so every section loads for the new set of accounts.
+  const activeIds = accounts.filter((a) => a.active).map((a) => a.id);
+  async function setActive(ids: string[]) {
+    if (!ids.length) return;
+    setSwitching(true);
+    try {
+      await setActiveAccounts(ids);
+      location.reload();
+    } catch {
+      setSwitching(false);
+      setError("Couldn't switch accounts. Try again.");
+    }
+  }
+  const knob = (on: boolean) => (
+    <span aria-hidden className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${on ? "bg-accent" : "bg-ink/20"}`}>
+      <span className={`absolute top-0.5 size-4 rounded-full bg-white shadow transition-[left] ${on ? "left-[18px]" : "left-0.5"}`} />
+    </span>
+  );
+  // One account: its switch (the last one on can't be switched off), its address, and whether it's the main one.
+  const accountRow = (a: Account) => (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={a.active}
+      aria-label={`Use ${a.email} in Almanac`}
+      disabled={switching || (a.active && activeIds.length === 1)}
+      onClick={() => setActive(a.active ? activeIds.filter((x) => x !== a.id) : [...activeIds, a.id])}
+      className="flex w-full items-center gap-2.5 rounded-lg px-3 py-1.5 text-left hover:bg-ink/5 disabled:cursor-default disabled:hover:bg-transparent"
+    >
+      {knob(a.active)}
+      <span className={`min-w-0 flex-1 truncate text-sm font-medium ${a.active ? "" : "text-muted"}`} title={a.email}>
+        {a.email}
+      </span>
+      {a.broken ? <span className="shrink-0 text-xs text-accent">Reconnect</span> : a.main && <span className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-muted">Main</span>}
+    </button>
+  );
+
   // Priorities live on Home only (beside its list on wide screens, under it on phones): levels, Doing, Later, Done.
   const priorityDetails = <PrioritiesPanel items={priorities} onAction={priorityAction} />;
 
   // A tile or button on Home: the section it's about (wide screens: Calendar or Mail in Home's place, To-do over it).
-  function openFromToday(t: TileTarget) {
+  // mail: an email to open there (Home's Open in Mail); key makes Mail open it even if it's the same one again.
+  function openFromToday(t: TileTarget, mail?: MailTarget) {
+    if (mail) setMailTarget({ ...mail, key: Date.now() });
     if (t === "calendar") goToday();
     if (matchMedia(WIDE).matches) {
       if (t === "todo") setTodos(true);
@@ -765,6 +821,22 @@ export function CalendarApp({
               ))}
           </div>
           <div className="flex shrink-0 items-center gap-1 lg:gap-2">
+            {phone && tab === "calendar" && (
+              <button
+                type="button"
+                onClick={() => setCalMenu(true)}
+                aria-label="Calendar view and categories"
+                aria-expanded={calMenu}
+                title="View and categories"
+                className="grid size-9 shrink-0 place-items-center rounded-full border border-line bg-surface hover:border-ink/40 sm:size-10"
+              >
+                <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
+                  <path d="M4 7h10M18 7h2M4 17h4M12 17h8" />
+                  <circle cx="16" cy="7" r="2" />
+                  <circle cx="10" cy="17" r="2" />
+                </svg>
+              </button>
+            )}
             {/* Search: the round button grows to the left into the search box (over the name and date while open). */}
             <div className="relative size-9 shrink-0 sm:size-10">
               <div
@@ -814,7 +886,9 @@ export function CalendarApp({
                 )}
               </div>
             </div>
-            {/* Wide screens: search, Today, mail, To-do, theme, settings. Phones have Today and To-do in the bottom bar. */}
+            {/* Wide screens: Home, Calendar, Mail and People switch the page under the header; a ring flows like
+                a red ring flows like liquid to the one you're on, and its icon turns red, as in the phone bar. Phones have these in the bottom bar. */}
+            <div className="relative hidden items-center gap-2 lg:flex">
             <button
               type="button"
               onClick={() => {
@@ -824,14 +898,15 @@ export function CalendarApp({
               aria-label={`Home: what to do now, and everything to do${todayDot ? " (new suggestion)" : ""}`}
               aria-pressed={home}
               title="Home"
-              className={`relative hidden size-10 shrink-0 place-items-center rounded-full border bg-surface hover:border-ink/40 lg:grid ${home ? "border-ink" : "border-line"}`}
+              className={`relative grid size-10 shrink-0 place-items-center rounded-full border border-line bg-surface transition-colors duration-300 hover:border-ink/40 ${home ? "text-accent" : ""}`}
             >
+              {home && <span ref={setNavAt} aria-hidden className="absolute inset-0" />}
               {/* The phone bar's Home icon. */}
               <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <path d="M4 11 12 4l8 7v8a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1z" />
               </svg>
               {/* A plain red dot, no number: Today has a suggestion you haven't opened it to see. */}
-              {todayDot && <span className="absolute -top-0.5 -right-0.5 size-3 rounded-full bg-accent ring-2 ring-paper" aria-hidden />}
+              {todayDot && <span className="absolute -top-1 -right-1 z-10 size-3 rounded-full bg-accent ring-2 ring-paper" aria-hidden />}
             </button>
             <button
               type="button"
@@ -839,8 +914,9 @@ export function CalendarApp({
               aria-label="Calendar"
               aria-pressed={section === "calendar"}
               title="Calendar"
-              className={`hidden size-10 shrink-0 place-items-center rounded-full border bg-surface hover:border-ink/40 lg:grid ${section === "calendar" ? "border-ink" : "border-line"}`}
+              className={`relative grid size-10 shrink-0 place-items-center rounded-full border border-line bg-surface transition-colors duration-300 hover:border-ink/40 ${section === "calendar" ? "text-accent" : ""}`}
             >
+              {section === "calendar" && <span ref={setNavAt} aria-hidden className="absolute inset-0" />}
               <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <rect x="3.5" y="5" width="17" height="15" rx="3" />
                 <path d="M3.5 10h17M8 3v4M16 3v4" />
@@ -854,14 +930,15 @@ export function CalendarApp({
                 aria-label={mailCount ? `Mail: ${mailCount} found in your email to add` : "Mail"}
                 aria-pressed={mailOpen}
                 title="Mail (m)"
-                className={`relative grid size-10 shrink-0 place-items-center rounded-full border bg-surface hover:border-ink/40 ${mailOpen ? "border-ink" : mailCount ? "border-accent/50" : "border-line"}`}
+                className={`relative grid size-10 shrink-0 place-items-center rounded-full border bg-surface transition-colors duration-300 hover:border-ink/40 ${mailCount ? "border-accent/50" : "border-line"} ${mailOpen ? "text-accent" : ""}`}
               >
+                {mailOpen && <span ref={setNavAt} aria-hidden className="absolute inset-0" />}
                 <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                   <rect x="3" y="5" width="18" height="14" rx="2" />
                   <path d="m3.5 6.5 8.5 6 8.5-6" />
                 </svg>
                 {!!mailCount && (
-                  <span className="absolute -top-1 -right-1 grid min-w-5 place-items-center rounded-full bg-accent px-1 text-[0.7rem] font-medium leading-5 text-paper" aria-hidden>
+                  <span className="absolute -top-1.5 -right-1.5 z-10 grid min-w-5 place-items-center rounded-full bg-accent px-1 text-[0.7rem] font-medium leading-5 text-paper ring-2 ring-paper" aria-hidden>
                     {mailCount}
                   </span>
                 )}
@@ -876,13 +953,16 @@ export function CalendarApp({
               aria-label="People"
               aria-pressed={section === "people"}
               title="People"
-              className={`hidden size-10 shrink-0 place-items-center rounded-full border bg-surface hover:border-ink/40 lg:grid ${section === "people" ? "border-ink" : "border-line"}`}
+              className={`relative grid size-10 shrink-0 place-items-center rounded-full border border-line bg-surface transition-colors duration-300 hover:border-ink/40 ${section === "people" ? "text-accent" : ""}`}
             >
+              {section === "people" && <span ref={setNavAt} aria-hidden className="absolute inset-0" />}
               <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <circle cx="12" cy="8" r="3.5" />
                 <path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5" />
               </svg>
             </button>
+            <LiquidBlob target={navAt} className="rounded-full border-[1.5px] border-accent" />
+            </div>
             <button
               type="button"
               onClick={(e) => setTodos(e.currentTarget.getBoundingClientRect())}
@@ -934,7 +1014,7 @@ export function CalendarApp({
         </AnimatePresence>
         <motion.aside
           id="menu"
-          aria-label="Calendars"
+          aria-label="Accounts"
           inert={!menu}
           initial={false}
           animate={{ x: menu ? 0 : "-105%" }}
@@ -954,6 +1034,65 @@ export function CalendarApp({
               ✕
             </button>
           </div>
+          <h2 className="font-mono text-xs uppercase tracking-[0.2em] text-muted">Accounts</h2>
+          <p className="mt-1.5 text-xs text-muted">
+            Home, Calendar, Mail and the assistant use the accounts switched on. Reminders and email suggestions keep
+            covering every account.
+          </p>
+          {accounts.length > 1 && (
+            <button
+              type="button"
+              role="switch"
+              aria-checked={activeIds.length === accounts.length}
+              disabled={switching || activeIds.length === accounts.length}
+              onClick={() => setActive(accounts.map((a) => a.id))}
+              className="mt-3 flex w-full items-center gap-2.5 rounded-lg px-3 py-1.5 text-left text-sm font-medium hover:bg-ink/5 disabled:cursor-default disabled:hover:bg-transparent"
+            >
+              {knob(activeIds.length === accounts.length)}
+              All accounts
+            </button>
+          )}
+          <ul className="mt-1 flex flex-col gap-0.5">
+            {accounts.map((a) => (
+              <li key={a.id}>{accountRow(a)}</li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            onClick={() => {
+              setMenu(false);
+              setSettingsTab("Account");
+              setSettings(true);
+            }}
+            className="mt-1 px-3 py-1.5 text-left text-sm text-muted hover:text-ink"
+          >
+            + Add another Google account
+          </button>
+
+        </motion.aside>
+
+        {/* The Calendar page's drawer, from the right: how the calendar shows (view, which calendars, categories)
+            and the week in review. Opened from the sliders button by the date. The ☰ menu holds only accounts. */}
+        <AnimatePresence>
+          {calMenu && (
+            <motion.div key="cal-scrim" className="fixed inset-0 z-40 bg-ink/25" onClick={() => setCalMenu(false)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} aria-hidden />
+          )}
+        </AnimatePresence>
+        <motion.aside
+          aria-label="Calendar view"
+          inert={!calMenu}
+          initial={false}
+          animate={{ x: calMenu ? 0 : "105%" }}
+          transition={{ type: "spring", damping: 32, stiffness: 340 }}
+          onKeyDown={(e) => e.key === "Escape" && setCalMenu(false)}
+          className="fixed inset-y-0 right-0 z-50 w-[min(22rem,88vw)] overflow-y-auto border-l border-line bg-paper px-5 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-[calc(0.75rem+env(safe-area-inset-top))] shadow-2xl"
+        >
+          <div className="mb-4 flex items-center justify-between">
+            <span className="font-serif text-2xl">Calendar</span>
+            <button type="button" onClick={() => setCalMenu(false)} aria-label="Close" className="grid size-10 place-items-center rounded-full text-muted hover:bg-ink/5 hover:text-ink">
+              ✕
+            </button>
+          </div>
           {/* Agenda, day, week or month (also the A, D, W and M keys). */}
           <h2 className="font-mono text-xs uppercase tracking-[0.2em] text-muted">View</h2>
           <div className="relative mt-3 grid grid-cols-4 rounded-full border border-line bg-surface p-0.5" role="group" aria-label="View">
@@ -966,7 +1105,7 @@ export function CalendarApp({
                   aria-pressed={on}
                   onClick={() => {
                     changeView(v);
-                    setMenu(false);
+                    setCalMenu(false);
                   }}
                   title={`${v} (${v[0].toUpperCase()})`}
                   className="relative rounded-full px-3 py-1 text-sm capitalize"
@@ -984,7 +1123,7 @@ export function CalendarApp({
               const on = !hidden.has(c.id);
               const editing = editCal === c.id;
               // With more than one Google account, each one's calendars sit under its email.
-              const heading = accounts.length > 1 && list[i - 1]?.account !== c.account;
+              const heading = accounts.length > 1 && list[i - 1]?.accountId !== c.accountId;
               return (
                 <Fragment key={c.id}>
                 {heading && (
@@ -1073,22 +1212,11 @@ export function CalendarApp({
               )}
             </div>
           )}
-          <button
-            type="button"
-            onClick={() => {
-              setMenu(false);
-              setSettingsTab("Account");
-              setSettings(true);
-            }}
-            className="mt-1 px-3 py-1.5 text-left text-sm text-muted hover:text-ink"
-          >
-            + Add another Google account
-          </button>
 
           <button
             type="button"
             onClick={() => {
-              setMenu(false);
+              setCalMenu(false);
               setReview(true);
             }}
             className="mt-6 rounded-full border border-line px-3 py-1.5 text-sm hover:border-ink/40"
@@ -1133,16 +1261,12 @@ export function CalendarApp({
         {/* Wide screens: the section picked in the header, under it, filling the screen's height (6.25rem = header
             + padding): Home, Mail, People, or the calendar (the whole width; Priorities and suggestions are on Home). */}
         {wide && section === "home" && !searching ? (
-          <Home version={gen} wide greeting={mounted ? greeting(now.getHours(), name.split(" ")[0]) : `Hello, ${name.split(" ")[0]}`} onCalendarChange={() => setGen((g) => g + 1)} onOpen={openFromToday}>
+          <Home version={gen} wide greeting={hello} onCalendarChange={() => setGen((g) => g + 1)} onOpen={openFromToday}>
             {priorityDetails}
           </Home>
         ) : wide && section === "mail" && !searching ? (
           <div className="lg:h-[calc(100dvh-6.25rem)]">
-            <Inbox version={gen} onMakeEvent={makeEvent} onChanged={() => setGen((g) => g + 1)} onPerson={openPerson}>
-              <div className="mb-3">
-                <MailFinds version={gen} onCalendarChange={() => setGen((g) => g + 1)} onCount={setMailCount} />
-              </div>
-            </Inbox>
+            <Inbox version={gen} onMakeEvent={makeEvent} onChanged={() => setGen((g) => g + 1)} onPerson={openPerson} openThread={mailTarget} />
           </div>
         ) : wide && section === "people" && !searching ? (
           <div className="lg:h-[calc(100dvh-6.25rem)]">
@@ -1155,8 +1279,7 @@ export function CalendarApp({
           {/* Wide screens: a greeting on the left, the dates shown (tap for the month) on the right. */}
           <div className="flex flex-wrap items-center gap-2 max-lg:hidden">
             <h1 className="mr-auto font-serif text-4xl">
-              {/* By the browser's clock; "Hello" until it's known, so the server and browser render the same. */}
-              {mounted ? greeting(now.getHours(), name.split(" ")[0]) : `Hello, ${name.split(" ")[0]}`}
+              {hello}
             </h1>
             <div className="font-serif text-2xl" aria-live="polite">
               {mounted ? (
@@ -1176,6 +1299,20 @@ export function CalendarApp({
                 " "
               )}
             </div>
+            <button
+                type="button"
+                onClick={() => setCalMenu(true)}
+                aria-label="Calendar view and categories"
+                aria-expanded={calMenu}
+                title="View and categories"
+                className="grid size-10 shrink-0 place-items-center rounded-full border border-line bg-surface hover:border-ink/40"
+              >
+                <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
+                  <path d="M4 7h10M18 7h2M4 17h4M12 17h8" />
+                  <circle cx="16" cy="7" r="2" />
+                  <circle cx="10" cy="17" r="2" />
+                </svg>
+              </button>
           </div>
           {/* Phones: the month when the date at the top is tapped (it pushes the calendar down), otherwise on the
               day view the week as a strip of days. */}
@@ -1235,11 +1372,7 @@ export function CalendarApp({
               ) : tab === "people" ? (
                 <People key={person?.key} version={gen} open={person?.email} onMeet={meetWith} onMakeEvent={makeEvent} onChanged={() => setGen((g) => g + 1)} />
               ) : tab === "mail" ? (
-                <Inbox version={gen} onMakeEvent={makeEvent} onChanged={() => setGen((g) => g + 1)} onPerson={openPerson}>
-                  <div className="mb-3">
-                    <MailFinds version={gen} onCalendarChange={() => setGen((g) => g + 1)} onCount={setMailCount} />
-                  </div>
-                </Inbox>
+                <Inbox version={gen} onMakeEvent={makeEvent} onChanged={() => setGen((g) => g + 1)} onPerson={openPerson} openThread={mailTarget} />
               ) : (
                 <TodoBody
                   version={gen}

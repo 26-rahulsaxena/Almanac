@@ -45,6 +45,86 @@
   --cat-6: #84c2c3;
 }
 
+/* Ember (Settings → Look → Ember; the .ember class on <html>, always with .dark): frosted dark panels over smoke
+   with a warm glow that drifts slowly; white pill buttons (bg-ink is near-white here). One hue (--ember-hue, Settings
+   → Ember colour; 44 is the orange) colours the accent, the glow and the name. Muted text and the accent keep 4.5:1
+   on the panels. */
+.ember {
+  --paper: #18161a;
+  --surface: rgb(46 40 44 / 0.62);
+  --ink: #f5f1ee;
+  --muted: #b3acaf;
+  --line: rgb(255 255 255 / 0.1);
+  --accent: oklch(0.74 0.17 var(--ember-hue, 44));
+  --chrome: rgb(24 22 26 / 0.55); /* the header and other sticky bars: thinner, so more glow shows through */
+  --edge: rgb(255 255 255 / 0.14); /* light catching a panel's top edge */
+  --panel-shadow: rgb(0 0 0 / 0.55);
+}
+/* The wallpaper, larger than the screen so its slow drift never shows an edge. */
+.ember body::before {
+  content: "";
+  position: fixed;
+  inset: -20%;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(34% 40% at 46% 34%, oklch(0.66 0.2 var(--ember-hue, 44) / 0.42), transparent 70%),
+    radial-gradient(26% 28% at 60% 64%, oklch(0.76 0.16 calc(var(--ember-hue, 44) + 12) / 0.16), transparent 70%),
+    radial-gradient(36% 46% at 92% 8%, rgb(130 80 120 / 0.38), transparent 70%),
+    radial-gradient(40% 42% at 6% 92%, rgb(90 70 110 / 0.38), transparent 70%),
+    radial-gradient(70% 70% at 50% 50%, #2a2529, #141215);
+  animation: ember-drift 40s ease-in-out infinite alternate;
+}
+/* Only a slide: scaling or turning this oversized layer made the theme switch's snapshot freeze the page. */
+@keyframes ember-drift {
+  to { transform: translate3d(5%, -4%, 0); }
+}
+/* Panels and cards are frosted; sticky bars a thinner frost (they already blur what's under them). */
+.ember .bg-surface {
+  -webkit-backdrop-filter: blur(22px) saturate(1.5);
+  backdrop-filter: blur(22px) saturate(1.5);
+  box-shadow: inset 0 1px 0 var(--edge), 0 8px 28px -12px var(--panel-shadow);
+}
+.ember [class*="bg-paper/"] {
+  background-color: var(--chrome);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  backdrop-filter: blur(24px) saturate(1.6);
+}
+/* Always dark: the top bar's light/dark button has nothing to switch. */
+.ember header [data-theme-toggle] {
+  display: none;
+}
+/* Headings and big numbers, every look: Unbounded (wide, geometric; the font-serif class), light and a touch tight. */
+.font-serif {
+  font-weight: 300;
+  letter-spacing: -0.02em;
+}
+/* The first name in the greeting: Instrument Serif italic in the accent, a little larger to sit with the wide
+   headings. In Ember it's an ember-lit script: the Ember colour, fading lighter. */
+.greet-name {
+  font-family: var(--font-instrument-serif), serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 1.12em;
+  letter-spacing: 0;
+  color: var(--accent);
+}
+.ember .greet-name {
+  padding-right: 0.06em; /* italic overhang, so the gradient isn't clipped */
+  background: linear-gradient(100deg, oklch(0.74 0.17 var(--ember-hue, 44)), oklch(0.87 0.08 calc(var(--ember-hue, 44) + 18)));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+/* "Reduce transparency": solid panels, no blur. "Reduce motion": the wallpaper stays still. */
+@media (prefers-reduced-transparency: reduce) {
+  .ember { --surface: #2a2529; --chrome: #1d1a1e; }
+  .ember .bg-surface, .ember [class*="bg-paper/"] { -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ember body::before { animation: none; }
+}
+
 @theme inline {
   --color-paper: var(--paper);
   --color-surface: var(--surface);
@@ -54,7 +134,7 @@
   --color-accent: var(--accent);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  --font-serif: var(--font-instrument-serif);
+  --font-serif: var(--font-unbounded); /* not a serif any more: kept as the "display" font's class name */
 }
 
 html {
@@ -82,6 +162,15 @@ body {
   transition: none !important;
 }
 
+/* No scrollbars anywhere (they clashed with the look): every page, panel and list still scrolls by wheel,
+   trackpad, touch and keyboard; only the bar isn't drawn. */
+* {
+  scrollbar-width: none;
+}
+*::-webkit-scrollbar {
+  display: none;
+}
+
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -103,12 +192,14 @@ html[data-intro] .intro {
   padding: 0 1.5rem;
   animation: intro-out 0.4s ease-in 2s forwards;
 }
-.intro-a { animation: intro-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
-.intro-dot { transform-box: fill-box; transform-origin: center; animation: intro-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) 0.4s both; }
-.intro-line { transform-box: fill-box; transform-origin: left; animation: intro-sweep 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.5s both; }
+.intro-card { animation: intro-drop 0.45s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.intro-card-2 { animation-delay: 0.1s; }
+.intro-card-3 { animation-delay: 0.2s; }
+.intro-line { transform-box: fill-box; transform-origin: left; animation: intro-sweep 0.4s cubic-bezier(0.22, 1, 0.36, 1) 0.45s both; }
+.intro-dot { transform-box: fill-box; transform-origin: center; animation: intro-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) 0.6s both; }
 .intro-name { margin-top: 0.75rem; font-size: 1.125rem; letter-spacing: 0.25em; animation: intro-fade 0.45s 0.8s both; }
 .intro-tagline { margin-top: 1rem; font-size: 1.25rem; font-style: italic; animation: intro-up 0.5s 1.05s both; }
-@keyframes intro-rise { from { opacity: 0; transform: translateY(12px); } }
+@keyframes intro-drop { from { opacity: 0; transform: translateY(-14px); } }
 @keyframes intro-pop { from { opacity: 0; transform: scale(0); } }
 @keyframes intro-sweep { from { transform: scaleX(0); } }
 @keyframes intro-fade { from { opacity: 0; } }

@@ -7,11 +7,11 @@ import { GoogleSignIn, startLink } from "./google-sign-in";
 import { useDialog } from "./use-dialog";
 
 // The same shapes as lib/inbox.ts sends (dates as ISO strings).
-type Row = { id: string; account: string; accountEmail: string; subject: string; people: string; snippet: string; date: string; unread: boolean; starred: boolean; inbox: boolean; count: number };
+type Row = { id: string; account: string; accountEmail: string; subject: string; people: string; snippet: string; date: string; unread: boolean; starred: boolean; inbox: boolean; trash: boolean; count: number };
 type Attachment = { id: string; name: string; mime: string; size: number; cid: string | null };
 type Msg = { id: string; from: string; fromEmail: string | null; to: string; cc: string; date: string; subject: string; html: string | null; text: string; attachments: Attachment[]; unread: boolean };
 type List = { threads: Row[]; next: Record<string, string> | null; failed: string[]; accounts: MailAccount[] };
-type View = "primary" | "inbox" | "starred" | "sent" | "all";
+type View = "primary" | "inbox" | "starred" | "sent" | "trash" | "all";
 type Action = "archive" | "unarchive" | "read" | "unread" | "star" | "unstar" | "trash" | "untrash";
 
 const VIEWS: [View, string][] = [
@@ -19,6 +19,7 @@ const VIEWS: [View, string][] = [
   ["inbox", "All inbox"],
   ["starred", "Starred"],
   ["sent", "Sent"],
+  ["trash", "Trash"],
 ];
 const ALLOW = "Almanac may only read this account's mail. Press Allow at the top of the inbox first.";
 const errorText = (d: { error?: string } | null) =>
@@ -40,6 +41,12 @@ const fileUrl = (row: Row, m: Msg, a: Attachment) => `/api/inbox?${new URLSearch
 const inline = (html: string, atts: Attachment[], url: (a: Attachment) => string) =>
   atts.reduce((h, a) => (a.cid ? h.split(`cid:${a.cid}`).join(url(a).replace(/&/g, "&amp;")) : h), html);
 const files = (m: Msg) => m.attachments.filter((a) => !(a.cid && m.html?.includes(`cid:${a.cid}`)));
+// The last first page of each list (folder, search, mailbox) and the drawer's unread numbers, kept while the page is
+// open so going back to Mail shows them at once, and Gmail isn't asked again within a minute: each page costs 210
+// of the 6,000 units Gmail allows a person per minute. In memory only: a reload starts fresh.
+const FRESH_MS = 60_000;
+const seen = new Map<string, { list: List; at: number; version: number }>();
+let lastCounts: { id: string; unread: number }[] | null = null;
 const kb = (n: number) => (n > 1_000_000 ? `${(n / 1_000_000).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1000))} KB`);
 
 // The inbox: every connected Google account's mail in one list, read, answered and tidied without leaving Almanac.
@@ -54,6 +61,7 @@ export function Inbox({
   onPerson,
   query: fixed,
   writeTo,
+  openThread,
   children,
 }: {
   version: number;
@@ -62,6 +70,8 @@ export function Inbox({
   onPerson?: (email: string) => void;
   query?: string;
   writeTo?: string;
+  // An email to open as soon as the accounts are known (Home's Open in Mail); key: each request once.
+  openThread?: { thread: string; inbox: string | null; title: string; key: number } | null;
   children?: ReactNode;
 }) {
   const [view, setView] = useState<View>(fixed ? "all" : "primary");
@@ -71,17 +81,33 @@ export function Inbox({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<Row | null>(null);
+  // Opening the email Home asked for, once the list (and with it the accounts) has loaded: a conversation row made
+  // from what's known; its own heading takes the email's subject when it loads. Done while rendering, the way React
+  // adjusts state to a changed prop, so it shows in the same paint.
+  const [openedKey, setOpenedKey] = useState<number | null>(null);
   const [toast, setToast] = useState<{ key: number; text: string; undo?: () => void } | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   // The drawer: which mailbox (one account's id; null: all of them together) and, on phones, whether it's out.
   const [box, setBox] = useState<string | null>(null);
   const [drawer, setDrawer] = useState(false);
   const [counts, setCounts] = useState<{ id: string; unread: number }[] | null>(null);
-  const asked = useRef(0); // the latest list asked for; older answers arriving late are dropped
+  // The latest load asked for (its number and list), and the number of the answer on screen. An answer for a list
+  // you've moved away from is dropped; one for this list shows unless a newer one already has, so a refresh that
+  // starts while another is still on its way (coming back to the tab) never leaves Mail stuck on "Loading".
+  const asked = useRef({ n: 0, key: "" });
+  const shownN = useRef(0);
 
+  const key = `${view}|${search}|${box ?? ""}`; // which list this is, for `seen`
   const load = useCallback(
-    async (more?: Record<string, string>) => {
-      const n = ++asked.current;
+    async (more?: Record<string, string>, fresh = false) => {
+      const n = asked.current.n + 1;
+      asked.current = { n, key };
+      // Coming back to a list seen before: it shows at once. Seen in the last minute, with nothing changed since
+      // (version) and no Refresh pressed: that's it, Gmail isn't asked again. Otherwise the fresh one replaces it.
+      const hit = !more ? seen.get(key) : undefined;
+      if (hit) setList(hit.list);
+      if (!more && !fixed && lastCounts) setCounts(lastCounts);
+      if (hit && !fresh && hit.version === version && Date.now() - hit.at < FRESH_MS) return setLoading(false);
       setLoading(true);
       setError(null);
       const params = new URLSearchParams({ view, q: search });
@@ -91,22 +117,29 @@ export function Inbox({
       if (!more && !fixed)
         fetch("/api/inbox?counts=1")
           .then((r) => (r.ok ? r.json() : null))
-          .then((c) => Array.isArray(c) && setCounts(c))
+          .then((c) => Array.isArray(c) && setCounts((lastCounts = c)))
           .catch(() => {});
       try {
         const r = await fetch(`/api/inbox?${params}`);
         const d = await r.json().catch(() => null);
-        if (n !== asked.current) return;
-        if (!r.ok) return setError(errorText(d));
+        if (asked.current.key !== key || n < shownN.current) return;
+        if (!r.ok) return n === asked.current.n && setError(errorText(d));
+        shownN.current = n;
+        if (!more) seen.set(key, { list: d, at: Date.now(), version });
         setList((prev) => (more && prev ? { ...d, threads: [...prev.threads, ...d.threads.filter((t: Row) => !prev.threads.some((p) => p.id === t.id && p.account === t.account))] } : d));
       } catch {
-        if (n === asked.current) setError("Couldn't reach Gmail. Check your connection.");
+        if (n === asked.current.n) setError("Couldn't reach Gmail. Check your connection.");
       } finally {
-        if (n === asked.current) setLoading(false);
+        if (n === asked.current.n) setLoading(false);
       }
     },
-    [view, search, box, fixed],
+    [view, search, box, fixed, key, version],
   );
+  // What's on screen is what a revisit shows: archive, trash, star or read here, and the remembered list follows.
+  useEffect(() => {
+    const hit = seen.get(key);
+    if (list && hit && hit.list !== list) seen.set(key, { ...hit, list });
+  }, [list, key]);
   useEffect(() => {
     const t = setTimeout(load); // after this render, so typing a search or switching views fast asks once
     return () => clearTimeout(t);
@@ -132,21 +165,25 @@ export function Inbox({
     return false;
   }
 
-  // Archive and Bin take the conversation off the list at once, with Undo; it comes back if Gmail says no.
-  async function remove(row: Row, action: "archive" | "trash") {
+  // Archive, Trash and Restore (out of Trash) take the conversation off the list at once when it no longer belongs
+  // there, with Undo; it comes back if Gmail says no.
+  async function remove(row: Row, action: "archive" | "trash" | "untrash") {
     if (!canAct(row)) return setError(ALLOW);
+    const undo: Action = action === "archive" ? "unarchive" : action === "trash" ? "untrash" : "trash";
+    const after: Partial<Row> = action === "archive" ? { inbox: false } : { trash: action === "trash" };
+    const before: Partial<Row> = action === "archive" ? { inbox: true } : { trash: action !== "trash" };
     const at = list?.threads.findIndex((t) => t.id === row.id && t.account === row.account) ?? -1;
     const putBack = () => setList((l) => l && { ...l, threads: l.threads.some((t) => t.id === row.id) ? l.threads : [...l.threads.slice(0, at), row, ...l.threads.slice(at)] });
-    const off = action === "trash" || view === "primary" || view === "inbox";
+    const off = action === "untrash" ? view === "trash" : action === "trash" || view === "primary" || view === "inbox";
     if (off) setList((l) => l && { ...l, threads: l.threads.filter((t) => !(t.id === row.id && t.account === row.account)) });
-    else patch(row, { inbox: false });
+    else patch(row, after);
     if (open?.id === row.id) setOpen(null);
-    if (!(await act(row, action))) return off ? putBack() : patch(row, { inbox: true });
-    say(action === "trash" ? "Moved to Bin" : "Archived", async () => {
+    if (!(await act(row, action))) return off ? putBack() : patch(row, before);
+    say(action === "trash" ? "Moved to Trash" : action === "untrash" ? "Restored" : "Archived", async () => {
       setToast(null);
-      if (!(await act(row, action === "trash" ? "untrash" : "unarchive"))) return;
+      if (!(await act(row, undo))) return;
       if (off) putBack();
-      else patch(row, { inbox: true });
+      else patch(row, before);
     });
   }
 
@@ -174,6 +211,13 @@ export function Inbox({
   }
 
   const accounts = list?.accounts ?? [];
+  if (openThread && list && openedKey !== openThread.key) {
+    const a = list.accounts.find((x) => (openThread.inbox ? x.email === openThread.inbox : x.main)) ?? list.accounts[0];
+    if (a) {
+      setOpenedKey(openThread.key);
+      setOpen({ id: openThread.thread, account: a.id, accountEmail: a.email, subject: openThread.title, people: "", snippet: "", date: new Date().toISOString(), unread: false, starred: false, inbox: true, trash: false, count: 1 });
+    }
+  }
   const readOnly = accounts.filter((a) => !a.send && (!box || a.id === box)); // only the mailbox you're in
   // Write sends from the mailbox you're in when it can send, otherwise from the first account that can.
   const writer = accounts.find((a) => a.id === box && a.send) ?? accounts.find((a) => a.send);
@@ -199,32 +243,36 @@ export function Inbox({
 
   return (
     <div className="lg:grid lg:h-full lg:min-h-0 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:gap-6">
-      <AnimatePresence>
-        {!fixed && drawer && (
-          <Drawer key="drawer" onClose={() => setDrawer(false)}>
-            {drawerBody}
-          </Drawer>
-        )}
-      </AnimatePresence>
       <section aria-label="Inbox" className={`min-w-0 lg:min-h-0 lg:overflow-y-auto lg:pr-1 ${open ? "max-lg:hidden" : ""}`}>
         {!fixed && (
-          // First thing above the list: which mailbox and folder you're in; tap the three lines for the drawer.
+          // First thing above the list: which mailbox and folder you're in; tap it for the Mail drawer to change them.
+          <div className="mb-2">
           <button
             type="button"
-            onClick={() => setDrawer(true)}
+            onClick={() => setDrawer(!drawer)}
             aria-label={`Mailboxes: ${boxName}, ${VIEWS.find(([v]) => v === view)?.[1]}`}
             aria-expanded={drawer}
-            className="mb-2 flex w-full items-center gap-2 rounded-xl px-1 py-1.5 text-left hover:bg-ink/[0.03]"
+            className="flex w-full items-center gap-2 rounded-xl px-1 py-1.5 text-left hover:bg-ink/[0.03]"
           >
             <svg className="size-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
               <path d="M4 6h16M4 12h16M4 18h10" />
             </svg>
             <span className="min-w-0 truncate text-sm font-medium">{boxName}</span>
             <span className="shrink-0 text-xs text-muted">· {VIEWS.find(([v]) => v === view)?.[1]}</span>
-            <svg className="ml-auto size-4 shrink-0 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
-              <path d="m6 9 6 6 6-6" />
+            <svg className="ml-auto size-5 shrink-0 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
+              <path d="M4 7h10M18 7h2M4 17h4M12 17h8" />
+              <circle cx="16" cy="7" r="2" />
+              <circle cx="10" cy="17" r="2" />
             </svg>
           </button>
+          <AnimatePresence>
+            {drawer && (
+              <Drawer key="mailboxes" onClose={() => setDrawer(false)}>
+                {drawerBody}
+              </Drawer>
+            )}
+          </AnimatePresence>
+          </div>
         )}
         {readOnly.length > 0 && (
           <div className="mb-3 rounded-2xl border border-accent/50 bg-surface p-3 text-sm">
@@ -282,7 +330,7 @@ export function Inbox({
             placeholder="Search mail (from:priya, has:attachment…)"
             className="min-w-0 flex-1 rounded-full border border-line bg-surface px-4 py-2 text-sm placeholder:text-muted focus:border-accent/60 focus:outline-none"
           />
-          <button type="button" onClick={() => load()} aria-label="Refresh" title="Refresh" className="grid size-9 shrink-0 place-items-center rounded-full text-muted hover:text-ink">
+          <button type="button" onClick={() => load(undefined, true)} aria-label="Refresh" title="Refresh" className="grid size-9 shrink-0 place-items-center rounded-full text-muted hover:text-ink">
             <svg className={`size-4 ${loading ? "animate-spin" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
               <path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v4.5h-4.5" />
             </svg>
@@ -384,7 +432,7 @@ export function Inbox({
             onSent={() => {
               setDraft(null);
               say("Sent");
-              setTimeout(() => load(), 1500); // Gmail lists a sent email after a moment
+              setTimeout(() => load(undefined, true), 1500); // Gmail lists a sent email after a moment
             }}
           />
         )}
@@ -431,7 +479,7 @@ export function Inbox({
 }
 
 // The drawer: Write, then the mailboxes (all of them together, then each account, with unread in Primary), then
-// the folders of the one you're in. Slides out from the left from the three-lines button above the list.
+// the folders of the one you're in. Opened from the row above the list that names where you are.
 function MailDrawer({
   accounts,
   counts,
@@ -492,26 +540,31 @@ function MailDrawer({
   );
 }
 
-// The drawer, sliding out from the left over a dimmed page; tap outside or Esc to close. Drawn at the top of the page
-// (a portal), so it's above the full-window Mail and isn't held inside the phone page's sliding transform.
+// The Mail drawer, from the right like the Calendar page's: the mailboxes and folders. A choice, a tap outside, ✕ or
+// Esc closes it. On <body>, so the page's sliding transforms can't pin it inside the page.
 function Drawer({ onClose, children }: { onClose: () => void; children: ReactNode }) {
-  const ref = useDialog<HTMLDivElement>(onClose);
+  const ref = useDialog<HTMLElement>(onClose);
   return createPortal(
     <>
-      <motion.div className="fixed inset-0 z-40 bg-ink/25" onClick={onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />
-      <motion.div
+      <motion.div className="fixed inset-0 z-40 bg-ink/25" onClick={onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} aria-hidden />
+      <motion.aside
         ref={ref}
         role="dialog"
-        aria-modal="true"
         aria-label="Mailboxes"
-        initial={{ x: "-100%" }}
+        initial={{ x: "105%" }}
         animate={{ x: 0 }}
-        exit={{ x: "-100%" }}
-        transition={{ type: "spring", damping: 30, stiffness: 320 }}
-        className="fixed inset-y-0 left-0 z-50 w-[min(18rem,85vw)] overflow-y-auto rounded-r-3xl border-r border-line bg-surface p-4 pt-[calc(1rem+env(safe-area-inset-top))] shadow-2xl"
+        exit={{ x: "105%" }}
+        transition={{ type: "spring", damping: 32, stiffness: 340 }}
+        className="fixed inset-y-0 right-0 z-50 w-[min(22rem,88vw)] overflow-y-auto border-l border-line bg-paper px-5 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-[calc(0.75rem+env(safe-area-inset-top))] shadow-2xl"
       >
+        <div className="mb-4 flex items-center justify-between">
+          <span className="font-serif text-2xl">Mail</span>
+          <button type="button" onClick={onClose} aria-label="Close" className="grid size-10 place-items-center rounded-full text-muted hover:bg-ink/5 hover:text-ink">
+            ✕
+          </button>
+        </div>
         {children}
-      </motion.div>
+      </motion.aside>
     </>,
     document.body,
   );
@@ -536,7 +589,7 @@ function Thread({
   me: string;
   canAct: boolean;
   onBack: () => void;
-  onRemove: (a: "archive" | "trash") => void;
+  onRemove: (a: "archive" | "trash" | "untrash") => void;
   onToggle: (k: "unread" | "starred") => void;
   onTodo: () => void;
   onEvent: (note: string) => void;
@@ -575,21 +628,30 @@ function Thread({
 
   return (
     <article className="pb-6">
-      <div className="sticky top-0 z-10 flex items-center gap-0.5 border-b border-line bg-paper/90 py-1 backdrop-blur">
+      <div className="sticky top-0 z-10 flex items-center gap-0.5 rounded-2xl border border-line bg-paper/90 px-1 py-1 backdrop-blur">
         <button type="button" onClick={onBack} aria-label="Back to the inbox" className={`${iconButton} lg:hidden`}>
           ←
         </button>
-        <button type="button" disabled={!canAct} onClick={() => onRemove("archive")} aria-label={row.inbox ? "Archive" : "Already archived"} title="Archive" className={iconButton}>
-          <svg className="size-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <rect x="3" y="4" width="18" height="5" rx="1.5" />
-            <path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4" />
-          </svg>
-        </button>
-        <button type="button" disabled={!canAct} onClick={() => onRemove("trash")} aria-label="Move to Bin" title="Move to Bin" className={iconButton}>
-          <svg className="size-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" />
-          </svg>
-        </button>
+        {row.trash ? (
+          // In Trash: Restore puts it back where it was (Gmail keeps its other labels).
+          <button type="button" disabled={!canAct} onClick={() => onRemove("untrash")} className="shrink-0 rounded-full border border-line px-3 py-1 text-xs hover:border-ink/40 disabled:opacity-40">
+            Restore
+          </button>
+        ) : (
+          <>
+            <button type="button" disabled={!canAct} onClick={() => onRemove("archive")} aria-label={row.inbox ? "Archive" : "Already archived"} title="Archive" className={iconButton}>
+              <svg className="size-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <rect x="3" y="4" width="18" height="5" rx="1.5" />
+                <path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4" />
+              </svg>
+            </button>
+            <button type="button" disabled={!canAct} onClick={() => onRemove("trash")} aria-label="Move to Trash" title="Move to Trash" className={iconButton}>
+              <svg className="size-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" />
+              </svg>
+            </button>
+          </>
+        )}
         <button type="button" disabled={!canAct} onClick={() => (onToggle("unread"), onBack())} aria-label="Mark unread" title="Mark unread" className={iconButton}>
           <svg className="size-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <rect x="3" y="5" width="18" height="14" rx="2" />
@@ -608,7 +670,7 @@ function Thread({
         </button>
       </div>
 
-      <h2 className="mt-3 break-words font-serif text-2xl leading-tight">{row.subject}</h2>
+      <h2 className="mt-3 break-words font-serif text-2xl leading-tight">{msgs?.[0]?.subject || row.subject}</h2>
       {error && (
         <p role="alert" className="mt-3 text-sm text-accent">
           {error}

@@ -63,6 +63,6 @@ test("a conversation's row: first subject, latest date, who's in it, unread if a
     payload: { headers: [{ name: "From", value: from }, ...(subject ? [{ name: "Subject", value: subject }] : [])] },
   });
   const row = rowOf(a, "t", [msg("Priya Shah <p@y.com>", 1000, ["INBOX"], "Lunch?"), msg("Me <me@x.com>", 2000, ["INBOX", "UNREAD", "STARRED"])], "It&#39;s on &amp; fine");
-  expect(row).toMatchObject({ subject: "Lunch?", people: "Priya, me (2)", unread: true, starred: true, inbox: true, count: 2, snippet: "It's on & fine" });
+  expect(row).toMatchObject({ subject: "Lunch?", people: "Priya, me (2)", unread: true, starred: true, inbox: true, trash: false, count: 2, snippet: "It's on & fine" });
   expect(row.date).toBe(new Date(2000).toISOString());
 });

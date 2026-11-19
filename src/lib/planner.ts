@@ -33,7 +33,14 @@ export type Routine = { id: string; title: string; minutes: number; per_week: nu
 
 export async function me(id: string | undefined): Promise<User | null> {
   if (!id) return null;
-  const [u] = await sql<User[]>`select id, timezone, hidden_calendars from users where id = ${id}`;
+  // The calendars of accounts switched off in the ☰ menu count as hidden too, so everything built on this user
+  // (Home, priorities, the assistant…) leaves them out. The background job reads users itself, so it still covers all.
+  const [u] = await sql<User[]>`
+    select id, timezone, hidden_calendars || array(
+      select c.calendar_id from account_calendars c
+      where c.user_id = users.id and cardinality(users.active_accounts) > 0 and not (c.account_id = any(users.active_accounts))
+    ) as hidden_calendars
+    from users where id = ${id}`;
   return u ?? null;
 }
 

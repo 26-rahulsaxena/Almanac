@@ -16,7 +16,7 @@ import { midnightIn } from "./reminders";
 const DAY = 86_400_000;
 
 export type Group = "today" | "overdue" | "week" | "month";
-export const GROUPS: Group[] = ["today", "overdue", "week", "month"]; // the order Home shows them in
+export const GROUPS: Group[] = ["overdue", "today", "week", "month"]; // the order Home shows them in
 
 // source: where it comes from. when: what it's grouped by (due, or start). fit: free time it can be booked into
 // now. booked: already on the calendar then. act: what its buttons do, with the id each source's own API needs.
@@ -33,7 +33,7 @@ export type ActionItem = {
   act:
     | { kind: "todo"; id: string; suggestion?: string }
     | { kind: "priority"; calendarId: string; eventId: string; prep?: string }
-    | { kind: "find"; id: string; pickTime: boolean }
+    | { kind: "find"; id: string; pickTime: boolean; quote: string; thread: string; inbox: string | null } // inbox: its account's email (null: the main one)
     | { kind: "suggestion"; id: string; move: boolean };
 };
 
@@ -98,10 +98,12 @@ export function buildActions(i: Input, now: Date, tz: string): Record<Group, Act
       when: iso(new Date(f.start_at)),
       allDay: false,
       severity: null,
-      note: `${f.summary || `“${f.quote}”`} · from ${f.sender}`,
-      fit: f.end_at && !f.pick_time ? span(new Date(f.start_at), new Date(f.end_at)) : null,
+      note: `${f.summary || `“${f.quote}”`} · from ${f.sender}${f.pick_time ? " · the email gives no time, so this is a free one Almanac picked" : ""}`,
+      // Meetings and calls: its time, or (none in the email) the free one Almanac suggested; Add books it, or the
+      // time picked on the card instead. Deadlines have no length: Add makes them a to-do.
+      fit: f.end_at ? span(new Date(f.start_at), new Date(f.end_at)) : null,
       booked: null,
-      act: { kind: "find", id: f.id, pickTime: f.pick_time },
+      act: { kind: "find", id: f.id, pickTime: f.pick_time, quote: f.quote, thread: f.thread_id, inbox: f.account_email },
     });
   }
 

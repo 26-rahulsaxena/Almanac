@@ -9,7 +9,10 @@ export type MailAccount = { id: string; email: string; main: boolean; send: bool
 // "Re:" in when the subject is left as it was). title: what the sheet is called ("Reply", "New email"…).
 export type Draft = { account: string; to: string; cc: string; bcc: string; subject: string; body: string; replyTo?: string; title: string };
 
-const field = "min-w-0 flex-1 bg-transparent py-2 text-sm placeholder:text-muted focus:outline-none";
+// No outline on the fields (the app-wide focus outline sits outside them and the scrolling sheet cut it off); the
+// row's bottom line turns the accent colour instead (row).
+const field = "min-w-0 flex-1 bg-transparent py-2 text-sm placeholder:text-muted focus:outline-none!";
+const row = "flex items-center gap-2 border-b border-line transition-colors focus-within:border-accent";
 
 // The compose sheet: the whole screen on phones, a panel in the corner on wide screens. Plain text only (no
 // attachments yet). Sends from the account picked in From: by default the one the conversation came in to.
@@ -71,7 +74,7 @@ export function Compose({ draft, accounts, onClose, onSent }: { draft: Draft; ac
       </header>
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4">
         {from.length > 1 && (
-          <label className="flex items-center gap-2 border-b border-line">
+          <label className={row}>
             <span className="w-14 shrink-0 text-xs text-muted">From</span>
             <select value={d.account} onChange={set("account")} className={`${field} truncate`}>
               {from.map((a) => (
@@ -82,7 +85,7 @@ export function Compose({ draft, accounts, onClose, onSent }: { draft: Draft; ac
             </select>
           </label>
         )}
-        <label className="flex items-center gap-2 border-b border-line">
+        <label className={row}>
           <span className="w-14 shrink-0 text-xs text-muted">To</span>
           <input data-autofocus={!d.to || undefined} type="text" inputMode="email" autoComplete="email" value={d.to} onChange={set("to")} className={field} placeholder="name@example.com, …" />
           {!more && (
@@ -93,17 +96,17 @@ export function Compose({ draft, accounts, onClose, onSent }: { draft: Draft; ac
         </label>
         {more && (
           <>
-            <label className="flex items-center gap-2 border-b border-line">
+            <label className={row}>
               <span className="w-14 shrink-0 text-xs text-muted">Cc</span>
               <input type="text" inputMode="email" value={d.cc} onChange={set("cc")} className={field} />
             </label>
-            <label className="flex items-center gap-2 border-b border-line">
+            <label className={row}>
               <span className="w-14 shrink-0 text-xs text-muted">Bcc</span>
               <input type="text" inputMode="email" value={d.bcc} onChange={set("bcc")} className={field} />
             </label>
           </>
         )}
-        <label className="flex items-center gap-2 border-b border-line">
+        <label className={row}>
           <span className="w-14 shrink-0 text-xs text-muted">Subject</span>
           <input type="text" value={d.subject} maxLength={300} onChange={set("subject")} className={field} />
         </label>

@@ -20,7 +20,7 @@ self.addEventListener("push", (event) => {
     renotify: true,
     requireInteraction: !!data.id, // reminders and check-ins stay on screen until you act on them
     icon: "/icon/large",
-    badge: "/icon/small",
+    badge: "/notification-badge", // one-colour mark for the status bar (the full icon would show as a white square)
     data: { id: data.id, kind: data.kind || "reminder" },
     actions: buttons(data),
   });

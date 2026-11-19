@@ -38,6 +38,18 @@ export async function signOutNow() {
   await signOut({ redirectTo: "/" });
 }
 
+// The ☰ menu: which of your Google accounts Almanac works with. All of them is stored as none chosen ('{}'), so an
+// account added later is on too. At least one stays on.
+export async function setActiveAccounts(ids: unknown) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Not signed in");
+  if (!Array.isArray(ids) || !ids.length || ids.length > 20 || !ids.every((i) => typeof i === "string")) throw new Error("Pick at least one account");
+  const mine = (await sql<{ id: string }[]>`select id from google_accounts where user_id = ${session.user.id}`).map((a) => a.id);
+  if (!ids.every((i) => mine.includes(i))) throw new Error("That isn't one of your accounts");
+  const chosen = mine.every((m) => ids.includes(m)) ? [] : [...new Set(ids as string[])];
+  await sql`update users set active_accounts = ${chosen}::uuid[] where id = ${session.user.id}`;
+}
+
 export async function setHiddenCalendars(ids: unknown) {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Not signed in");

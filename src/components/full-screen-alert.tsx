@@ -153,50 +153,59 @@ type ViewProps = { alert: Alert; left: number; onAnswer: (action: string) => voi
 const label = (a: Alert, left: number) =>
   `${a.alarm ? "Starting now" : a.kind === "reminder" ? "Reminder" : "Check-in"}${left > 0 ? ` · ${left} more after this` : ""}`;
 
-// A card in the corner. Doesn't take focus, so typing elsewhere isn't interrupted.
+// A card in the middle of the screen, with everything behind it blurred (and not clickable) until it's answered.
+// Doesn't move focus, so a key press mid-typing doesn't answer it by accident.
 // secondsLeft: countdown to full screen, for check-ins only.
 function PopUp({ alert, left, secondsLeft, soundOn, onAnswer }: ViewProps & { secondsLeft: number | null; soundOn: boolean }) {
   return (
     <motion.div
-      role="alert"
-      initial={{ opacity: 0, y: -16, scale: 0.96 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: -12, scale: 0.97 }}
-      transition={{ type: "spring", damping: 22, stiffness: 300 }}
-      className="fixed right-4 top-4 z-[65] w-[min(24rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-accent/50 bg-surface p-4 shadow-2xl"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      className="fixed inset-0 z-[65] grid place-items-center bg-ink/20 p-4 backdrop-blur-md"
     >
-      {secondsLeft !== null && (
-        <motion.span
-          aria-hidden
-          className="absolute inset-x-0 top-0 h-1 origin-left bg-accent"
-          initial={{ scaleX: 1 }}
-          animate={{ scaleX: 0 }}
-          transition={{ duration: secondsLeft, ease: "linear" }}
-        />
-      )}
-      <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-accent">{label(alert, left)}</p>
-      <p className="mt-1.5 break-words font-serif text-2xl leading-snug">{alert.title}</p>
-      <p className="mt-1 text-sm text-muted">
-        <Emph text={alert.body} />
-      </p>
-      <div className="mt-3 flex flex-wrap gap-1.5">
-        {answersFor(alert).map((a) => (
-          <button
-            key={a.action}
-            type="button"
-            onClick={() => onAnswer(a.action)}
-            className={`rounded-full px-3.5 py-1.5 text-sm ${a.primary ? "bg-accent font-medium text-white" : "border border-line hover:border-ink/40"}`}
-          >
-            {a.label}
-          </button>
-        ))}
-      </div>
-      {(secondsLeft !== null || !soundOn) && (
-        <p className="mt-2 text-xs text-muted">
-          {secondsLeft !== null && `Goes full screen in ${secondsLeft}s if not answered.`}
-          {!soundOn && " Click anywhere on the page once to allow sound."}
+      <motion.div
+        role="alert"
+        initial={{ opacity: 0, y: 16, scale: 0.94 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 8, scale: 0.97 }}
+        transition={{ type: "spring", damping: 22, stiffness: 300 }}
+        className="relative w-full max-w-md overflow-hidden rounded-3xl border border-accent/50 bg-surface p-5 shadow-2xl"
+      >
+        {secondsLeft !== null && (
+          <motion.span
+            aria-hidden
+            className="absolute inset-x-0 top-0 h-1 origin-left bg-accent"
+            initial={{ scaleX: 1 }}
+            animate={{ scaleX: 0 }}
+            transition={{ duration: secondsLeft, ease: "linear" }}
+          />
+        )}
+        <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-accent">{label(alert, left)}</p>
+        <p className="mt-1.5 break-words font-serif text-2xl leading-snug">{alert.title}</p>
+        <p className="mt-1 text-sm text-muted">
+          <Emph text={alert.body} />
         </p>
-      )}
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {answersFor(alert).map((a) => (
+            <button
+              key={a.action}
+              type="button"
+              onClick={() => onAnswer(a.action)}
+              className={`rounded-full px-3.5 py-1.5 text-sm ${a.primary ? "bg-accent font-medium text-white" : "border border-line hover:border-ink/40"}`}
+            >
+              {a.label}
+            </button>
+          ))}
+        </div>
+        {(secondsLeft !== null || !soundOn) && (
+          <p className="mt-2 text-xs text-muted">
+            {secondsLeft !== null && `Goes full screen in ${secondsLeft}s if not answered.`}
+            {!soundOn && " Click anywhere on the page once to allow sound."}
+          </p>
+        )}
+      </motion.div>
     </motion.div>
   );
 }

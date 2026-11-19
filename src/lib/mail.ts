@@ -196,4 +196,9 @@ export const waitingFinds = (userId: string) =>
   sql<MailFind[]>`
     select ${sql.unsafe(FIELDS)} from mail_finds
     where user_id = ${userId} and status = 'waiting' and start_at > now()
+      -- found in an account switched on in the ☰ menu (none chosen: all); null account_email is the main one
+      and exists (
+        select 1 from users u where u.id = mail_finds.user_id and (cardinality(u.active_accounts) = 0 or exists (
+          select 1 from google_accounts g where g.id = any(u.active_accounts)
+            and (g.email = mail_finds.account_email or (mail_finds.account_email is null and g.is_main)))))
     order by start_at`;
