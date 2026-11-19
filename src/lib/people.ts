@@ -75,7 +75,7 @@ async function syncAccount(a: Claimed, mine: Set<string>) {
     await Promise.all(
       [`in:sent after:${since}`, `${VIEWS.primary} after:${since}`].map(async (q) => {
         const l = await googleAs<{ messages?: { id: string }[] }>(a, `${GMAIL}/messages?maxResults=${max}&q=${encodeURIComponent(q)}`);
-        return (l.messages ?? []).map((m) => m.id);
+        return (l?.messages ?? []).map((m) => m.id);
       }),
     )
   ).flat();

@@ -128,17 +128,31 @@ function ActionList({ version, onCalendarChange, onOpen, onListed }: { version: 
       return next;
     });
 
+  // Read again whenever something changes. A newer read replaces an older one still on its way; a dropped request
+  // (a phone waking up, the app coming back from the background) is tried once more before it's called an error,
+  // and a list that loads clears any earlier error.
   useEffect(() => {
-    fetch("/api/home")
-      .then(async (r) => {
-        const d = await r.json().catch(() => null);
-        if (r.ok) {
-          setList(d);
-          onListed([...d.today, ...d.overdue].flatMap((it: Item) => (it.act.kind === "todo" ? [it.act.id] : [])));
-        }
-        else setError(d?.error === "reauth" ? "Google needs you to sign in again." : (d?.error ?? "Couldn't load your list."));
-      })
-      .catch(() => setError("Couldn't load your list. Check your connection."));
+    let live = true;
+    const load = (retry: boolean) =>
+      fetch("/api/home")
+        .then(async (r) => {
+          const d = await r.json().catch(() => null);
+          if (!live) return;
+          if (r.ok && d?.today) {
+            setList(d);
+            setError(null);
+            onListed([...d.today, ...d.overdue].flatMap((it: Item) => (it.act.kind === "todo" ? [it.act.id] : [])));
+          } else setError(d?.error === "reauth" ? "Google needs you to sign in again." : (d?.error ?? "Couldn't load your list."));
+        })
+        .catch(() => {
+          if (!live) return;
+          if (retry) setTimeout(() => live && load(false), 2000);
+          else setError("Couldn't load your list. Check your connection.");
+        });
+    load(true);
+    return () => {
+      live = false;
+    };
   }, [version, mine, onListed]);
 
   // Runs one button: the source's own API, then the list (and the calendar) again.

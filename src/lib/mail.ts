@@ -102,7 +102,7 @@ async function scanInbox(u: MailUser, inbox: Inbox, now: Date): Promise<MailFind
   // The Primary tab, said as "not the other tabs": some accounts don't tag mail as primary at all.
   const q = `in:inbox -category:promotions -category:social -category:updates -category:forums -from:me after:${Math.floor(+since / 1000)}`;
   const list = await googleAs<{ messages?: { id: string }[] }>(inbox, `${GMAIL}/messages?maxResults=30&q=${encodeURIComponent(q)}`);
-  const ids = (list.messages ?? []).map((m) => m.id);
+  const ids = (list?.messages ?? []).map((m) => m.id);
   if (!ids.length) return [];
   // shortcut: read emails are remembered by Gmail id alone, not per inbox; ids are 64-bit and in practice never repeat
   // across inboxes, so a clash would only skip one email. Key mail_seen by account too if that ever matters.

@@ -149,7 +149,7 @@ export async function listThreads(userId: string, view: View, search: string, pa
         // All of a page at once (~350 ms per call, so one round instead of three): at most 20 × 10 + the list's 10,
         // under Gmail's 250 per second per account.
         const rows = await pool(
-          l.threads ?? [],
+          l?.threads ?? [], // Gmail can answer an empty list with no body at all
           async (t) => {
             const known = rowCache.get(`${a.id}:${t.id}`);
             if (known?.history === t.historyId) return { ...known.row, snippet: unentity(t.snippet) };
@@ -161,7 +161,7 @@ export async function listThreads(userId: string, view: View, search: string, pa
           },
           PAGE,
         );
-        if (l.nextPageToken) next[a.id] = l.nextPageToken; // only once the page loaded, so a failed one offers no Load more
+        if (l?.nextPageToken) next[a.id] = l.nextPageToken; // only once the page loaded, so a failed one offers no Load more
         return rows;
       } catch (err) {
         console.error(`Listing mail in account ${a.id} failed:`, err);
@@ -181,7 +181,7 @@ export async function unreadCounts(userId: string) {
   return Promise.all(
     (await inboxAccounts(userId)).map(async (a) => ({
       id: a.id,
-      unread: await googleAs<{ threads?: unknown[] }>(a, `${GMAIL}/threads?maxResults=500&fields=threads(id)&q=${q}`).then((r) => r.threads?.length ?? 0, () => 0),
+      unread: await googleAs<{ threads?: unknown[] }>(a, `${GMAIL}/threads?maxResults=500&fields=threads(id)&q=${q}`).then((r) => r?.threads?.length ?? 0, () => 0), // no body: none unread
     })),
   );
 }
