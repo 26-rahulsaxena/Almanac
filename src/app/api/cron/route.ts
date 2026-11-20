@@ -2,7 +2,6 @@ import { healthCheck, sql } from "@/lib/db";
 import { listCalendars, listEvents, type Ev } from "@/lib/calendar";
 import { ReauthError } from "@/lib/google";
 import { scanAll } from "@/lib/mail";
-import { syncPeople } from "@/lib/people";
 import { doneKeys, morningCheck, replan } from "@/lib/planner";
 import { dayPlanText, riskText } from "@/lib/coach";
 import { coachToday, coachWeek } from "@/lib/coach-data";
@@ -80,11 +79,10 @@ export async function GET(req: Request) {
   const planned = await autoPlanUsers();
   const updates = await announceAppUpdate();
   const mail = await scanAll(now).catch((err) => (console.error("Reading mail failed:", err), 0));
-  const people = await syncPeople().catch((err) => (console.error("Gathering people failed:", err), 0));
 
   await sql`delete from reminder_deliveries where fire_at < now() - interval '2 days'`;
   await sql`delete from deadline_states where due_at < now() - interval '7 days'`;
-  return Response.json({ users: users.length, sent, snoozed: snoozed.length, checkins, digests, planned, updates, mail, people });
+  return Response.json({ users: users.length, sent, snoozed: snoozed.length, checkins, digests, planned, updates, mail });
 }
 
 // Google no longer accepts the saved sign-in (in Google's testing mode it expires every 7 days), so the calendar

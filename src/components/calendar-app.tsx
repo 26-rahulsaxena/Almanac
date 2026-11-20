@@ -24,10 +24,9 @@ import type { AwayKind } from "@/lib/away";
 import { EMPTY_PROFILE, type Profile } from "@/lib/profile";
 import { PrioritiesPanel, type PriorityAction } from "./priorities-panel";
 import { AddCalendarHelp } from "./add-calendar";
-import { Inbox } from "./inbox";
-import { People } from "./people";
+import { MailFinds } from "./mail-finds";
 import { type TileTarget } from "./today-tiles";
-import { Home, type MailTarget } from "./home";
+import { Home } from "./home";
 import { Modal, Review } from "./coach";
 import { BottomBar, DateButton, FLOW, FLOW_SPRING, LiquidBlob, MonthPanel, TAB_TITLE, tabDirection, WeekStrip, type Tab } from "./phone";
 import { type PlanMode } from "./suggestions";
@@ -106,6 +105,7 @@ const useMounted = () => useSyncExternalStore(() => () => {}, () => true, () => 
 
 // Wide screens (lg and up) show Today and Priorities beside the calendar; phones open them from two buttons.
 const WIDE = "(min-width: 1024px)";
+const NO_MAIL = "Nothing waiting from your email. With Read my email on (Settings), meetings, calls and deadlines found in new mail show up here.";
 const useWide = () =>
   useSyncExternalStore(
     (cb) => {
@@ -196,9 +196,6 @@ export function CalendarApp({
   const wide = useWide();
   // Email finds waiting: behind the header's mail button on wide screens, the Email tab on phones (both with a count).
   const [mailCount, setMailCount] = useState<number | null>(null); // null: not known yet
-  // People at someone's page (email; null: the list). key: a fresh page each time someone is opened from elsewhere
-  // (a sender's name in Mail). Shown in the People section on wide screens, the People tab on phones.
-  const [person, setPerson] = useState<{ email: string | null; key: number } | null>(null);
   const [monthAt, setMonthAt] = useState<DOMRect | null>(null); // the date title, while its month bubble is open
   useEffect(() => {
     fetch("/api/mail")
@@ -207,12 +204,11 @@ export function CalendarApp({
       .catch(() => {});
   }, [gen, setMailCount]);
   // Phones: the page picked in the bottom bar, and the month dropped down from the date at the top.
-  // Phones: Home first (tiles, What now?, everything to do). Wide screens: the page under the header, switched by
-  // its Home, Calendar, Mail and People buttons (calendar shortcuts show the calendar), Home first.
+  // Phones: Today first (tiles, What now?, everything to do). Wide screens: the page under the header, switched by
+  // its Home, Calendar and Email buttons (calendar shortcuts show the calendar), Home first.
   const [tab, setTab] = useState<Tab>("today");
-  const [section, setSection] = useState<"home" | "calendar" | "mail" | "people">("home");
+  const [section, setSection] = useState<"home" | "calendar" | "mail">("home");
   const home = section === "home";
-  const [mailTarget, setMailTarget] = useState<(MailTarget & { key: number }) | null>(null); // an email for Mail to open
   const [navAt, setNavAt] = useState<HTMLSpanElement | null>(null); // the header button of the section you're on
   const mailOpen = section === "mail";
   const [tabDir, setTabDir] = useState(0); // which side the page you just picked in the bottom bar comes from
@@ -250,9 +246,9 @@ export function CalendarApp({
   };
   const todayDot = !!todayTips?.some((t) => !todaySeen.includes(t)) && !(phone && tab === "today") && !(wide && home);
   const openTodos = () => (matchMedia(WIDE).matches ? setTodos(true) : setTab("todo"));
-  // Priorities (a notification, ?priorities=1, the p key): Home's list of things to do, where they all are.
+  // Priorities (a notification, ?priorities=1, the p key): their own tab on phones, beside Home's list on wide screens.
   const showPriorities = useCallback(() => {
-    setTab("today");
+    setTab("priorities");
     setSection("home");
     setTimeout(() => document.getElementById("things-to-do")?.scrollIntoView({ behavior: "smooth", block: "start" }), 350);
   }, []);
@@ -423,13 +419,11 @@ export function CalendarApp({
     </button>
   );
 
-  // Priorities live on Home only (beside its list on wide screens, under it on phones): levels, Doing, Later, Done.
+  // Priorities: beside Home's list on wide screens, their own tab on phones: levels, Doing, Later, Done.
   const priorityDetails = <PrioritiesPanel items={priorities} onAction={priorityAction} />;
 
-  // A tile or button on Home: the section it's about (wide screens: Calendar or Mail in Home's place, To-do over it).
-  // mail: an email to open there (Home's Open in Mail); key makes Mail open it even if it's the same one again.
-  function openFromToday(t: TileTarget, mail?: MailTarget) {
-    if (mail) setMailTarget({ ...mail, key: Date.now() });
+  // A tile on Home: the section it's about (wide screens: Calendar or Email in Home's place, To-do over it).
+  function openFromToday(t: TileTarget) {
     if (t === "calendar") goToday();
     if (matchMedia(WIDE).matches) {
       if (t === "todo") setTodos(true);
@@ -439,29 +433,6 @@ export function CalendarApp({
     setTabDir(tabDirection(tab, t));
     setTab(t);
     scrollTo({ top: 0 });
-  }
-
-  // A sender's name tapped in Mail: their page in People.
-  function openPerson(email: string) {
-    setPerson({ email, key: Date.now() });
-    if (matchMedia(WIDE).matches) setSection("people");
-    else setTab("people");
-  }
-
-  // From someone's page: a 30-minute meeting at the next half hour with them as a guest (the form asks before
-  // Google emails them an invite).
-  function meetWith(email: string, name: string) {
-    if (!writable) return;
-    const start = new Date(Math.ceil(Date.now() / 1_800_000) * 1_800_000);
-    const title = name ? `Meet ${name.split(" ")[0]}` : "Meeting";
-    setPanel({ form: { ...draftFromSlot(start, new Date(+start + 30 * 60_000), writable.id), title, attendees: [{ email, displayName: name || undefined }] } });
-  }
-
-  // From an email: a new event at the next half hour, named after it, with who it's from in its notes.
-  function makeEvent(title: string, note: string) {
-    if (!writable) return;
-    const start = new Date(Math.ceil(Date.now() / 1_800_000) * 1_800_000);
-    setPanel({ form: { ...draftFromSlot(start, new Date(+start + 3_600_000), writable.id), title, description: note } });
   }
 
   // New event: the next half hour today, or 9 am on the day being viewed.
@@ -635,12 +606,6 @@ export function CalendarApp({
     const t = setTimeout(() => {
       const q = new URLSearchParams(location.search);
       if (q.has("review")) setReview(true);
-      // Back from allowing Gmail from the inbox (?inbox=1): the inbox again.
-      if (q.has("inbox")) {
-        if (matchMedia(WIDE).matches) setSection("mail");
-        else setTab("mail");
-        history.replaceState(null, "", "/");
-      }
       if (q.has("update") || q.has("mail")) {
         setSettingsTab(q.has("mail") ? "Planning" : "App");
         setSettings(true);
@@ -693,8 +658,7 @@ export function CalendarApp({
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      // Not while typing in Mail or People (wide screens), where letters are for their search boxes.
-      if (panel || showAssistant || menu || settings || (wide && (section === "mail" || section === "people")) || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (panel || showAssistant || menu || settings || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.target instanceof HTMLElement && e.target.closest("input, textarea, select, [contenteditable]")) return;
       if (KEYS[e.key] || ["t", "n", "ArrowLeft", "ArrowRight", "/"].includes(e.key)) setSection("calendar"); // calendar keys show it
       if (KEYS[e.key]) changeView(KEYS[e.key]);
@@ -886,7 +850,7 @@ export function CalendarApp({
                 )}
               </div>
             </div>
-            {/* Wide screens: Home, Calendar, Mail and People switch the page under the header; a ring flows like
+            {/* Wide screens: Home, Calendar and Email switch the page under the header; a ring flows like
                 a red ring flows like liquid to the one you're on, and its icon turns red, as in the phone bar. Phones have these in the bottom bar. */}
             <div className="relative hidden items-center gap-2 lg:flex">
             <button
@@ -927,9 +891,9 @@ export function CalendarApp({
               <button
                 type="button"
                 onClick={() => setSection("mail")}
-                aria-label={mailCount ? `Mail: ${mailCount} found in your email to add` : "Mail"}
+                aria-label={mailCount ? `Email: ${mailCount} found in your email to add` : "Email"}
                 aria-pressed={mailOpen}
-                title="Mail (m)"
+                title="Email (m)"
                 className={`relative grid size-10 shrink-0 place-items-center rounded-full border bg-surface transition-colors duration-300 hover:border-ink/40 ${mailCount ? "border-accent/50" : "border-line"} ${mailOpen ? "text-accent" : ""}`}
               >
                 {mailOpen && <span ref={setNavAt} aria-hidden className="absolute inset-0" />}
@@ -944,23 +908,6 @@ export function CalendarApp({
                 )}
               </button>
             )}
-            <button
-              type="button"
-              onClick={() => {
-                setPerson({ email: null, key: Date.now() });
-                setSection("people");
-              }}
-              aria-label="People"
-              aria-pressed={section === "people"}
-              title="People"
-              className={`relative grid size-10 shrink-0 place-items-center rounded-full border border-line bg-surface transition-colors duration-300 hover:border-ink/40 ${section === "people" ? "text-accent" : ""}`}
-            >
-              {section === "people" && <span ref={setNavAt} aria-hidden className="absolute inset-0" />}
-              <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <circle cx="12" cy="8" r="3.5" />
-                <path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5" />
-              </svg>
-            </button>
             <LiquidBlob target={navAt} className="rounded-full border-[1.5px] border-accent" />
             </div>
             <button
@@ -1036,7 +983,7 @@ export function CalendarApp({
           </div>
           <h2 className="font-mono text-xs uppercase tracking-[0.2em] text-muted">Accounts</h2>
           <p className="mt-1.5 text-xs text-muted">
-            Home, Calendar, Mail and the assistant use the accounts switched on. Reminders and email suggestions keep
+            Home, Calendar, Email and the assistant use the accounts switched on. Reminders and email suggestions keep
             covering every account.
           </p>
           {accounts.length > 1 && (
@@ -1259,18 +1206,19 @@ export function CalendarApp({
 
         <AlertsBanner />
         {/* Wide screens: the section picked in the header, under it, filling the screen's height (6.25rem = header
-            + padding): Home, Mail, People, or the calendar (the whole width; Priorities and suggestions are on Home). */}
+            + padding): Home, Email, or the calendar (the whole width; Priorities and suggestions are on Home). */}
         {wide && section === "home" && !searching ? (
           <Home version={gen} wide greeting={hello} onCalendarChange={() => setGen((g) => g + 1)} onOpen={openFromToday}>
             {priorityDetails}
           </Home>
         ) : wide && section === "mail" && !searching ? (
-          <div className="lg:h-[calc(100dvh-6.25rem)]">
-            <Inbox version={gen} onMakeEvent={makeEvent} onChanged={() => setGen((g) => g + 1)} onPerson={openPerson} openThread={mailTarget} />
-          </div>
-        ) : wide && section === "people" && !searching ? (
-          <div className="lg:h-[calc(100dvh-6.25rem)]">
-            <People key={person?.key} version={gen} open={person?.email} onMeet={meetWith} onMakeEvent={makeEvent} onChanged={() => setGen((g) => g + 1)} />
+          <div className="mx-auto max-w-2xl space-y-4 pb-24">
+            <h1 className="font-serif text-4xl">Email</h1>
+            {mailCount === 0 ? (
+              <p className="rounded-2xl border border-line bg-surface p-4 text-sm text-muted">{NO_MAIL}</p>
+            ) : (
+              <MailFinds version={gen} onCalendarChange={() => setGen((g) => g + 1)} onCount={setMailCount} />
+            )}
           </div>
         ) : (
         <main className="grid min-w-0 items-start gap-4 lg:h-[calc(100dvh-5rem)] lg:items-stretch">
@@ -1366,13 +1314,15 @@ export function CalendarApp({
             // Phones: the page picked in the bottom bar, in place of the calendar, flowing in from that tab's side.
             <motion.div key={tab} className="mt-1" custom={tabDir} variants={FLOW} initial="enter" animate="center" transition={FLOW_SPRING}>
               {tab === "today" ? (
-                <Home version={gen} wide={false} greeting="" onCalendarChange={() => setGen((g) => g + 1)} onOpen={openFromToday}>
-                  {priorityDetails}
-                </Home>
-              ) : tab === "people" ? (
-                <People key={person?.key} version={gen} open={person?.email} onMeet={meetWith} onMakeEvent={makeEvent} onChanged={() => setGen((g) => g + 1)} />
+                <Home version={gen} wide={false} greeting={hello} onCalendarChange={() => setGen((g) => g + 1)} onOpen={openFromToday} />
+              ) : tab === "priorities" ? (
+                priorityDetails
               ) : tab === "mail" ? (
-                <Inbox version={gen} onMakeEvent={makeEvent} onChanged={() => setGen((g) => g + 1)} onPerson={openPerson} openThread={mailTarget} />
+                mailCount === 0 ? (
+                  <p className="rounded-2xl border border-line bg-surface p-4 text-sm text-muted">{NO_MAIL}</p>
+                ) : (
+                  <MailFinds version={gen} onCalendarChange={() => setGen((g) => g + 1)} onCount={setMailCount} />
+                )
               ) : (
                 <TodoBody
                   version={gen}
@@ -1602,7 +1552,6 @@ export function CalendarApp({
           onTab={(t) => {
             if (t === "today" || tab === "today") seeToday(); // opened it, or leaving it after seeing it
             if (t === "calendar" && tab === "calendar") goToday(); // tapped again while on it: back to today
-            setPerson(null); // People opens at its list
             setTabDir(tabDirection(tab, t));
             setTab(t);
             setMonthOpen(false);
@@ -1618,8 +1567,7 @@ export function CalendarApp({
 
       <FullScreenAlert onChanged={() => setGen((g) => g + 1)} />
 
-      {/* Not on Mail, which has its own Write button in this spot. */}
-      {!showAssistant && !(wide ? mailOpen : phone && tab === "mail") && (
+      {!showAssistant && (
         <CreateMenu
           canEdit={!!writable}
           onNew={newEvent}

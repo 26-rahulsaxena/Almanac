@@ -205,3 +205,39 @@ html[data-intro] .intro {
 @keyframes intro-fade { from { opacity: 0; } }
 @keyframes intro-up { from { opacity: 0; transform: translateY(6px); } to { opacity: 0.8; } }
 @keyframes intro-out { to { opacity: 0; visibility: hidden; } }
+
+/* Home's scene (components/home-scene.tsx): fades out downwards and at the sides, and in once its colours are set.
+   Slow, small motion only, so it stays calm. */
+.home-scene svg {
+  opacity: 0;
+  transition: opacity 0.8s;
+  mask-image: linear-gradient(to bottom, #000 48%, transparent 98%), linear-gradient(to right, transparent, #000 5%, #000 95%, transparent);
+  mask-composite: intersect;
+}
+.home-scene[data-ready] svg { opacity: 0.9; }
+.home-scene .hs-twinkle { animation: hs-twinkle 3.6s ease-in-out infinite; }
+.home-scene .hs-clouds { animation: hs-drift 90s linear infinite; }
+.home-scene .hs-sway { transform-box: fill-box; transform-origin: 50% 100%; animation: hs-sway 6s ease-in-out infinite; }
+.home-scene .hs-hang { transform-box: fill-box; transform-origin: 50% 0; animation: hs-sway 7s ease-in-out infinite; }
+.home-scene .hs-steam { animation: hs-steam 4s ease-in infinite; }
+.home-scene .hs-tail { transform-box: fill-box; transform-origin: 0 100%; animation: hs-tail 5s ease-in-out infinite; }
+.home-scene .hs-breathe { transform-box: fill-box; transform-origin: 50% 100%; animation: hs-breathe 4s ease-in-out infinite; }
+.home-scene .hs-shoot { opacity: 0; animation: hs-shoot 11s linear infinite; }
+.home-scene .hs-bulb { animation: hs-bulb 2.8s ease-in-out infinite; }
+.home-scene .hs-screen { animation: hs-bulb 5s ease-in-out infinite; }
+@keyframes hs-twinkle { 50% { opacity: 0.25; } }
+@keyframes hs-drift { from { transform: translateX(-300px); } to { transform: translateX(1300px); } }
+@keyframes hs-sway { 50% { transform: rotate(3deg); } }
+@keyframes hs-steam { 0% { opacity: 0; transform: translateY(6px); } 30% { opacity: 0.7; } 100% { opacity: 0; transform: translateY(-16px); } }
+@keyframes hs-tail { 50% { transform: rotate(-12deg); } }
+@keyframes hs-breathe { 50% { transform: scaleY(1.03); } }
+@keyframes hs-shoot { 0%, 88% { opacity: 0; transform: translate(0, 0); } 90% { opacity: 1; } 96%, 100% { opacity: 0; transform: translate(-220px, 90px); } }
+@keyframes hs-bulb { 50% { opacity: 0.55; } }
+@media (prefers-reduced-motion: reduce) {
+  .home-scene * { animation: none !important; transition: none !important; }
+}
+/* The close-up desk, scaled up from the bottom right corner: less on phones, where the greeting sits above. */
+.home-scene .hs-front { transform: translate(1200px, 300px) scale(1.3) translate(-1150px, -300px); }
+@media (min-width: 1024px) {
+  .home-scene .hs-front { transform: translate(1200px, 300px) scale(1.6) translate(-1150px, -300px); }
+}

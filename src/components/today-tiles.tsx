@@ -1,17 +1,17 @@
 "use client";
 
-export type Counts = { events: number; minutes: number; unread: number | null; todos: number; overdue: number };
+export type Counts = { events: number; minutes: number; found: number; todos: number; overdue: number };
 export type TileTarget = "calendar" | "mail" | "todo";
 
 const hours = (m: number) => (m < 60 ? `${m}m` : `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ""}`);
 
-// Today at a glance, at the top of Home: events, time booked, unread mail, to-dos due. Each opens where it's from.
+// Today at a glance, at the top of Home: events, time booked, what was found in your email, to-dos due. Each opens where it's from.
 // c: the counts (null while loading), read by Home.
 export function TodayTiles({ c, onOpen }: { c: Counts | null; onOpen: (t: TileTarget) => void }) {
   const tiles: [TileTarget, string, string, string?][] = [
     ["calendar", c ? String(c.events) : "–", c?.events === 1 ? "event today" : "events today"],
     ["calendar", c ? hours(c.minutes) : "–", "booked today"],
-    ["mail", c ? (c.unread === null ? "–" : c.unread >= 500 ? "500+" : String(c.unread)) : "–", c?.unread === null ? "connect Gmail" : "unread emails"],
+        ["mail", c ? String(c.found) : "–", "found in email"],
     ["todo", c ? String(c.todos) : "–", "to-dos due today", c?.overdue ? `${c.overdue} overdue` : undefined],
   ];
   return (

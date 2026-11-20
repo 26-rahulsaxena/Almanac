@@ -28,11 +28,6 @@ export async function setMailOn(on: unknown) {
   if (!on) await sql`delete from mail_finds where user_id = ${session.user.id} and status = 'waiting'`;
 }
 
-// Inbox → Allow: asks Google for the Gmail permission again (reading and now sending), leaving "Read my email" as it is.
-export async function allowGmail() {
-  await signIn("google", { redirectTo: "/?inbox=1" }, withGmail);
-}
-
 export async function signOutNow() {
   (await cookies()).delete(LINK_COOKIE); // an unfinished Add mustn't attach the next sign-in to this Almanac
   await signOut({ redirectTo: "/" });

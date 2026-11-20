@@ -1,5 +1,6 @@
 import { expect, test, vi } from "vitest";
 vi.mock("./db", () => ({ sql: () => [] }));
+vi.mock("./mail", () => ({ waitingFinds: () => [] })); // server-only (signs in with Google); not needed here
 const { count } = await import("./today");
 
 const ev = (start: string, end: string, more: object = {}) => ({ id: start, calendarId: "c", title: "x", start, end, allDay: start.length === 10, busy: true, isOrganizer: true, ...more });

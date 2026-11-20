@@ -46,9 +46,9 @@ test("the planner's suggestion rides on its to-do; email finds and other suggest
   const essay = g.today.find((x) => x.title === "essay")!;
   expect(essay.act).toEqual({ kind: "todo", id: "essay", suggestion: "s1" });
   expect(essay.fit?.start).toBe(at("2026-11-19T15:00").toISOString());
-  // No time in the email: Almanac's suggested free time, which the card can change; its conversation, to open in Mail.
+  // No time in the email: Almanac's suggested free time, which the card can change.
   expect(g.today.find((x) => x.title === "Call Priya")).toMatchObject({
     fit: { start: at("2026-11-19T16:00").toISOString() },
-    act: { kind: "find", id: "f1", pickTime: true, thread: "t", inbox: null },
+    act: { kind: "find", id: "f1", pickTime: true },
   });
 });

@@ -33,7 +33,7 @@ export type ActionItem = {
   act:
     | { kind: "todo"; id: string; suggestion?: string }
     | { kind: "priority"; calendarId: string; eventId: string; prep?: string }
-    | { kind: "find"; id: string; pickTime: boolean; quote: string; thread: string; inbox: string | null } // inbox: its account's email (null: the main one)
+    | { kind: "find"; id: string; pickTime: boolean; quote: string }
     | { kind: "suggestion"; id: string; move: boolean };
 };
 
@@ -103,7 +103,7 @@ export function buildActions(i: Input, now: Date, tz: string): Record<Group, Act
       // time picked on the card instead. Deadlines have no length: Add makes them a to-do.
       fit: f.end_at ? span(new Date(f.start_at), new Date(f.end_at)) : null,
       booked: null,
-      act: { kind: "find", id: f.id, pickTime: f.pick_time, quote: f.quote, thread: f.thread_id, inbox: f.account_email },
+      act: { kind: "find", id: f.id, pickTime: f.pick_time, quote: f.quote },
     });
   }
 

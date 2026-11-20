@@ -3,7 +3,7 @@ import { ReauthError } from "@/lib/google";
 import { me } from "@/lib/planner";
 import { todayCounts } from "@/lib/today";
 
-// GET /api/today → {events, minutes, unread, todos, overdue}: the numbers at the top of Today.
+// GET /api/today → {events, minutes, found, todos, overdue}: the numbers at the top of Today.
 export async function GET() {
   const u = await me((await auth())?.user?.id);
   if (!u) return Response.json({ error: "signin" }, { status: 401 });

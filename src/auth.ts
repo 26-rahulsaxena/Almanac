@@ -5,13 +5,12 @@ import { cookies } from "next/headers";
 import { encrypt } from "@/lib/crypto";
 import { attachAccount, linkDone, LINK_COOKIE, readTicket } from "@/lib/accounts";
 
-// Scopes: sign-in, list calendars, read/write events, and Gmail (the inbox: read, reply, archive; and "Read my email":
-// meetings, calls and deadlines in new mail). All on one Google screen, at sign-in and when adding another account; Google lets people untick
+// Scopes: sign-in, list calendars, read/write events, and read Gmail ("Read my email": meetings, calls and deadlines
+// in new mail). All on one Google screen, at sign-in and when adding another account; Google lets people untick
 // Gmail there, and then Settings offers Allow later. Nothing else from the Google account.
 // Free/busy is computed from the events we already read, so the separate free/busy scope isn't needed.
-// gmail.modify: read, send, label and trash (never delete for good). Accounts from before it have gmail.readonly,
-// which still reads; MAIL_READ matches either, in SQL like.
-export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.modify";
+// Read only. Accounts that allowed gmail.modify for the old inbox still read with it; MAIL_READ matches either, in SQL like.
+export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 export const MAIL_READ = "%/auth/gmail.%";
 const scope = [
   "openid",

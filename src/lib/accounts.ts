@@ -61,13 +61,13 @@ export async function attachAccount(uid: string, sub: string, email: string, log
   return !had ? "added" : had.user_id === uid ? "again" : "moved";
 }
 
-// gmail: Almanac may read its Gmail. send: also reply, archive and trash (accounts from before only allowed reading).
-// active: switched on in the ☰ menu (Home, Calendar, Mail and the assistant use it).
-export type Account = { id: string; email: string; main: boolean; broken: boolean; gmail: boolean; send: boolean; active: boolean };
+// gmail: Almanac may read its Gmail.
+// active: switched on in the ☰ menu (Home, Calendar, email suggestions and the assistant use it).
+export type Account = { id: string; email: string; main: boolean; broken: boolean; gmail: boolean; active: boolean };
 
 export const listAccounts = (uid: string) =>
   sql<Account[]>`
-    select id, email, is_main as main, broken_at is not null as broken, scope like '%/auth/gmail.%' as gmail, scope like '%/gmail.modify%' as send,
+    select id, email, is_main as main, broken_at is not null as broken, scope like '%/auth/gmail.%' as gmail,
       (select cardinality(active_accounts) = 0 or google_accounts.id = any(active_accounts) from users where users.id = google_accounts.user_id) as active
     from google_accounts
     where user_id = ${uid} order by is_main desc, created_at`;

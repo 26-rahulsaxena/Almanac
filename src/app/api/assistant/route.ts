@@ -10,7 +10,7 @@ import { InvalidInput } from "@/lib/validate";
 // The planning assistant's chat. Uses Claude when ANTHROPIC_API_KEY is set, otherwise any OpenAI-style provider
 // set by AI_API_KEY (+ AI_BASE_URL, AI_MODEL): Groq's free tier by default, or Google Gemini.
 // Chat history lives only in the browser tab; each question sends the visible chat plus what the tools read
-// (event titles and times, and the emails it searches or reads) to that provider.
+// (event titles and times) to that provider.
 
 const CLAUDE_MODEL = "claude-opus-5-5";
 const MAX_STEPS = 8; // tool rounds per question

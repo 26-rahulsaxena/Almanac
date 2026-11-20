@@ -2,11 +2,8 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState, type ReactNode } from "react";
 import { TodayCard, WhatNowBody } from "./coach";
+import { HomeScene } from "./home-scene";
 import { TodayTiles, type Counts, type TileTarget } from "./today-tiles";
-
-// An email to open in Mail: its conversation, the inbox it came to (its email; null: the main one), and a title for
-// the conversation's heading until it loads.
-export type MailTarget = { thread: string; inbox: string | null; title: string };
 
 // The same shape as lib/home.ts sends.
 type Item = {
@@ -22,7 +19,7 @@ type Item = {
   act:
     | { kind: "todo"; id: string; suggestion?: string }
     | { kind: "priority"; calendarId: string; eventId: string; prep?: string }
-    | { kind: "find"; id: string; pickTime: boolean; quote: string; thread: string; inbox: string | null }
+    | { kind: "find"; id: string; pickTime: boolean; quote: string }
     | { kind: "suggestion"; id: string; move: boolean };
 };
 type Group = "today" | "overdue" | "week" | "month";
@@ -66,7 +63,7 @@ export function Home({
   wide: boolean;
   greeting: ReactNode;
   onCalendarChange: () => void;
-  onOpen: (t: TileTarget, mail?: MailTarget) => void;
+  onOpen: (t: TileTarget) => void;
   children?: ReactNode;
 }) {
   const [nowPick, setNowPick] = useState<string | null>(null); // What now?'s pick, left out of the plan under it
@@ -89,17 +86,18 @@ export function Home({
     // 5.25rem: the header and the space above Home (81 px), so the page itself never scrolls; each column does.
     <div className="lg:grid lg:h-[calc(100dvh-5.25rem)] lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:gap-6">
       <div className="min-w-0 space-y-4 lg:min-h-0 lg:overflow-y-auto lg:pr-1 lg:pb-24">
-        {wide && <h1 className="font-serif text-4xl">{greeting}</h1>}
+        {/* The greeting over a picture of the time of day, which the cards below slide up over. */}
+        <HomeScene greeting={greeting} />
         {/* What now? and today's plan as one card, so nothing is suggested twice: the plan leaves out What now?'s
             pick and the to-dos that have their own card below. */}
-        <section aria-label="What now and today's plan" className="rounded-2xl border border-line bg-surface p-4">
+        <section aria-label="What now and today's plan" className="relative rounded-2xl border border-line bg-surface p-4">
           <WhatNowBody onCalendarChange={onCalendarChange} onPick={setNowPick} />
           <div className="mt-3 border-t border-line pt-3">
             <TodayCard version={version} onCalendarChange={onCalendarChange} waiting inDialog skip={nowPick} skipTodos={listed} />
           </div>
         </section>
         <TodayTiles c={day} onOpen={onOpen} />
-        <ActionList version={version} onCalendarChange={onCalendarChange} onOpen={onOpen} onListed={setListed} />
+        <ActionList version={version} onCalendarChange={onCalendarChange} onListed={setListed} />
         {!wide && children}
       </div>
       {/* A column the Priorities panel fills to the bottom of the screen (it scrolls inside itself). */}
@@ -111,7 +109,7 @@ export function Home({
 // Everything to do, grouped. Each card has one main button: Book (it fits free time), Add (from email), or Done;
 // one that can't be booked says why and offers the next step instead. onListed: the to-dos with a card in Overdue,
 // each time the list is read.
-function ActionList({ version, onCalendarChange, onOpen, onListed }: { version: number; onCalendarChange: () => void; onOpen: (t: TileTarget, mail?: MailTarget) => void; onListed: (todos: string[]) => void }) {
+function ActionList({ version, onCalendarChange, onListed }: { version: number; onCalendarChange: () => void; onListed: (todos: string[]) => void }) {
   const [list, setList] = useState<List | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -293,9 +291,6 @@ function ActionList({ version, onCalendarChange, onOpen, onListed }: { version: 
                                     {it.key in picked ? "Keep this time" : "Change time"}
                                   </button>
                                 )}
-                                <button type="button" onClick={() => onOpen("mail", { thread: a.thread, inbox: a.inbox, title: it.title })} className="font-medium text-accent hover:underline">
-                                  Open in Mail
-                                </button>
                               </p>
                               {it.key in picked && (
                                 <input
