@@ -211,7 +211,7 @@ html[data-intro] .intro {
 .home-scene svg {
   opacity: 0;
   transition: opacity 0.8s;
-  mask-image: linear-gradient(to bottom, #000 48%, transparent 98%), linear-gradient(to right, transparent, #000 5%, #000 95%, transparent);
+  mask-image: linear-gradient(to bottom, #000 60%, transparent 98%), linear-gradient(to right, transparent, #000 5%, #000 95%, transparent);
   mask-composite: intersect;
 }
 .home-scene[data-ready] svg { opacity: 0.9; }
@@ -225,7 +225,16 @@ html[data-intro] .intro {
 .home-scene .hs-shoot { opacity: 0; animation: hs-shoot 11s linear infinite; }
 .home-scene .hs-bulb { animation: hs-bulb 2.8s ease-in-out infinite; }
 .home-scene .hs-screen { animation: hs-bulb 5s ease-in-out infinite; }
+.home-scene .hs-cirrus { animation: hs-drift 240s linear infinite; }
+.home-scene .hs-fly { animation: hs-fly 70s linear infinite; }
+.home-scene .hs-blink { animation: hs-blink 2.4s ease-in-out infinite; }
+.home-scene .hs-birds { animation: hs-birds 48s linear infinite; }
+.home-scene .hs-flap { transform-box: fill-box; transform-origin: 50% 100%; animation: hs-flap 0.45s ease-in-out infinite alternate; }
 @keyframes hs-twinkle { 50% { opacity: 0.25; } }
+@keyframes hs-fly { from { transform: translateX(-200px); } to { transform: translateX(1500px); } }
+@keyframes hs-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.15; } }
+@keyframes hs-birds { from { transform: translate(-150px, 20px); } to { transform: translate(1350px, -40px); } }
+@keyframes hs-flap { to { transform: scaleY(-0.5); } }
 @keyframes hs-drift { from { transform: translateX(-300px); } to { transform: translateX(1300px); } }
 @keyframes hs-sway { 50% { transform: rotate(3deg); } }
 @keyframes hs-steam { 0% { opacity: 0; transform: translateY(6px); } 30% { opacity: 0.7; } 100% { opacity: 0; transform: translateY(-16px); } }
