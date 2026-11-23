@@ -167,14 +167,12 @@ const TRICKLES = [
   [790, -80, 4.1],
   [1080, -40, 1.2],
 ];
-const LABEL: Record<Weather, string> = { clear: "Clear", cloudy: "Cloudy", fog: "Fog", rain: "Rain", snow: "Snow", storm: "Storm" };
 
 export function HomeScene({ greeting }: { greeting: ReactNode }) {
   const root = useRef<HTMLDivElement>(null);
   const sun = useRef<SVGGElement>(null);
   const moon = useRef<SVGGElement>(null);
-  const [wx, setWx] = useState<{ kind: Weather; temp?: number } | null>(null);
-  const kind = wx?.kind ?? "clear";
+  const [kind, setKind] = useState<Weather>("clear");
   const grey = GREY[kind];
 
   // The weather where the viewer is, every 20 minutes. ?weather=rain (or any look) shows that look instead.
@@ -182,7 +180,7 @@ export function HomeScene({ greeting }: { greeting: ReactNode }) {
     const forced = new URLSearchParams(location.search).get("weather") as Weather;
     const load = () =>
       (WEATHERS.includes(forced) ? Promise.resolve({ kind: forced }) : fetch("/api/weather").then((r) => r.json()))
-        .then((w) => w.kind && setWx(w))
+        .then((w) => w.kind && setKind(w.kind))
         .catch(() => {});
     load();
     const id = setInterval(load, 20 * 60_000);
@@ -738,12 +736,6 @@ export function HomeScene({ greeting }: { greeting: ReactNode }) {
       <h1 className="absolute top-4 left-4 font-serif text-2xl text-white [text-shadow:0_2px_18px_rgb(0_0_0/0.45)] lg:top-auto lg:bottom-16 lg:left-6 lg:text-4xl">
         {greeting}
       </h1>
-      {wx && (
-        <p className="absolute top-14 left-4 rounded-full lg:top-4 lg:right-4 lg:left-auto bg-black/25 px-3 py-1 text-sm text-white backdrop-blur-sm">
-          {wx.temp != null && `${wx.temp}° · `}
-          {LABEL[wx.kind]}
-        </p>
-      )}
     </div>
   );
 }
