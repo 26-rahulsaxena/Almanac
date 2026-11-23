@@ -1,9 +1,10 @@
 "use client";
 import { useEffect, useRef, type ReactNode } from "react";
 
-// The picture at the top of Home: a balcony desk over a city, following the time of day (dawn, day, golden hour,
-// dusk, night) and fading into the page. Drawn in SVG; the colours are CSS variables set once a minute, so nothing
-// re-renders. The drawing spans y -150 to 300: the sky above 0 is the extra height.
+// The picture at the top of Home: a desk in a high-rise office, looking out through a glass wall at the city, the
+// sky, birds and aeroplanes, following the time of day (dawn, day, golden hour, dusk, night) and fading into the
+// page. Drawn in SVG; the colours are CSS variables set once a minute, so nothing re-renders. The drawing spans
+// y -150 (the ceiling) to 300.
 
 // Through the day: [hour, sky top, middle, horizon, foreground, leaves, night 0–1].
 const KEYS: [number, string, string, string, string, string, number][] = [
@@ -49,13 +50,22 @@ export function sceneVars(h: number): Record<string, string> {
     "--sky2": horizon,
     "--fg": fg,
     "--leaf": mix(a[5], b[5], t),
+    "--leaf-hi": lit("#c4cf6e", 0.35),
     "--haze": mix(fg, horizon, 0.68), // hazier further away
     "--far": mix(fg, horizon, 0.45),
     "--near": mix(fg, horizon, 0.18),
+    "--tower": mix(fg, horizon, 0.3),
+    "--tower-hi": mix(mix(sky1, horizon, 0.5), fg, 0.25 + 0.55 * night), // glass towers mirror the sky
     "--night": night.toFixed(3),
     "--cloud": (0.15 + (1 - night) * 0.75).toFixed(3),
     "--cloud-c": cloud,
     "--cloud-lo": mix(cloud, sky1, 0.5),
+    "--ceil": lit("#34373e", 0.2),
+    "--frame": lit("#3b3f47", 0.3),
+    "--sill": lit("#9a9ea7", 0.3),
+    "--wall": lit("#2b2d33", 0.25),
+    "--blind": lit("#d9d2c3", 0.3),
+    "--planter": lit("#e9e5dd", 0.3),
     "--wood": lit("#4a3326", 0.35),
     "--wood-hi": lit("#8a6248", 0.3),
     "--metal": lit("#80838c", 0.35),
@@ -99,14 +109,12 @@ function city(base: number, minH: number, maxH: number, minW: number, maxW: numb
 const HAZE = city(236, 60, 150, 16, 36, 0).blocks;
 const FAR = city(236, 40, 110, 22, 48, 0.75);
 const NEAR = city(236, 18, 60, 30, 64, 0.85);
-const MASTS = FAR.blocks.filter((b) => b.h > 92).map((b) => ({ x: b.x + b.w / 2, y: 236 - b.h, delay: rnd() * 2.4 }));
+// Aircraft-warning lights: on the tallest far blocks, the crane and the spire.
+const MASTS = FAR.blocks.filter((b) => b.h > 92).map((b) => ({ x: b.x + b.w / 2, y: 236 - b.h - 18, delay: rnd() * 2.4 }));
+const LIGHTS = [...MASTS, { x: 779, y: 40, delay: 0.7 }, { x: 322, y: 6, delay: 1.5 }];
 const TANKS = NEAR.blocks.filter((b, i) => i % 4 === 1 && b.w > 40).map((b) => ({ x: b.x + b.w * 0.3, y: 236 - b.h }));
-const POSTS = Array.from({ length: 50 }, (_, i) => 6 + i * 24);
-// String lights along the wire's curve (M560 0 Q860 96 1200 46).
-const BULBS = Array.from({ length: 13 }, (_, i) => {
-  const t = (i + 1) / 14;
-  return { x: (1 - t) ** 2 * 560 + 2 * (1 - t) * t * 860 + t * t * 1200, y: 2 * (1 - t) * t * 96 + t * t * 46 + 5, delay: (i * 0.37) % 2.8 };
-});
+// The crane's lattice mast, as a zigzag.
+const LATTICE = "M776 236" + Array.from({ length: 21 }, (_, i) => `L${i % 2 ? 776 : 782} ${228 - i * 8}`).join("");
 // A puffy cloud: a darker base and three lit puffs, each a soft radial gradient (no blur filter, so drifting stays cheap).
 const CLOUDS = [
   [120, 40, 1],
@@ -116,34 +124,23 @@ const CLOUDS = [
   [790, -60, 0.7],
 ];
 const CIRRUS = [
-  [200, -112, 170, 6],
-  [700, -86, 120, 5],
-  [1010, -124, 190, 7],
+  [200, -96, 170, 6],
+  [700, -80, 120, 5],
+  [1010, -100, 190, 7],
   [460, -40, 90, 4],
 ];
-// Leaves on the hanging plant's vines: [x, y, angle].
-const VINE_LEAVES = [
-  [687, 66, 60],
-  [683, 80, 110],
-  [680, 95, 70],
-  [696, 72, 100],
-  [698, 88, 70],
-  [696, 103, 110],
-  [709, 68, 70],
-  [712, 82, 120],
-  [715, 95, 60],
-  [701, 74, 120],
-  [698, 86, 50],
-];
-// Leaves on the potted plant: [x, y, angle].
-const POT_LEAVES = [
-  [-3, 164, -60],
-  [6, 180, -30],
-  [37, 158, -120],
-  [28, 176, -140],
-  [15, 162, -95],
-  [-9, 191, -20],
-  [2, 198, -5],
+// The glass wall: mullions, and the ceiling's light panels.
+const MULLIONS = [200, 440, 680, 920, 1160];
+const PANELS = [120, 420, 720, 1020];
+// A snake plant on the window ledge: [base x, height (negative is up), lean].
+const SNAKE = [
+  [552, -62, -9],
+  [558, -88, -4],
+  [566, -104, 1],
+  [574, -84, 6],
+  [582, -58, 12],
+  [562, -50, -15],
+  [571, -70, 11],
 ];
 
 export function HomeScene({ greeting }: { greeting: ReactNode }) {
@@ -200,6 +197,18 @@ export function HomeScene({ greeting }: { greeting: ReactNode }) {
       ))}
     </g>
   );
+  // A glass tower: the sky in its glass, floor lines, offices lit at night, and a shaded side.
+  const tower = (d: string, x: number, w: number) => (
+    <g>
+      <clipPath id={`hs-t${x}`}>
+        <path d={d} />
+      </clipPath>
+      <path d={d} fill="url(#hs-glass)" />
+      <path d={d} fill="url(#hs-floors)" />
+      <path d={d} fill="url(#hs-lit)" style={atNight(0.55)} />
+      <rect x={x + w * 0.72} y="0" width={w * 0.28} height="240" fill="#000" opacity=".14" clipPath={`url(#hs-t${x})`} />
+    </g>
+  );
 
   return (
     <div ref={root} className="home-scene relative -mb-12 h-78 overflow-hidden rounded-3xl lg:h-96">
@@ -245,9 +254,25 @@ export function HomeScene({ greeting }: { greeting: ReactNode }) {
             <stop offset="0" stopColor="#fff" stopOpacity="0" />
             <stop offset="1" stopColor="#fff" stopOpacity=".7" />
           </linearGradient>
-          <radialGradient id="hs-warm">
-            <stop offset="0" stopColor="#ffb867" stopOpacity=".75" />
-            <stop offset="1" stopColor="#ffb867" stopOpacity="0" />
+          <linearGradient id="hs-glass" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" style={{ stopColor: "var(--tower-hi)" }} />
+            <stop offset=".7" style={{ stopColor: "var(--tower)" }} />
+          </linearGradient>
+          <pattern id="hs-floors" width="8" height="6" patternUnits="userSpaceOnUse">
+            <rect width="8" height="1" fill="#000" opacity=".28" />
+            <rect x="7" width="1" height="6" fill="#000" opacity=".12" />
+          </pattern>
+          <pattern id="hs-lit" width="16" height="12" patternUnits="userSpaceOnUse">
+            <rect x="1" y="1.5" width="6" height="3.5" fill="#ffe2a8" />
+            <rect x="9" y="7.5" width="6" height="3.5" fill="#cfe6ff" opacity=".7" />
+          </pattern>
+          <linearGradient id="hs-sheen" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="#fff" stopOpacity=".16" />
+            <stop offset="1" stopColor="#fff" stopOpacity=".02" />
+          </linearGradient>
+          <radialGradient id="hs-panel">
+            <stop offset="0" stopColor="#fff6e6" stopOpacity=".55" />
+            <stop offset="1" stopColor="#fff6e6" stopOpacity="0" />
           </radialGradient>
           <radialGradient id="hs-red">
             <stop offset="0" stopColor="#ff4a3d" stopOpacity=".8" />
@@ -257,13 +282,13 @@ export function HomeScene({ greeting }: { greeting: ReactNode }) {
             <stop offset="0" stopColor="#9fd0ff" stopOpacity=".7" />
             <stop offset="1" stopColor="#9fd0ff" stopOpacity="0" />
           </radialGradient>
-          <linearGradient id="hs-cone" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#ffcf87" stopOpacity=".55" />
-            <stop offset="1" stopColor="#ffcf87" stopOpacity="0" />
-          </linearGradient>
           <linearGradient id="hs-display" x1="0" y1="0" x2="1" y2="1">
             <stop offset="0" stopColor="#e4f2ff" />
             <stop offset="1" stopColor="#7fb0e6" />
+          </linearGradient>
+          <linearGradient id="hs-monitor" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stopColor="#f6f8fc" />
+            <stop offset="1" stopColor="#c9d6ea" />
           </linearGradient>
           <mask id="hs-crescent">
             <circle r="16" fill="#fff" />
@@ -281,15 +306,10 @@ export function HomeScene({ greeting }: { greeting: ReactNode }) {
             <stop offset="0" style={{ stopColor: "var(--mug)" }} />
             <stop offset="1" style={{ stopColor: "var(--mug-lo)" }} />
           </linearGradient>
-          <linearGradient id="hs-lampshade" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0" style={{ stopColor: "var(--near)" }} />
-            <stop offset="1" style={{ stopColor: "var(--fg)" }} />
-          </linearGradient>
         </defs>
 
+        {/* Outside: the sky. */}
         <rect y="-150" width="1200" height="450" fill="url(#hs-sky)" />
-
-        {/* Night sky: the Milky Way, stars, a shooting star, and the city's glow on the horizon. */}
         <g style={atNight()}>
           <ellipse cx="330" cy="-40" rx="460" ry="46" fill="url(#hs-milky)" transform="rotate(-16 330 -40)" />
           <ellipse cx="420" cy="-66" rx="200" ry="18" fill="url(#hs-milky)" transform="rotate(-16 420 -66)" />
@@ -299,7 +319,6 @@ export function HomeScene({ greeting }: { greeting: ReactNode }) {
           <line className="hs-shoot" x1="760" y1="-100" x2="800" y2="-116" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" />
           <rect y="60" width="1200" height="176" fill="url(#hs-cityglow)" />
         </g>
-
         <g ref={sun} style={{ opacity: 0 }}>
           <circle r="170" fill="url(#hs-sun)" opacity=".35" />
           <circle r="70" fill="url(#hs-sun)" />
@@ -318,14 +337,12 @@ export function HomeScene({ greeting }: { greeting: ReactNode }) {
             </g>
           </g>
         </g>
-
-        {/* High thin cloud, an aeroplane (a contrail by day, blinking lights by night) and a few birds. */}
         <g className="hs-cirrus" style={{ opacity: "calc(var(--cloud) * .7)" }}>
           {CIRRUS.map(([x, y, rx, ry], i) => (
             <ellipse key={i} cx={x} cy={y} rx={rx} ry={ry} fill="url(#hs-puff)" />
           ))}
         </g>
-        <g transform="translate(0 -98)">
+        <g transform="translate(0 -92)">
           <g className="hs-fly">
             <rect x="-150" y="-0.8" width="140" height="1.6" fill="url(#hs-trail)" style={byDay(0.8)} />
             <path d="M-8 -.9h15c1.4 0 2.4 .5 2.4 .9s-1 .9 -2.4 .9h-15zM-1 -.6l-4 -5h2.2l5.5 5zM-1 .6l-4 4h2.2l5.5 -4zM-7.5 -.6l-2 -3h1.4l2.6 3z" style={fill("--far")} />
@@ -360,28 +377,39 @@ export function HomeScene({ greeting }: { greeting: ReactNode }) {
           ))}
         </g>
 
-        {/* The city in three layers, hazier further back, with masts and rooftop water tanks. */}
+        {/* Outside: the city in layers, hazier further back, with a crane, masts, glass towers and water tanks. */}
         <g style={fill("--haze")}>
           {HAZE.map((b, i) => (
             <rect key={i} x={b.x} y={236 - b.h} width={b.w} height={b.h + 20} />
           ))}
         </g>
         {blocks(FAR.blocks, "--far", 0.1)}
-        <g style={stroke("--far")} strokeWidth="1.2">
+        <g style={stroke("--far")} fill="none" strokeWidth="1.2">
           {MASTS.map((m, i) => (
-            <path key={i} d={`M${m.x} ${m.y}v-18M${m.x - 3} ${m.y - 6}h6`} />
+            <path key={i} d={`M${m.x} ${m.y + 18}v-18M${m.x - 3} ${m.y + 12}h6`} />
           ))}
+          <path d={`M776 236V60M782 236V60${LATTICE}`} />
+          <path d="M700 60h196M700 66h196M779 60l-70 0M779 44l-73 16M779 44l95 16M779 60V40" />
+          <path d="M858 66v46" strokeWidth=".6" />
         </g>
-        <g style={{ opacity: "calc(.25 + var(--night) * .75)" }}>
-          {MASTS.map((m, i) => (
-            <g key={i} className="hs-blink" style={{ animationDelay: `${m.delay.toFixed(2)}s` }}>
-              <circle cx={m.x} cy={m.y - 18} r="6" fill="url(#hs-red)" />
-              <circle cx={m.x} cy={m.y - 18} r="1.4" fill="#ff5a4d" />
-            </g>
-          ))}
+        <g style={fill("--far")}>
+          <rect x="704" y="66" width="18" height="9" />
+          <path d="M854 112h8l-2 5h-4z" />
         </g>
         <g>{windows(FAR.wins)}</g>
         <rect y="150" width="1200" height="86" fill="url(#hs-mist)" />
+        {tower("M300 236V52l22 -14l22 14V236z", 300, 44)}
+        <path d="M322 38V6" style={stroke("--tower")} strokeWidth="1.6" />
+        {tower("M600 236V100l52 -14V236z", 600, 52)}
+        {tower("M920 236V96h6v-14h28v14h6V236z", 920, 40)}
+        <g style={{ opacity: "calc(.25 + var(--night) * .75)" }}>
+          {LIGHTS.map((m, i) => (
+            <g key={i} className="hs-blink" style={{ animationDelay: `${m.delay.toFixed(2)}s` }}>
+              <circle cx={m.x} cy={m.y} r="6" fill="url(#hs-red)" />
+              <circle cx={m.x} cy={m.y} r="1.4" fill="#ff5a4d" />
+            </g>
+          ))}
+        </g>
         {blocks(NEAR.blocks, "--near", 0.16)}
         <g style={fill("--near")}>
           {TANKS.map((t, i) => (
@@ -390,94 +418,92 @@ export function HomeScene({ greeting }: { greeting: ReactNode }) {
         </g>
         <g>{windows(NEAR.wins)}</g>
 
-        {/* The balcony rail, lit along its top edge by the sky. */}
-        <g style={fill("--fg")}>
-          <rect y="228" width="1200" height="7" rx="2" />
-          {POSTS.map((x) => (
-            <rect key={x} x={x} y="235" width="4" height="70" />
+        {/* The glass: a faint tint, the sun's sheen by day, the office's lights mirrored at night. */}
+        <rect y="-116" width="1200" height="338" fill="#8fc3d6" opacity=".07" />
+        <g fill="url(#hs-sheen)" style={byDay(0.8)}>
+          <polygon points="120,-116 220,-116 60,222 -40,222" />
+          <polygon points="560,-116 600,-116 480,222 440,222" />
+          <polygon points="1000,-116 1070,-116 950,222 880,222" />
+        </g>
+        <g style={atNight(0.3)} fill="#fff6e6">
+          {PANELS.map((x) => (
+            <g key={x}>
+              <rect x={x + 6} y="-88" width="78" height="2" rx="1" />
+              <ellipse cx={x + 45} cy="-87" rx="70" ry="10" fill="url(#hs-panel)" />
+            </g>
           ))}
         </g>
-        <rect y="228" width="1200" height="1.3" style={fill("--sky2")} opacity=".4" />
 
-        {/* String lights. */}
-        <path d="M560 0 Q 860 96 1200 46" fill="none" style={stroke("--fg")} strokeWidth="1.6" />
-        {BULBS.map((b, i) => (
+        {/* Blinds pulled part way down two panes. */}
+        {(
+          [
+            [203.5, 436.5, -30],
+            [923.5, 1156.5, -72],
+          ] as const
+        ).map(([x0, x1, y], i) => (
           <g key={i}>
-            <g style={atNight()}>
-              <circle cx={b.x} cy={b.y} r="12" fill="url(#hs-warm)" className="hs-bulb" style={{ animationDelay: `${b.delay.toFixed(2)}s` }} />
-            </g>
-            <path d={`M${b.x} ${b.y - 5}v2`} style={stroke("--fg")} strokeWidth="2" />
-            <circle cx={b.x} cy={b.y} r="3" fill="#ffd88f" style={{ opacity: "calc(.35 + var(--night) * .65)" }} />
+            <rect x={x0} y="-116" width={x1 - x0} height={y + 116} style={fill("--blind")} opacity=".92" />
+            <path d={Array.from({ length: Math.floor((y + 116) / 5) }, (_, j) => `M${x0} ${-112 + j * 5}h${x1 - x0}`).join("")} stroke="#000" strokeWidth=".5" opacity=".1" />
+            <rect x={x0} y={y - 3} width={x1 - x0} height="3" style={fill("--frame")} />
+            <path d={`M${x1 - 14} ${y}v34`} style={stroke("--frame")} strokeWidth=".8" />
+            <circle cx={x1 - 14} cy={y + 35} r="1.4" style={fill("--frame")} />
           </g>
         ))}
 
-        {/* A hanging plant, a cat on the rail, and a plant in a pot. */}
-        <g className="hs-hang">
-          <path d="M700 -150V40M700 40l-14 4M700 40l14 4" style={stroke("--fg")} strokeWidth="1.2" fill="none" />
-          <path d="M684 44h32l-4 18h-24z" style={fill("--fg")} />
-          <rect x="682" y="42" width="36" height="4" rx="1.5" style={fill("--fg")} />
-          <path
-            d="M688 58c-6 16-4 30-10 44M696 60c0 18 4 26 0 46M708 58c6 14 2 26 8 38M702 60c-2 12-8 20-6 32"
-            fill="none"
-            style={stroke("--leaf")}
-            strokeWidth="1.6"
-            strokeLinecap="round"
-          />
-          <g style={fill("--leaf")}>
-            {VINE_LEAVES.map(([x, y, a], i) => (
-              <ellipse key={i} cx={x} cy={y} rx="5" ry="2.6" transform={`rotate(${a} ${x} ${y})`} />
-            ))}
+        {/* The office: ceiling with light panels, the window frame, and the ledge under the glass. */}
+        <rect y="-150" width="1200" height="34" style={fill("--ceil")} />
+        <path d={Array.from({ length: 20 }, (_, i) => `M${i * 60} -150v26`).join("") + "M0 -124h1200"} stroke="#000" strokeWidth=".8" opacity=".2" />
+        {PANELS.map((x) => (
+          <g key={x}>
+            <ellipse cx={x + 45} cy="-124" rx="90" ry="14" fill="url(#hs-panel)" style={atNight(0.8)} />
+            <rect x={x} y="-131" width="90" height="4" rx="1" fill="#f4f7ff" style={{ opacity: "calc(.55 + var(--night) * .45)" }} />
           </g>
+        ))}
+        <rect y="-122" width="1200" height="7" style={fill("--frame")} />
+        <path d="M0 -115.5h1200" style={stroke("--sill")} strokeWidth="1" opacity=".4" />
+        <g style={fill("--frame")}>
+          {MULLIONS.map((x) => (
+            <rect key={x} x={x - 3.5} y="-116" width="7" height="338" />
+          ))}
         </g>
-        <g transform="translate(640 228)" style={fill("--fg")}>
-          <path className="hs-tail" d="M14 -4c16 2 22 -10 18 -22" fill="none" style={stroke("--fg")} strokeWidth="4.5" strokeLinecap="round" />
-          <ellipse className="hs-breathe" cy="-15" rx="17" ry="15" />
-          <circle cx="-10" cy="-34" r="10" />
-          <path d="M-18 -40l2 -11 6 7zM-6 -42l4 -10 3 9z" />
-          <path d="M-15 -28a17 15 0 0 1 30 -1M-19 -38a10 10 0 0 1 13 -6" fill="none" style={stroke("--sky2")} strokeWidth="1.2" opacity=".35" />
-          <g style={atNight()} fill="#ffd36a">
-            <circle cx="-13" cy="-35" r="1.4" />
-            <circle cx="-6" cy="-35" r="1.4" />
-          </g>
-        </g>
-        <g transform="translate(520 0)">
-          <g className="hs-sway">
-            <g style={stroke("--leaf")} strokeWidth="2.4" strokeLinecap="round" fill="none">
-              <path d="M17 206c-2 -20 -14 -30 -20 -44" />
-              <path d="M17 206c2 -24 10 -34 20 -50" />
-              <path d="M17 206c0 -18 0 -30 -2 -46" />
-              <path d="M17 206c-6 -10 -18 -14 -26 -16" />
-            </g>
-            <g style={fill("--leaf")}>
-              {POT_LEAVES.map(([x, y, a], i) => (
-                <path key={i} d="M0 0c4 -5 11 -7 17 -5c-4 5 -11 7 -17 5z" transform={`translate(${x} ${y}) rotate(${a})`} />
-              ))}
-            </g>
-          </g>
-          <path d="M0 206h34l-4 22h-26z" style={fill("--fg")} />
-          <rect x="-2" y="203" width="38" height="4" rx="1.5" style={fill("--fg")} />
-          <path d="M2 207.4h30" style={stroke("--sky2")} strokeWidth="1" opacity=".3" />
+        <path d={MULLIONS.map((x) => `M${x - 2} -116v338`).join("")} style={stroke("--sill")} strokeWidth="1" opacity=".3" />
+        <rect y="222" width="1200" height="78" style={fill("--wall")} />
+        <rect y="219" width="1200" height="5" style={fill("--sill")} />
+        <path d={Array.from({ length: 5 }, (_, i) => `M40 ${234 + i * 4}h1120`).join("")} stroke="#000" strokeWidth="1.4" opacity=".22" />
+
+        {/* A snake plant in a white planter on the ledge. */}
+        <g>
+          {SNAKE.map(([x, h, lean], i) => {
+            const d = `M${x - 4} 194C${x - 5} ${194 + h * 0.5} ${x + lean - 2} ${194 + h * 0.85} ${x + lean} ${194 + h}C${x + lean + 2} ${194 + h * 0.85} ${x + 5} ${194 + h * 0.5} ${x + 4} 194z`;
+            return <path key={i} d={d} style={{ ...fill("--leaf"), ...stroke("--leaf-hi") }} strokeWidth=".9" />;
+          })}
+          <path d="M540 219l4 -27h44l4 27z" style={fill("--planter")} />
+          <rect x="541" y="190" width="50" height="4" rx="1.5" style={fill("--planter")} />
+          <path d="M546 194l-3 25" style={stroke("--fg")} strokeWidth="2" opacity=".15" />
         </g>
 
-        {/* Up close, bottom right (hs-front scales it up): desk, lamp, mug, books, pencils and a laptop, its screen lit at night. */}
+        {/* Up close, bottom right (hs-front scales it up): the desk, a monitor showing a calendar, a laptop, and the rest. */}
         <g className="hs-front">
-          <polygon points="1086,144 1062,218 1150,218 1116,144" fill="url(#hs-cone)" style={atNight()} />
-          <circle cx="950" cy="190" r="90" fill="url(#hs-warm)" style={atNight(0.55)} />
+          <g style={{ opacity: "calc(.2 + var(--night) * .8)" }}>
+            <ellipse className="hs-screen" cx="925" cy="188" rx="58" ry="40" fill="url(#hs-screen)" />
+            <ellipse className="hs-screen" cx="1073" cy="170" rx="80" ry="56" fill="url(#hs-screen)" style={{ animationDelay: "2s" }} />
+          </g>
 
-          {/* Desk: a wooden top with a lit front edge, grain, and pools of light from the lamp and the screen. */}
+          {/* Desk: a wooden top with a lit front edge, grain, light from the screens, and metal legs. */}
           <rect x="850" y="214" width="300" height="9" rx="2" fill="url(#hs-wood)" />
           <path d="M851 214.6h298" style={stroke("--wood-hi")} strokeWidth="1" opacity=".7" />
           <path d="M856 218.4c40 -.7 80 .6 120 0s90 -.7 168 .2M860 220.6c50 .5 96 -.6 140 0s80 .5 140 -.3" style={stroke("--wood")} strokeWidth=".5" fill="none" opacity=".8" />
-          <ellipse cx="1098" cy="214.4" rx="58" ry="3" fill="#ffcf87" style={atNight(0.5)} />
           <ellipse cx="925" cy="214.4" rx="48" ry="2.6" fill="#9fd0ff" style={atNight(0.35)} />
-          <g style={fill("--fg")}>
-            <rect x="866" y="223" width="7" height="95" />
-            <rect x="1126" y="223" width="7" height="95" />
+          <ellipse cx="1073" cy="214.4" rx="60" ry="2.8" fill="#9fd0ff" style={atNight(0.3)} />
+          <g fill="url(#hs-metal)">
+            <rect x="866" y="223" width="6" height="95" />
+            <rect x="1127" y="223" width="6" height="95" />
           </g>
           <g fill="#000" opacity=".28">
             <ellipse cx="925" cy="214.3" rx="38" ry="1.6" />
-            <ellipse cx="1062" cy="214.3" rx="10" ry="1.2" />
-            <ellipse cx="1014" cy="214.3" rx="26" ry="1.4" />
+            <ellipse cx="994" cy="214.3" rx="10" ry="1.2" />
+            <ellipse cx="1073" cy="214.3" rx="18" ry="1.3" />
+            <ellipse cx="1136" cy="214.3" rx="14" ry="1.2" />
             <ellipse cx="868" cy="214.3" rx="8" ry="1.1" />
           </g>
 
@@ -488,46 +514,75 @@ export function HomeScene({ greeting }: { greeting: ReactNode }) {
           </g>
           <path d="M861 199h14l-1 15h-12z" fill="url(#hs-metal)" />
 
-          {/* A stack of books, pages showing on the right. */}
+          {/* Headphones. */}
+          <path d="M964 213.4a8 6 0 0 1 16 0" fill="none" style={stroke("--bezel")} strokeWidth="1.8" />
+          <g style={fill("--bezel")}>
+            <rect x="962" y="210.5" width="4.5" height="3.5" rx="1.2" />
+            <rect x="977.5" y="210.5" width="4.5" height="3.5" rx="1.2" />
+          </g>
+
+          {/* Mug, with steam. */}
+          <g transform="translate(-68 0)">
+            <path d="M1070 200c8 0 8 11 0 11" fill="none" style={stroke("--mug-lo")} strokeWidth="3" />
+            <path d="M1054 196h16v15c0 2 -2 3 -4 3h-8c-2 0 -4 -1 -4 -3z" fill="url(#hs-mug)" />
+            <ellipse cx="1062" cy="196" rx="8" ry="1.8" style={fill("--mug-lo")} />
+            <ellipse cx="1062" cy="196.4" rx="6.4" ry="1.2" fill="#4a2c1c" />
+            <path d="M1056.5 199v10" stroke="#fff" strokeWidth="1.2" strokeLinecap="round" opacity=".35" />
+            <g fill="none" stroke="#fff" strokeWidth="1.6" strokeLinecap="round">
+              <path className="hs-steam" d="M1059 192c-4 -6 4 -10 0 -16" />
+              <path className="hs-steam" style={{ animationDelay: "1.6s" }} d="M1066 192c-4 -6 4 -10 0 -16" />
+            </g>
+          </g>
+
+          {/* Monitor on a stand, showing a week of calendar, a sticky note, and an ID badge hung on its corner. */}
+          <rect x="1070" y="197" width="6" height="13" fill="url(#hs-metal)" />
+          <path d="M1058 214l4 -4h22l4 4z" fill="url(#hs-metal)" />
+          <rect x="1026" y="138" width="94" height="60" rx="2" style={fill("--bezel")} />
+          <rect x="1029" y="141" width="88" height="53" fill="url(#hs-monitor)" />
+          <rect x="1029" y="141" width="88" height="6" fill="#2b2f3a" opacity=".85" />
+          <path d={Array.from({ length: 4 }, (_, i) => `M${1046.6 + i * 17.6} 147v47`).join("") + "M1029 158h88M1029 170h88M1029 182h88"} stroke="#000" strokeWidth=".35" opacity=".18" />
+          <g opacity=".9">
+            <rect x="1030.5" y="150" width="14.5" height="9" rx="1" fill="#f07b3f" />
+            <rect x="1048" y="161" width="14.5" height="13" rx="1" fill="#5b8def" />
+            <rect x="1065.5" y="149" width="14.5" height="7" rx="1" fill="#46b38a" />
+            <rect x="1083" y="166" width="14.5" height="10" rx="1" fill="#f07b3f" />
+            <rect x="1100.5" y="152" width="14.5" height="14" rx="1" fill="#a678e8" />
+            <rect x="1030.5" y="176" width="14.5" height="8" rx="1" fill="#5b8def" />
+            <rect x="1065.5" y="180" width="14.5" height="9" rx="1" fill="#f0b93f" />
+          </g>
+          <polygon points="1029,141 1060,141 1040,194 1029,194" fill="#fff" opacity=".1" />
+          <rect x="1110" y="184" width="8" height="8" fill="#f6d55c" transform="rotate(6 1114 188)" />
+          <path d="M1031 142c-6 10 -9 22 -8 34M1036 142c-2 12 -6 24 -13 34" fill="none" stroke="#3f63c9" strokeWidth=".9" />
+          <rect x="1018" y="175" width="10" height="13" rx="1" fill="#f4f4f6" />
+          <rect x="1018" y="175" width="10" height="3.5" rx="1" fill="#3f63c9" />
+          <circle cx="1023" cy="182.5" r="2" fill="#c9ccd3" />
+
+          {/* Keyboard and mouse. */}
+          <rect x="1030" y="210.6" width="70" height="3.2" rx="1" style={fill("--bezel")} />
+          <path d="M1033 211.8h64" style={stroke("--metal-hi")} strokeWidth=".6" strokeDasharray="2.4 1.2" opacity=".5" />
+          <ellipse cx="1110" cy="212.6" rx="4.5" ry="1.8" style={fill("--bezel")} />
+
+          {/* Books with a succulent on top. */}
           {(
             [
-              [990, 208, 48, 6, "--book1"],
-              [994, 203, 41, 5, "--book2"],
-              [991, 199, 45, 4, "--book3"],
+              [1124, 208, 26, 6, "--book1"],
+              [1126, 203, 22, 5, "--book2"],
+              [1123, 199, 25, 4, "--book3"],
             ] as const
           ).map(([x, y, w, h, c], i) => (
             <g key={i}>
               <rect x={x} y={y} width={w} height={h} rx=".8" style={fill(c)} />
               <rect x={x + 3} y={y + 1} width={w - 3} height={h - 2} style={fill("--mug")} />
-              <path d={`M${x + 4} ${y + h / 2}h${w - 5}`} style={stroke("--mug-lo")} strokeWidth=".4" />
             </g>
           ))}
-
-          {/* Lamp. */}
-          <rect x="1097" y="142" width="4" height="72" fill="url(#hs-metal)" />
-          <ellipse cx="1099" cy="212" rx="15" ry="3.5" fill="url(#hs-metal)" />
-          <path d="M1084 212h30" style={stroke("--metal-hi")} strokeWidth=".8" opacity=".6" />
-          <path d="M1082 146l8 -22h18l8 22z" fill="url(#hs-lampshade)" />
-          <path d="M1090 124h18" style={stroke("--sky2")} strokeWidth=".8" opacity=".35" />
-          <g style={atNight()}>
-            <ellipse className="hs-bulb" cx="1099" cy="146" rx="13" ry="3" fill="#ffd38a" />
-          </g>
-
-          {/* Mug, with steam. */}
-          <path d="M1070 200c8 0 8 11 0 11" fill="none" style={stroke("--mug-lo")} strokeWidth="3" />
-          <path d="M1054 196h16v15c0 2 -2 3 -4 3h-8c-2 0 -4 -1 -4 -3z" fill="url(#hs-mug)" />
-          <ellipse cx="1062" cy="196" rx="8" ry="1.8" style={fill("--mug-lo")} />
-          <ellipse cx="1062" cy="196.4" rx="6.4" ry="1.2" fill="#4a2c1c" />
-          <path d="M1056.5 199v10" stroke="#fff" strokeWidth="1.2" strokeLinecap="round" opacity=".35" />
-          <g fill="none" stroke="#fff" strokeWidth="1.6" strokeLinecap="round">
-            <path className="hs-steam" d="M1059 192c-4 -6 4 -10 0 -16" />
-            <path className="hs-steam" style={{ animationDelay: "1.6s" }} d="M1066 192c-4 -6 4 -10 0 -16" />
+          <path d="M1130 199l1 -7h10l1 7z" style={fill("--planter")} />
+          <g style={fill("--leaf")}>
+            <ellipse cx="1133" cy="190" rx="2.6" ry="4.5" transform="rotate(-30 1133 190)" />
+            <ellipse cx="1136" cy="188.5" rx="2.6" ry="5" />
+            <ellipse cx="1139" cy="190" rx="2.6" ry="4.5" transform="rotate(30 1139 190)" />
           </g>
 
           {/* Laptop: aluminium deck and lid, and the screen showing a document. */}
-          <g style={{ opacity: "calc(.2 + var(--night) * .8)" }}>
-            <ellipse className="hs-screen" cx="925" cy="188" rx="58" ry="40" fill="url(#hs-screen)" />
-          </g>
           <polygon points="892,214 962,214 953,206 893,206" fill="url(#hs-metal)" />
           <path d="M898 210.5h56M900 208.4h50" style={stroke("--fg")} strokeWidth=".6" opacity=".35" />
           <path d="M916 212.6h22" style={stroke("--fg")} strokeWidth=".8" opacity=".3" />
@@ -542,7 +597,7 @@ export function HomeScene({ greeting }: { greeting: ReactNode }) {
           <path d="M889 167l57 -2" stroke="#fff" strokeOpacity=".25" strokeWidth=".8" />
         </g>
       </svg>
-      {/* The greeting: over the sky at the top on phones (the desk is lower down there), at the bottom on wide screens. */}
+      {/* The greeting: at the top on phones (the desk is lower down there), at the bottom on wide screens. */}
       <h1 className="absolute top-4 left-4 font-serif text-2xl text-white [text-shadow:0_2px_18px_rgb(0_0_0/0.45)] lg:top-auto lg:bottom-16 lg:left-6 lg:text-4xl">
         {greeting}
       </h1>
