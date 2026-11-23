@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { WEATHERS, type Weather } from "../lib/weather";
 
 // The picture at the top of Home: a desk in a high-rise office, looking out through a glass wall at the city, the
 // sky, birds and aeroplanes, following the time of day (dawn, day, golden hour, dusk, night) and fading into the
@@ -31,21 +32,25 @@ const mix = (a: string, b: string, t: number) =>
     .join("");
 const smooth = (t: number) => t * t * (3 - 2 * t);
 
-// The scene's colours at an hour (0–24), as CSS variables.
-export function sceneVars(h: number): Record<string, string> {
+// How grey each weather turns the sky (0 clear – 1 fully overcast).
+const GREY: Record<Weather, number> = { clear: 0, cloudy: 0.45, fog: 0.55, snow: 0.55, rain: 0.7, storm: 0.85 };
+
+// The scene's colours at an hour (0–24), greyed by the weather, as CSS variables.
+export function sceneVars(h: number, grey = 0): Record<string, string> {
   h = ((h % 24) + 24) % 24;
   const i = KEYS.findIndex((k, j) => h >= k[0] && h < KEYS[j + 1][0]);
   const [a, b] = [KEYS[i], KEYS[i + 1]];
   const t = smooth((h - a[0]) / (b[0] - a[0]));
   const night = a[6] + (b[6] - a[6]) * t;
   const fg = mix(a[4], b[4], t);
-  const horizon = mix(a[3], b[3], t);
-  const sky1 = mix(a[2], b[2], t);
-  const cloud = mix("#ffffff", a[3], 0.35 + 0.3 * night);
+  const overcast = mix("#8f98a3", "#14171e", night);
+  const horizon = mix(mix(a[3], b[3], t), overcast, grey * 0.8);
+  const sky1 = mix(mix(a[2], b[2], t), overcast, grey);
+  const cloud = mix(mix("#ffffff", a[3], 0.35 + 0.3 * night), overcast, grey * 0.5);
   // An object's own colour, darkened towards the foreground at night.
   const lit = (c: string, base: number) => mix(c, fg, base + 0.45 * night);
   return {
-    "--sky0": mix(a[1], b[1], t),
+    "--sky0": mix(mix(a[1], b[1], t), overcast, grey),
     "--sky1": sky1,
     "--sky2": horizon,
     "--fg": fg,
@@ -60,6 +65,7 @@ export function sceneVars(h: number): Record<string, string> {
     "--cloud": (0.15 + (1 - night) * 0.75).toFixed(3),
     "--cloud-c": cloud,
     "--cloud-lo": mix(cloud, sky1, 0.5),
+    "--cloud-dk": mix(cloud, mix("#59616c", "#181b22", night), 0.6), // rain clouds
     "--ceil": lit("#34373e", 0.2),
     "--frame": lit("#3b3f47", 0.3),
     "--sill": lit("#9a9ea7", 0.3),
@@ -123,6 +129,8 @@ const CLOUDS = [
   [330, 92, 0.6],
   [790, -60, 0.7],
 ];
+// Clouds are drawn twice, 1400 apart, and drift exactly 1400 per loop, so the restart lands where the copy was (no pop-in).
+const WRAP = [0, -1400];
 const CIRRUS = [
   [200, -96, 170, 6],
   [700, -80, 120, 5],
@@ -142,24 +150,57 @@ const SNAKE = [
   [562, -50, -15],
   [571, -70, 11],
 ];
+// Weather: big low clouds when it isn't clear, and raindrops on the glass when it rains.
+const HEAVY = [
+  [90, -30, 1.7],
+  [420, -60, 1.9],
+  [720, 0, 1.6],
+  [1030, -40, 1.8],
+  [260, 50, 1.3],
+  [890, 70, 1.2],
+];
+const DROPS = Array.from({ length: 90 }, () => ({ x: rnd() * 1200, y: rnd() * 330 - 112, r: 0.8 + rnd() * 1.8 }));
+const FLAKES = Array.from({ length: 14 }, () => ({ x: 3 + rnd() * 154, y: 3 + rnd() * 154, r: 0.9 + rnd() * 1.3, o: 0.6 + rnd() * 0.4 }));
+const TRICKLES = [
+  [150, -60, 0],
+  [505, -20, 2.3],
+  [790, -80, 4.1],
+  [1080, -40, 1.2],
+];
+const LABEL: Record<Weather, string> = { clear: "Clear", cloudy: "Cloudy", fog: "Fog", rain: "Rain", snow: "Snow", storm: "Storm" };
 
 export function HomeScene({ greeting }: { greeting: ReactNode }) {
   const root = useRef<HTMLDivElement>(null);
   const sun = useRef<SVGGElement>(null);
   const moon = useRef<SVGGElement>(null);
+  const [wx, setWx] = useState<{ kind: Weather; temp?: number } | null>(null);
+  const kind = wx?.kind ?? "clear";
+  const grey = GREY[kind];
+
+  // The weather where the viewer is, every 20 minutes. ?weather=rain (or any look) shows that look instead.
+  useEffect(() => {
+    const forced = new URLSearchParams(location.search).get("weather") as Weather;
+    const load = () =>
+      (WEATHERS.includes(forced) ? Promise.resolve({ kind: forced }) : fetch("/api/weather").then((r) => r.json()))
+        .then((w) => w.kind && setWx(w))
+        .catch(() => {});
+    load();
+    const id = setInterval(load, 20 * 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   // The time of day, once a minute.
   useEffect(() => {
     const paint = () => {
       const d = new Date();
       const h = d.getHours() + d.getMinutes() / 60;
-      for (const [k, v] of Object.entries(sceneVars(h))) root.current?.style.setProperty(k, v);
+      for (const [k, v] of Object.entries(sceneVars(h, grey))) root.current?.style.setProperty(k, v);
       for (const [g, at] of [
         [sun.current, arc(h, 6, 12.5)],
         [moon.current, arc(h, 18.5, 11.5)],
       ] as const) {
         if (!g) continue;
-        g.style.opacity = at ? "1" : "0";
+        g.style.opacity = at ? String(1 - grey * 0.9) : "0"; // behind the clouds
         if (at) g.setAttribute("transform", `translate(${at[0]} ${at[1]})`);
       }
       root.current?.setAttribute("data-ready", "");
@@ -167,7 +208,8 @@ export function HomeScene({ greeting }: { greeting: ReactNode }) {
     paint();
     const id = setInterval(paint, 60_000);
     return () => clearInterval(id);
-  }, []);
+  }, [grey]);
+  const wet = kind === "rain" || kind === "storm";
 
   const fill = (v: string) => ({ fill: `var(${v})` });
   const stroke = (v: string) => ({ stroke: `var(${v})` });
@@ -306,11 +348,35 @@ export function HomeScene({ greeting }: { greeting: ReactNode }) {
             <stop offset="0" style={{ stopColor: "var(--mug)" }} />
             <stop offset="1" style={{ stopColor: "var(--mug-lo)" }} />
           </linearGradient>
+          <radialGradient id="hs-puff-dk" cy=".45">
+            <stop offset="0" style={{ stopColor: "var(--cloud-dk)" }} />
+            <stop offset=".6" style={{ stopColor: "var(--cloud-dk)", stopOpacity: 0.8 }} />
+            <stop offset="1" style={{ stopColor: "var(--cloud-dk)", stopOpacity: 0 }} />
+          </radialGradient>
+          {/* Rain and snow tile; each layer slides exactly a whole number of tiles per loop, so it never jumps. */}
+          <pattern id="hs-rain" width="40" height="60" patternUnits="userSpaceOnUse">
+            <path d="M8 2l-4 12M30 22l-4 12M18 40l-4 12M37 48l-3 9" stroke="#dbe7f5" strokeWidth="1" strokeLinecap="round" />
+          </pattern>
+          <pattern id="hs-snow" width="160" height="160" patternUnits="userSpaceOnUse">
+            <g fill="#fff">
+              {FLAKES.map((f, i) => (
+                <circle key={i} cx={f.x} cy={f.y} r={f.r} opacity={f.o} />
+              ))}
+            </g>
+          </pattern>
+          <linearGradient id="hs-fog" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" style={{ stopColor: "var(--sky2)", stopOpacity: 0.15 }} />
+            <stop offset=".55" style={{ stopColor: "var(--sky2)", stopOpacity: 0.7 }} />
+            <stop offset="1" style={{ stopColor: "var(--sky2)", stopOpacity: 0.9 }} />
+          </linearGradient>
+          <clipPath id="hs-wall">
+            <rect y="-116" width="1200" height="338" />
+          </clipPath>
         </defs>
 
         {/* Outside: the sky. */}
         <rect y="-150" width="1200" height="450" fill="url(#hs-sky)" />
-        <g style={atNight()}>
+        <g style={atNight(1 - grey * 0.9)}>
           <ellipse cx="330" cy="-40" rx="460" ry="46" fill="url(#hs-milky)" transform="rotate(-16 330 -40)" />
           <ellipse cx="420" cy="-66" rx="200" ry="18" fill="url(#hs-milky)" transform="rotate(-16 420 -66)" />
           {STARS.map((s, i) => (
@@ -338,9 +404,9 @@ export function HomeScene({ greeting }: { greeting: ReactNode }) {
           </g>
         </g>
         <g className="hs-cirrus" style={{ opacity: "calc(var(--cloud) * .7)" }}>
-          {CIRRUS.map(([x, y, rx, ry], i) => (
-            <ellipse key={i} cx={x} cy={y} rx={rx} ry={ry} fill="url(#hs-puff)" />
-          ))}
+          {WRAP.map((dx) =>
+            CIRRUS.map(([x, y, rx, ry], i) => <ellipse key={`${dx}-${i}`} cx={x + dx} cy={y} rx={rx} ry={ry} fill="url(#hs-puff)" />),
+          )}
         </g>
         <g transform="translate(0 -92)">
           <g className="hs-fly">
@@ -352,7 +418,7 @@ export function HomeScene({ greeting }: { greeting: ReactNode }) {
             </g>
           </g>
         </g>
-        <g style={byDay()}>
+        <g style={byDay(wet || kind === "snow" ? 0 : 1)}>
           <g className="hs-birds" style={stroke("--fg")} fill="none" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
             {[
               [0, -40, 0],
@@ -367,15 +433,38 @@ export function HomeScene({ greeting }: { greeting: ReactNode }) {
           </g>
         </g>
         <g className="hs-clouds" style={{ opacity: "var(--cloud)" }}>
-          {CLOUDS.map(([x, y, s], i) => (
-            <g key={i}>
-              <ellipse cx={x} cy={y + 8 * s} rx={78 * s} ry={15 * s} fill="url(#hs-puff-lo)" />
-              <ellipse cx={x - 30 * s} cy={y} rx={36 * s} ry={20 * s} fill="url(#hs-puff)" />
-              <ellipse cx={x + 6 * s} cy={y - 8 * s} rx={42 * s} ry={25 * s} fill="url(#hs-puff)" />
-              <ellipse cx={x + 42 * s} cy={y + 2 * s} rx={30 * s} ry={17 * s} fill="url(#hs-puff)" />
-            </g>
-          ))}
+          {WRAP.map((dx) =>
+            CLOUDS.map(([x, y, s], i) => (
+              <g key={`${dx}-${i}`} transform={`translate(${dx} 0)`}>
+                <ellipse cx={x} cy={y + 8 * s} rx={78 * s} ry={15 * s} fill="url(#hs-puff-lo)" />
+                <ellipse cx={x - 30 * s} cy={y} rx={36 * s} ry={20 * s} fill="url(#hs-puff)" />
+                <ellipse cx={x + 6 * s} cy={y - 8 * s} rx={42 * s} ry={25 * s} fill="url(#hs-puff)" />
+                <ellipse cx={x + 42 * s} cy={y + 2 * s} rx={30 * s} ry={17 * s} fill="url(#hs-puff)" />
+              </g>
+            )),
+          )}
         </g>
+        {/* Weather: a low grey cloud deck, and lightning in a storm. */}
+        {grey > 0 && (
+          <g className="hs-heavy" style={{ opacity: `calc(${Math.min(1, grey * 1.25)} * (.55 + (1 - var(--night)) * .45))` }}>
+            {WRAP.map((dx) =>
+              HEAVY.map(([x, y, s], i) => (
+                <g key={`${dx}-${i}`} transform={`translate(${dx} 0)`}>
+                  <ellipse cx={x} cy={y + 12 * s} rx={95 * s} ry={22 * s} fill="url(#hs-puff-dk)" />
+                  <ellipse cx={x - 36 * s} cy={y} rx={44 * s} ry={26 * s} fill="url(#hs-puff)" />
+                  <ellipse cx={x + 8 * s} cy={y - 10 * s} rx={52 * s} ry={30 * s} fill="url(#hs-puff)" />
+                  <ellipse cx={x + 50 * s} cy={y + 4 * s} rx={38 * s} ry={22 * s} fill="url(#hs-puff-dk)" />
+                </g>
+              )),
+            )}
+          </g>
+        )}
+        {kind === "storm" && (
+          <g className="hs-flash">
+            <rect y="-116" width="1200" height="338" fill="#e6ecff" opacity=".55" />
+            <path d="M430 -70l-14 42h12l-18 46h10l-22 52" stroke="#fff" strokeWidth="2.2" fill="none" strokeLinejoin="round" />
+          </g>
+        )}
 
         {/* Outside: the city in layers, hazier further back, with a crane, masts, glass towers and water tanks. */}
         <g style={fill("--haze")}>
@@ -418,8 +507,56 @@ export function HomeScene({ greeting }: { greeting: ReactNode }) {
         </g>
         <g>{windows(NEAR.wins)}</g>
 
+        {/* Weather outside the glass: fog over the city, rain or snow falling in two layers (the far one smaller). */}
+        {(kind === "fog" || wet || kind === "snow") && (
+          <rect y="-60" width="1200" height="282" fill="url(#hs-fog)" opacity={kind === "fog" ? 1 : 0.45} />
+        )}
+        {kind === "fog" && (
+          <g className="hs-fogband" style={{ opacity: 0.5 }}>
+            {WRAP.map((dx) =>
+              [
+                [150, 150, 260],
+                [620, 120, 300],
+                [1050, 170, 240],
+              ].map(([x, y, rx], i) => <ellipse key={`${dx}-${i}`} cx={x + dx} cy={y} rx={rx} ry="26" fill="url(#hs-puff)" />),
+            )}
+          </g>
+        )}
+        {(wet || kind === "snow") && (
+          <g clipPath="url(#hs-wall)" opacity={kind === "storm" ? 0.75 : kind === "rain" ? 0.55 : 0.85}>
+            {(
+              [
+                ["translate(11 7) scale(.6)", "b", 0.5],
+                ["", "a", 1],
+              ] as const
+            ).map(([t, layer, o]) => (
+              <g key={layer} transform={t} opacity={o}>
+                <g className={wet ? `hs-rain-${layer}` : `hs-snow-${layer}`}>
+                  <rect x="-10" y="-460" width="2100" height="1100" fill={wet ? "url(#hs-rain)" : "url(#hs-snow)"} />
+                </g>
+              </g>
+            ))}
+          </g>
+        )}
+
         {/* The glass: a faint tint, the sun's sheen by day, the office's lights mirrored at night. */}
         <rect y="-116" width="1200" height="338" fill="#8fc3d6" opacity=".07" />
+        {wet && (
+          <g fill="#e4f0fb">
+            {DROPS.map((d, i) => (
+              <g key={i} opacity=".32">
+                <ellipse cx={d.x} cy={d.y} rx={d.r} ry={d.r * 1.25} />
+                <circle cx={d.x - d.r * 0.35} cy={d.y - d.r * 0.4} r={d.r * 0.35} opacity=".9" />
+              </g>
+            ))}
+            {TRICKLES.map(([x, y, delay], i) => (
+              <g key={i} className="hs-trickle" style={{ animationDelay: `${delay}s` }}>
+                <path d={`M${x} ${y - 26}q1 13 0 24`} stroke="#e4f0fb" strokeWidth="1" fill="none" opacity=".22" />
+                <ellipse cx={x} cy={y} rx="2" ry="2.6" opacity=".45" />
+              </g>
+            ))}
+          </g>
+        )}
         <g fill="url(#hs-sheen)" style={byDay(0.8)}>
           <polygon points="120,-116 220,-116 60,222 -40,222" />
           <polygon points="560,-116 600,-116 480,222 440,222" />
@@ -601,6 +738,12 @@ export function HomeScene({ greeting }: { greeting: ReactNode }) {
       <h1 className="absolute top-4 left-4 font-serif text-2xl text-white [text-shadow:0_2px_18px_rgb(0_0_0/0.45)] lg:top-auto lg:bottom-16 lg:left-6 lg:text-4xl">
         {greeting}
       </h1>
+      {wx && (
+        <p className="absolute top-14 left-4 rounded-full lg:top-4 lg:right-4 lg:left-auto bg-black/25 px-3 py-1 text-sm text-white backdrop-blur-sm">
+          {wx.temp != null && `${wx.temp}° · `}
+          {LABEL[wx.kind]}
+        </p>
+      )}
     </div>
   );
 }

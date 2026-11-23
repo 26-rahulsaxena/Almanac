@@ -216,21 +216,33 @@ html[data-intro] .intro {
 }
 .home-scene[data-ready] svg { opacity: 0.9; }
 .home-scene .hs-twinkle { animation: hs-twinkle 3.6s ease-in-out infinite; }
-.home-scene .hs-clouds { animation: hs-drift 90s linear infinite; }
+.home-scene .hs-clouds { animation: hs-drift 80s linear infinite; }
 .home-scene .hs-steam { animation: hs-steam 4s ease-in infinite; }
 .home-scene .hs-shoot { opacity: 0; animation: hs-shoot 11s linear infinite; }
 .home-scene .hs-screen { animation: hs-glow 5s ease-in-out infinite; }
-.home-scene .hs-cirrus { animation: hs-drift 240s linear infinite; }
+.home-scene .hs-cirrus { animation: hs-drift 210s linear infinite; }
 .home-scene .hs-fly { animation: hs-fly 70s linear infinite; }
 .home-scene .hs-blink { animation: hs-blink 2.4s ease-in-out infinite; }
 .home-scene .hs-birds { animation: hs-birds 48s linear infinite; }
 .home-scene .hs-flap { transform-box: fill-box; transform-origin: 50% 100%; animation: hs-flap 0.45s ease-in-out infinite alternate; }
+.home-scene .hs-heavy { animation: hs-drift 120s linear infinite; }
+.home-scene .hs-fogband { animation: hs-drift 160s linear infinite; }
+.home-scene .hs-rain-a { animation: hs-rain 0.45s linear infinite; }
+.home-scene .hs-rain-b { animation: hs-rain 0.7s linear infinite; }
+.home-scene .hs-snow-a { animation: hs-snow 7s linear infinite; }
+.home-scene .hs-snow-b { animation: hs-snow 11s linear infinite; }
+.home-scene .hs-flash { opacity: 0; animation: hs-flash 9s linear infinite; }
+.home-scene .hs-trickle { opacity: 0; animation: hs-trickle 7s ease-in infinite; }
+@keyframes hs-rain { to { transform: translate(-40px, 120px); } }
+@keyframes hs-snow { to { transform: translateY(160px); } }
+@keyframes hs-flash { 0%, 80%, 100% { opacity: 0; } 80.6% { opacity: 1; } 81.4% { opacity: 0.1; } 82.4% { opacity: 0.8; } 85% { opacity: 0; } }
+@keyframes hs-trickle { 0% { opacity: 0; transform: translateY(0); } 10% { opacity: 1; } 100% { opacity: 0; transform: translateY(170px); } }
 @keyframes hs-twinkle { 50% { opacity: 0.25; } }
 @keyframes hs-fly { from { transform: translateX(-200px); } to { transform: translateX(1500px); } }
 @keyframes hs-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.15; } }
 @keyframes hs-birds { from { transform: translate(-150px, 20px); } to { transform: translate(1350px, -40px); } }
 @keyframes hs-flap { to { transform: scaleY(-0.5); } }
-@keyframes hs-drift { from { transform: translateX(-300px); } to { transform: translateX(1300px); } }
+@keyframes hs-drift { to { transform: translateX(1400px); } }
 @keyframes hs-steam { 0% { opacity: 0; transform: translateY(6px); } 30% { opacity: 0.7; } 100% { opacity: 0; transform: translateY(-16px); } }
 @keyframes hs-shoot { 0%, 88% { opacity: 0; transform: translate(0, 0); } 90% { opacity: 1; } 96%, 100% { opacity: 0; transform: translate(-220px, 90px); } }
 @keyframes hs-glow { 50% { opacity: 0.55; } }
