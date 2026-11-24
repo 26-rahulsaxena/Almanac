@@ -850,8 +850,8 @@ export function CalendarApp({
                 )}
               </div>
             </div>
-            {/* Wide screens: Home, Calendar and Email switch the page under the header; a ring flows like
-                a red ring flows like liquid to the one you're on, and its icon turns red, as in the phone bar. Phones have these in the bottom bar. */}
+            {/* Wide screens: Home, Calendar and Email switch the page under the header; a soft red fill flows like
+                liquid to the one you're on, and its icon turns red, as in the phone bar. Phones have these in the bottom bar. */}
             <div className="relative hidden items-center gap-2 lg:flex">
             <button
               type="button"
@@ -862,7 +862,7 @@ export function CalendarApp({
               aria-label={`Home: what to do now, and everything to do${todayDot ? " (new suggestion)" : ""}`}
               aria-pressed={home}
               title="Home"
-              className={`relative grid size-10 shrink-0 place-items-center rounded-full border border-line bg-surface transition-colors duration-300 hover:border-ink/40 ${home ? "text-accent" : ""}`}
+              className={`relative z-[1] grid size-10 shrink-0 place-items-center rounded-full border transition-colors duration-300 ${home ? "border-transparent text-accent" : "border-line bg-surface hover:border-ink/40"}`}
             >
               {home && <span ref={setNavAt} aria-hidden className="absolute inset-0" />}
               {/* The phone bar's Home icon. */}
@@ -878,7 +878,7 @@ export function CalendarApp({
               aria-label="Calendar"
               aria-pressed={section === "calendar"}
               title="Calendar"
-              className={`relative grid size-10 shrink-0 place-items-center rounded-full border border-line bg-surface transition-colors duration-300 hover:border-ink/40 ${section === "calendar" ? "text-accent" : ""}`}
+              className={`relative z-[1] grid size-10 shrink-0 place-items-center rounded-full border transition-colors duration-300 ${section === "calendar" ? "border-transparent text-accent" : "border-line bg-surface hover:border-ink/40"}`}
             >
               {section === "calendar" && <span ref={setNavAt} aria-hidden className="absolute inset-0" />}
               <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -894,7 +894,7 @@ export function CalendarApp({
                 aria-label={mailCount ? `Email: ${mailCount} found in your email to add` : "Email"}
                 aria-pressed={mailOpen}
                 title="Email (m)"
-                className={`relative grid size-10 shrink-0 place-items-center rounded-full border bg-surface transition-colors duration-300 hover:border-ink/40 ${mailCount ? "border-accent/50" : "border-line"} ${mailOpen ? "text-accent" : ""}`}
+                className={`relative z-[1] grid size-10 shrink-0 place-items-center rounded-full border transition-colors duration-300 ${mailOpen ? "border-transparent text-accent" : `bg-surface hover:border-ink/40 ${mailCount ? "border-accent/50" : "border-line"}`}`}
               >
                 {mailOpen && <span ref={setNavAt} aria-hidden className="absolute inset-0" />}
                 <svg className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -908,7 +908,8 @@ export function CalendarApp({
                 )}
               </button>
             )}
-            <LiquidBlob target={navAt} className="rounded-full border-[1.5px] border-accent" />
+            {/* Under the buttons (they sit at z-[1]): a soft red fill that shows through the one you're on. */}
+            <LiquidBlob target={navAt} className="rounded-full bg-accent/20" />
             </div>
             <button
               type="button"

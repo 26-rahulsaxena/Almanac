@@ -84,7 +84,7 @@ export function Home({
 
   return (
     // 5.25rem: the header and the space above Home (81 px), so the page itself never scrolls; each column does.
-    <div className="lg:grid lg:h-[calc(100dvh-5.25rem)] lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:gap-6">
+    <div className="lg:grid lg:h-[calc(100dvh-5.25rem)] lg:grid-cols-[minmax(0,1fr)_minmax(0,26.5rem)] lg:gap-6">
       <div className="min-w-0 space-y-4 lg:min-h-0 lg:overflow-y-auto lg:pr-1 lg:pb-24">
         {/* The greeting over a picture of the time of day, which the cards below slide up over. */}
         <HomeScene greeting={greeting} />
