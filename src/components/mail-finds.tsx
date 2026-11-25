@@ -237,6 +237,53 @@ export function MailSetting({ gmail, on: initial, onChange, accounts }: { gmail:
         </GoogleSignIn>
       )}
       {error && <p className="mt-2 text-xs text-accent">Couldn&apos;t save. Try again.</p>}
+      {gmail && <OlderMail />}
+    </div>
+  );
+}
+
+// "Read older emails": new here, read the last 30 days once for what's still to come. A page at a time (each call
+// reads one page), until the server says there's no more.
+function OlderMail() {
+  const [state, setState] = useState<{ busy: boolean; pages: number; found: number; done: boolean; error?: string }>({ busy: false, pages: 0, found: 0, done: false });
+  async function run() {
+    setState({ busy: true, pages: 0, found: 0, done: false });
+    let at: object | null = {};
+    let found = 0;
+    let pages = 0;
+    try {
+      while (at) {
+        const r: Response = await fetch("/api/mail/older", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(at) });
+        const j: { found: number; next: object | null; error?: string } = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(j.error === "reauth" || j.error === "gmail" ? "Allow Gmail again above, then try again." : (j.error ?? "Couldn't read your email. Try again."));
+        found += j.found;
+        pages += 1;
+        at = j.next;
+        setState({ busy: !!at, pages, found, done: !at });
+      }
+    } catch (e) {
+      setState({ busy: false, pages, found, done: false, error: (e as Error).message });
+    }
+  }
+  const { busy, pages, found, done, error } = state;
+  return (
+    <div className="mt-5 border-t border-line pt-4">
+      <p className="font-medium">Read older emails</p>
+      <p className="mt-1 text-xs text-muted">
+        New here? Read the last 30 days of your Primary inbox once, to find meetings, calls and deadlines that are still to come.
+      </p>
+      <button
+        type="button"
+        onClick={run}
+        disabled={busy}
+        className="mt-3 rounded-full border border-line px-4 py-2 text-sm hover:border-ink/40 disabled:opacity-60"
+      >
+        {busy ? `Reading… ${pages * 16} emails so far` : done ? "Read them again" : "Read older emails"}
+      </button>
+      <p role="status" className="mt-2 text-xs">
+        {done && (found ? `Done: found ${found}. With Ask me first they're waiting in Email; with Automatic they're on your calendar.` : "Done: nothing still to come in the last 30 days.")}
+        {error && <span className="text-accent">{error}</span>}
+      </p>
     </div>
   );
 }

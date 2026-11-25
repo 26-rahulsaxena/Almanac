@@ -45,10 +45,29 @@
   --cat-6: #84c2c3;
 }
 
-/* Ember (Settings → Look → Ember; the .ember class on <html>, always with .dark): frosted dark panels over smoke
-   with a warm glow that drifts slowly; white pill buttons (bg-ink is near-white here). One hue (--ember-hue, Settings
-   → Ember colour; 44 is the orange) colours the accent, the glow and the name. Muted text and the accent keep 4.5:1
-   on the panels. */
+/* Frost (Settings → Look → Frost; the .frost class on <html>): clean and cool like Google Calendar — a white page,
+   white cards on a faint blue-grey, grey hairlines and a blue accent. Light or dark, like Paper. */
+.frost:not(.dark) {
+  --paper: #f8fafd;
+  --surface: #ffffff;
+  --ink: #1f1f1f;
+  --muted: #5f6368;
+  --line: #dde3ea;
+  --accent: #0b57d0;
+}
+.frost.dark {
+  --paper: #131314;
+  --surface: #1e1f20;
+  --ink: #e3e3e3;
+  --muted: #9aa0a6;
+  --line: #3c4043;
+  --accent: #a8c7fa;
+}
+
+/* Ember (Settings → Look → Ember; the .ember class on <html>): frosted panels over smoke with a warm glow that
+   drifts slowly. Dark: dark glass, white pill buttons (bg-ink is near-white here). Light (.ember:not(.dark), below):
+   milky glass over a pale glow, dark pill buttons. One hue (--ember-hue, Settings → Ember colour; 44 is the orange)
+   colours the accent, the glow and the name. Muted text and the accent keep 4.5:1 on the panels. */
 .ember {
   --paper: #18161a;
   --surface: rgb(46 40 44 / 0.62);
@@ -59,6 +78,24 @@
   --chrome: rgb(24 22 26 / 0.55); /* the header and other sticky bars: thinner, so more glow shows through */
   --edge: rgb(255 255 255 / 0.14); /* light catching a panel's top edge */
   --panel-shadow: rgb(0 0 0 / 0.55);
+}
+.ember:not(.dark) {
+  --paper: #f7f2ef;
+  --surface: rgb(255 255 255 / 0.4);
+  --ink: #221c1f;
+  --muted: #5f555b;
+  --line: rgb(60 30 45 / 0.1);
+  --accent: oklch(0.55 0.19 var(--ember-hue, 44));
+  --chrome: rgb(255 255 255 / 0.35);
+  --edge: rgb(255 255 255 / 0.95);
+  --panel-shadow: rgb(120 60 80 / 0.2);
+}
+/* Light glass: a bright rim where light catches it, and more colour pulled through the frost. */
+.ember:not(.dark) .bg-surface {
+  border-color: rgb(255 255 255 / 0.7);
+  -webkit-backdrop-filter: blur(24px) saturate(1.9);
+  backdrop-filter: blur(24px) saturate(1.9);
+  box-shadow: inset 0 1px 0 var(--edge), inset 0 0 0 1px rgb(255 255 255 / 0.25), 0 12px 32px -14px var(--panel-shadow);
 }
 /* The wallpaper, larger than the screen so its slow drift never shows an edge. */
 .ember body::before {
@@ -75,6 +112,14 @@
     radial-gradient(70% 70% at 50% 50%, #2a2529, #141215);
   animation: ember-drift 40s ease-in-out infinite alternate;
 }
+.ember:not(.dark) body::before {
+  background:
+    radial-gradient(34% 40% at 46% 34%, oklch(0.76 0.17 var(--ember-hue, 44) / 0.6), transparent 70%),
+    radial-gradient(26% 28% at 60% 64%, oklch(0.82 0.14 calc(var(--ember-hue, 44) + 12) / 0.5), transparent 70%),
+    radial-gradient(36% 46% at 92% 8%, rgb(240 168 212 / 0.55), transparent 70%),
+    radial-gradient(40% 42% at 6% 92%, rgb(182 168 242 / 0.55), transparent 70%),
+    radial-gradient(70% 70% at 50% 50%, #fdf9f7, #ede2e8);
+}
 /* Only a slide: scaling or turning this oversized layer made the theme switch's snapshot freeze the page. */
 @keyframes ember-drift {
   to { transform: translate3d(5%, -4%, 0); }
@@ -89,10 +134,6 @@
   background-color: var(--chrome);
   -webkit-backdrop-filter: blur(24px) saturate(1.6);
   backdrop-filter: blur(24px) saturate(1.6);
-}
-/* Always dark: the top bar's light/dark button has nothing to switch. */
-.ember header [data-theme-toggle] {
-  display: none;
 }
 /* Headings and big numbers, every look: Unbounded (wide, geometric; the font-serif class), light and a touch tight. */
 .font-serif {
@@ -116,10 +157,14 @@
   background-clip: text;
   color: transparent;
 }
+.ember:not(.dark) .greet-name {
+  background-image: linear-gradient(100deg, oklch(0.55 0.19 var(--ember-hue, 44)), oklch(0.66 0.15 calc(var(--ember-hue, 44) + 18)));
+}
 /* "Reduce transparency": solid panels, no blur. "Reduce motion": the wallpaper stays still. */
 @media (prefers-reduced-transparency: reduce) {
   .ember { --surface: #2a2529; --chrome: #1d1a1e; }
-  .ember .bg-surface, .ember [class*="bg-paper/"] { -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .ember:not(.dark) { --surface: #fffcfa; --chrome: #f7f2ef; }
+  .ember .bg-surface, .ember:not(.dark) .bg-surface, .ember [class*="bg-paper/"] { -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .ember body::before { animation: none; }

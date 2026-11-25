@@ -1,6 +1,6 @@
 "use client";
 import { motion } from "motion/react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 function save(key: string, value: string) {
   try {
@@ -15,24 +15,17 @@ function stored(key: string, fallback: string) {
   }
 }
 
-// Dark or light from what's saved: Ember is always dark; otherwise the saved theme, or the device's (System).
+// Dark or light from what's saved: the saved theme, or the device's (System). Every look has both.
 function applyDark() {
   const theme = stored("theme", "");
-  const dark = stored("look", "") === "ember" || theme === "dark" || (!theme && matchMedia("(prefers-color-scheme: dark)").matches);
+  const dark = theme === "dark" || (!theme && matchMedia("(prefers-color-scheme: dark)").matches);
   document.documentElement.classList.toggle("dark", dark);
 }
-const isEmber = () => stored("look", "") === "ember";
 
 // Light, Dark, or System (follows the phone's or computer's setting, live: see layout.tsx). System is no saved
 // theme; the top bar's button saves Light or Dark.
 export function ThemeMode() {
   const [mode, setMode] = useState(() => stored("theme", "system"));
-  const [ember, setEmber] = useState(isEmber);
-  useEffect(() => {
-    const on = () => setEmber(isEmber()); // the Look picker below says when it changes
-    addEventListener("look", on);
-    return () => removeEventListener("look", on);
-  }, []);
   function pick(next: string) {
     try {
       if (next === "system") localStorage.removeItem("theme");
@@ -41,7 +34,6 @@ export function ThemeMode() {
     applyDark();
     setMode(next);
   }
-  if (ember) return <span className="shrink-0 text-sm text-muted">Ember is always dark</span>;
   return (
     <div role="group" aria-label="Light or dark" className="flex shrink-0 rounded-full border border-line bg-surface p-0.5">
       {(["light", "dark", "system"] as const).map((m) => (
@@ -79,31 +71,35 @@ function HueSlider({ label, value, onChange }: { label: string; value: number; o
   );
 }
 
-// The look: Paper (warm, solid; light or dark) or Ember (dark smoky glass with a warm glow in a colour you pick).
-// Saved in this browser.
+// The look: Paper (warm, solid; light or dark), Frost (cool white and blue, like Google Calendar; light or dark) or
+// Ember (smoky glass with a warm glow in a colour you pick; light or dark). Saved in this browser.
+const LOOKS = ["paper", "frost", "ember"] as const;
+type Look = (typeof LOOKS)[number];
 export function LookSettings() {
-  const [look, setLook] = useState(() => (isEmber() ? "ember" : "paper"));
+  const [look, setLook] = useState<Look>(() => {
+    const l = stored("look", "paper");
+    return (LOOKS as readonly string[]).includes(l) ? (l as Look) : "paper";
+  });
   const [emberHue, setEmberHue] = useState(() => Number(stored("emberHue", "44")));
   function hue(h: number) {
     document.documentElement.style.setProperty("--ember-hue", String(h));
     save("emberHue", String(h));
     setEmberHue(h);
   }
-  function pick(next: "paper" | "ember") {
+  function pick(next: Look) {
     document.documentElement.classList.toggle("ember", next === "ember");
+    document.documentElement.classList.toggle("frost", next === "frost");
     save("look", next);
-    applyDark();
-    dispatchEvent(new Event("look"));
     setLook(next);
   }
   return (
     <>
       <div className="mt-3 flex items-center justify-between gap-3">
         <p className="text-sm">
-          Look <span className="text-muted">· Paper, or Ember</span>
+          Look <span className="text-muted">· Paper, Frost, or Ember</span>
         </p>
         <div role="group" aria-label="Look" className="flex shrink-0 rounded-full border border-line bg-surface p-0.5">
-          {(["paper", "ember"] as const).map((l) => (
+          {LOOKS.map((l) => (
             <button
               key={l}
               type="button"

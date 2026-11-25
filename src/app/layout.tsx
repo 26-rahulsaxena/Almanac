@@ -29,9 +29,9 @@ export const viewport: Viewport = {
   ],
 };
 
-// Runs before paint so the page never flashes the wrong theme or look (Paper or Ember: see globals.css). Ember is
-// always dark, coloured by its hue (--ember-hue). With no saved theme (System), light/dark follows the device live.
-const themeScript = `try{var d=document.documentElement,t=localStorage.theme,e=localStorage.look==='ember';if(e||t==='dark'||(!t&&matchMedia('(prefers-color-scheme: dark)').matches))d.classList.add('dark');if(e)d.classList.add('ember');d.style.setProperty('--ember-hue',localStorage.emberHue||'44')}catch(x){}matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(m){try{if(!localStorage.theme&&localStorage.look!=='ember')document.documentElement.classList.toggle('dark',m.matches)}catch(x){}});`;
+// Runs before paint so the page never flashes the wrong theme or look (Paper, Frost or Ember: see globals.css), each light or dark;
+// Ember is coloured by its hue (--ember-hue). With no saved theme (System), light/dark follows the device live.
+const themeScript = `try{var d=document.documentElement,t=localStorage.theme,e=localStorage.look==='ember';if(t==='dark'||(!t&&matchMedia('(prefers-color-scheme: dark)').matches))d.classList.add('dark');if(e)d.classList.add('ember');if(localStorage.look==='frost')d.classList.add('frost');d.style.setProperty('--ember-hue',localStorage.emberHue||'44')}catch(x){}matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(m){try{if(!localStorage.theme)document.documentElement.classList.toggle('dark',m.matches)}catch(x){}});`;
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

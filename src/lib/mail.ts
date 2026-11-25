@@ -19,6 +19,8 @@ const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me";
 const FIRST_LOOK_DAYS = 7; // when switched on, how far back it reads
 const BATCH = 8; // emails per AI question
 const LOOK_BACK_MS = 3_600_000;
+const OLDER_DAYS = 30; // "Read older emails": how far back
+const OLDER_PAGE = 16; // emails per call, two AI questions, so each call stays well inside a request's time limit
 
 type MailUser = User & { email: string; plan_mode: "ask" | "auto"; since: Date | null };
 // An inbox to read. since: when it was last read (null: never, so look back a week).
@@ -67,7 +69,7 @@ async function scanUser(u: MailUser, now: Date) {
   const saved: MailFind[] = [];
   for (const inbox of inboxes) {
     try {
-      saved.push(...(await scanInbox(u, inbox, now)));
+      saved.push(...(await scanInbox(u, inbox, now)).saved);
       await sql`update google_accounts set mail_checked_at = ${now} where id = ${inbox.id}`;
     } catch (err) {
       // Google says this login can't read Gmail (unticked on its screen): stop trying it, and Settings → Read my
@@ -96,19 +98,27 @@ async function scanUser(u: MailUser, now: Date) {
   return saved.length;
 }
 
-async function scanInbox(u: MailUser, inbox: Inbox, now: Date): Promise<MailFind[]> {
+// older: "Read older emails" — one page of the last OLDER_DAYS (page: Gmail's token for the next one), instead of
+// what's new since the last check. next: the token for the page after, if there is one.
+async function scanInbox(u: MailUser, inbox: Inbox, now: Date, older?: { page?: string }): Promise<{ saved: MailFind[]; next?: string }> {
   // Gmail's search lists a new email only after a delay, so each check looks back an hour, skipping what's been read.
-  const since = inbox.since ? new Date(+inbox.since - LOOK_BACK_MS) : new Date(+now - FIRST_LOOK_DAYS * 86_400_000);
+  const since = older
+    ? new Date(+now - OLDER_DAYS * 86_400_000)
+    : inbox.since
+      ? new Date(+inbox.since - LOOK_BACK_MS)
+      : new Date(+now - FIRST_LOOK_DAYS * 86_400_000);
   // The Primary tab, said as "not the other tabs": some accounts don't tag mail as primary at all.
   const q = `in:inbox -category:promotions -category:social -category:updates -category:forums -from:me after:${Math.floor(+since / 1000)}`;
-  const list = await googleAs<{ messages?: { id: string }[] }>(inbox, `${GMAIL}/messages?maxResults=30&q=${encodeURIComponent(q)}`);
+  const paging = older ? `maxResults=${OLDER_PAGE}${older.page ? `&pageToken=${encodeURIComponent(older.page)}` : ""}` : "maxResults=30";
+  const list = await googleAs<{ messages?: { id: string }[]; nextPageToken?: string }>(inbox, `${GMAIL}/messages?${paging}&q=${encodeURIComponent(q)}`);
   const ids = (list?.messages ?? []).map((m) => m.id);
-  if (!ids.length) return [];
+  const done = (saved: MailFind[]) => ({ saved, next: older ? list?.nextPageToken : undefined });
+  if (!ids.length) return done([]);
   // shortcut: read emails are remembered by Gmail id alone, not per inbox; ids are 64-bit and in practice never repeat
   // across inboxes, so a clash would only skip one email. Key mail_seen by account too if that ever matters.
   const seen = new Set((await sql<{ message_id: string }[]>`select message_id from mail_seen where user_id = ${u.id} and message_id = any(${ids})`).map((s) => s.message_id));
   const fresh = ids.filter((id) => !seen.has(id));
-  if (!fresh.length) return [];
+  if (!fresh.length) return done([]);
 
   const mails: Mail[] = [];
   for (const id of fresh) {
@@ -126,7 +136,7 @@ async function scanInbox(u: MailUser, inbox: Inbox, now: Date): Promise<MailFind
   }
   // Read: only now that the AI has answered for all of them (if it failed, they're tried again next minute).
   await sql`insert into mail_seen ${sql(fresh.map((message_id) => ({ user_id: u.id, message_id })))} on conflict do nothing`;
-  if (!finds.length) return [];
+  if (!finds.length) return done([]);
 
   // What's on the calendar over the days the finds are on, to put a meeting "sometime tomorrow" in free time.
   const { calendars, events } = await upcoming(u, midnightIn(finds.map((x) => x.f.day).sort()[0], u.timezone), 61, true);
@@ -147,7 +157,24 @@ async function scanInbox(u: MailUser, inbox: Inbox, now: Date): Promise<MailFind
     if (u.plan_mode === "auto" && !row.pick_time) await addFind(u, row, calendars);
     saved.push(row);
   }
-  return saved;
+  return done(saved);
+}
+
+// "Read older emails" (Settings → Planning), for someone new: the last OLDER_DAYS of each inbox that allows Gmail,
+// one page per call. at: where the last call stopped (that inbox and its next page); none: start at the first.
+// next: where to go on, or null when every inbox is done. Only what's still to come is kept, as with new mail.
+export async function readOlder(u: User, at?: { account: string; page?: string }, now = new Date()) {
+  const [user] = await sql<{ email: string; plan_mode: "ask" | "auto" }[]>`select email, plan_mode from users where id = ${u.id}`;
+  const inboxes = await sql<Inbox[]>`
+    select id, is_main as main, email, null::timestamptz as since from google_accounts
+    where user_id = ${u.id} and broken_at is null and scope like ${MAIL_READ}
+    order by is_main desc, created_at`;
+  const i = at ? inboxes.findIndex((x) => x.id === at.account) : 0;
+  const inbox = inboxes[i];
+  if (!inbox) return null; // none allows Gmail (or that one stopped allowing it)
+  const { saved, next } = await scanInbox({ ...u, ...user, since: null }, inbox, now, { page: at?.page });
+  const after = next ? { account: inbox.id, page: next } : inboxes[i + 1] ? { account: inboxes[i + 1].id } : null;
+  return { found: saved.length, next: after };
 }
 
 // "Fri 4:00 pm" or "due Fri 13 Nov, 11:59 pm"
