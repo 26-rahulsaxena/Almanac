@@ -22,6 +22,15 @@ function applyDark() {
   document.documentElement.classList.toggle("dark", dark);
 }
 
+// Switch at once, with colour fades off for that frame: hundreds of 300 ms fades at once (worst over Ember's
+// blurred glass, which redraws for each) made the switch stutter.
+function switchNow(change: () => void) {
+  const html = document.documentElement;
+  html.classList.add("theme-switching");
+  change();
+  setTimeout(() => html.classList.remove("theme-switching"), 100); // a timer, not frames: those stop in a hidden tab
+}
+
 // Light, Dark, or System (follows the phone's or computer's setting, live: see layout.tsx). System is no saved
 // theme; the top bar's button saves Light or Dark.
 export function ThemeMode() {
@@ -31,7 +40,7 @@ export function ThemeMode() {
       if (next === "system") localStorage.removeItem("theme");
       else localStorage.setItem("theme", next);
     } catch {}
-    applyDark();
+    switchNow(applyDark);
     setMode(next);
   }
   return (
@@ -139,11 +148,12 @@ export function ThemeToggle({ className = "size-10" }: { className?: string }) {
   }
 
   // The new theme spreads as a growing circle from the theme button in the top bar (even when switched from
-  // Settings) until it covers the screen. Browsers without view transitions, and "reduce motion", switch at once.
+  // Settings) until it covers the screen. Browsers without view transitions, "reduce motion", and Ember switch at
+  // once: Ember's blurred glass over its drifting wallpaper is redrawn every frame of the sweep, which stuttered.
   function toggle(e: React.MouseEvent<HTMLButtonElement>) {
     const html = document.documentElement;
     if (html.classList.contains("theme-switching")) return; // a second tap mid-sweep would cut the first one short
-    if (!document.startViewTransition || matchMedia("(prefers-reduced-motion: reduce)").matches) return apply();
+    if (!document.startViewTransition || matchMedia("(prefers-reduced-motion: reduce)").matches || html.classList.contains("ember")) return switchNow(apply);
     const from = document.querySelector("header [data-theme-toggle]") ?? e.currentTarget;
     const b = from.getBoundingClientRect();
     const x = b.left + b.width / 2;
