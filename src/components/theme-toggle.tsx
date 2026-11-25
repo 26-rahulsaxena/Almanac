@@ -1,6 +1,17 @@
 "use client";
 import { motion } from "motion/react";
 import { useState } from "react";
+import { sceneVars } from "./home-scene";
+
+// Sky look: its glow takes Home's sky colours at this minute (--glow0–2, see .sky in globals.css). Run by Providers
+// each minute and on return, and here when Sky is picked.
+export function paintSky() {
+  const html = document.documentElement;
+  if (!html.classList.contains("sky")) return;
+  const d = new Date();
+  const v = sceneVars(d.getHours() + d.getMinutes() / 60);
+  for (const i of [0, 1, 2]) html.style.setProperty(`--glow${i}`, v[`--sky${i}`]);
+}
 
 function save(key: string, value: string) {
   try {
@@ -15,10 +26,12 @@ function stored(key: string, fallback: string) {
   }
 }
 
-// Dark or light from what's saved: the saved theme, or the device's (System). Every look has both.
+// Dark or light from what's saved: the saved theme, the time of day (Day/Night: light 6 am to 7 pm, the same hours as
+// layout.tsx's script), or the device's (System). Every look has both.
 function applyDark() {
   const theme = stored("theme", "");
-  const dark = theme === "dark" || (!theme && matchMedia("(prefers-color-scheme: dark)").matches);
+  const h = new Date().getHours();
+  const dark = theme === "dark" || (theme === "auto" && (h < 6 || h >= 19)) || (!theme && matchMedia("(prefers-color-scheme: dark)").matches);
   document.documentElement.classList.toggle("dark", dark);
 }
 
@@ -31,8 +44,9 @@ function switchNow(change: () => void) {
   setTimeout(() => html.classList.remove("theme-switching"), 100); // a timer, not frames: those stop in a hidden tab
 }
 
-// Light, Dark, or System (follows the phone's or computer's setting, live: see layout.tsx). System is no saved
-// theme; the top bar's button saves Light or Dark.
+// Light, Dark, Day/Night (light by day, dark by night, switching on its own) or System (follows the phone's or
+// computer's setting, live: see layout.tsx). System is no saved theme; the top bar's button saves Light or Dark.
+const MODES = { light: "Light", dark: "Dark", auto: "Day/Night", system: "System" };
 export function ThemeMode() {
   const [mode, setMode] = useState(() => stored("theme", "system"));
   function pick(next: string) {
@@ -45,15 +59,16 @@ export function ThemeMode() {
   }
   return (
     <div role="group" aria-label="Light or dark" className="flex shrink-0 rounded-full border border-line bg-surface p-0.5">
-      {(["light", "dark", "system"] as const).map((m) => (
+      {Object.entries(MODES).map(([m, label]) => (
         <button
           key={m}
           type="button"
           aria-pressed={mode === m}
           onClick={() => pick(m)}
-          className={`rounded-full px-3 py-1.5 text-sm capitalize transition-colors ${mode === m ? "bg-ink text-paper" : "text-muted hover:text-ink"}`}
+          title={m === "auto" ? "Light from 6 am, dark from 7 pm" : undefined}
+          className={`whitespace-nowrap rounded-full px-3 py-1.5 text-sm transition-colors ${mode === m ? "bg-ink text-paper" : "text-muted hover:text-ink"}`}
         >
-          {m}
+          {label}
         </button>
       ))}
     </div>
@@ -80,9 +95,10 @@ function HueSlider({ label, value, onChange }: { label: string; value: number; o
   );
 }
 
-// The look: Paper (warm, solid; light or dark), Frost (cool white and blue, like Google Calendar; light or dark) or
-// Ember (smoky glass with a warm glow in a colour you pick; light or dark). Saved in this browser.
-const LOOKS = ["paper", "frost", "ember"] as const;
+// The look: Paper (warm, solid; light or dark), Frost (cool white and blue, like Google Calendar; light or dark),
+// Ember (smoky glass with a warm glow in a colour you pick; light or dark) or Sky (glass over the colours of Home's
+// sky, which follows the time of day; light or dark). Saved in this browser.
+const LOOKS = ["paper", "frost", "ember", "sky"] as const;
 type Look = (typeof LOOKS)[number];
 export function LookSettings() {
   const [look, setLook] = useState<Look>(() => {
@@ -98,14 +114,16 @@ export function LookSettings() {
   function pick(next: Look) {
     document.documentElement.classList.toggle("ember", next === "ember");
     document.documentElement.classList.toggle("frost", next === "frost");
+    document.documentElement.classList.toggle("sky", next === "sky");
+    paintSky();
     save("look", next);
     setLook(next);
   }
   return (
     <>
-      <div className="mt-3 flex items-center justify-between gap-3">
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm">
-          Look <span className="text-muted">· Paper, Frost, or Ember</span>
+          Look <span className="text-muted">· Paper, Frost, Ember, or Sky</span>
         </p>
         <div role="group" aria-label="Look" className="flex shrink-0 rounded-full border border-line bg-surface p-0.5">
           {LOOKS.map((l) => (
@@ -148,18 +166,17 @@ export function ThemeToggle({ className = "size-10" }: { className?: string }) {
   }
 
   // The new theme spreads as a growing circle from the theme button in the top bar (even when switched from
-  // Settings) until it covers the screen. Browsers without view transitions, "reduce motion", and Ember switch at
-  // once: Ember's blurred glass over its drifting wallpaper is redrawn every frame of the sweep, which stuttered.
+  // Settings) until it covers the screen. Browsers without view transitions and "reduce motion" switch at once.
   function toggle(e: React.MouseEvent<HTMLButtonElement>) {
     const html = document.documentElement;
     if (html.classList.contains("theme-switching")) return; // a second tap mid-sweep would cut the first one short
-    if (!document.startViewTransition || matchMedia("(prefers-reduced-motion: reduce)").matches || html.classList.contains("ember")) return switchNow(apply);
+    if (!document.startViewTransition || matchMedia("(prefers-reduced-motion: reduce)").matches) return switchNow(apply);
     const from = document.querySelector("header [data-theme-toggle]") ?? e.currentTarget;
     const b = from.getBoundingClientRect();
     const x = b.left + b.width / 2;
     const y = b.top + b.height / 2;
     const r = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y)); // to the farthest corner
-    // Colour fades are paused while the circle runs, so the new theme lands in one sweep.
+    // Colour fades and moving parts are paused while the circle runs (globals.css), so it lands in one smooth sweep.
     html.classList.add("theme-switching");
     const t = document.startViewTransition(apply);
     t.ready

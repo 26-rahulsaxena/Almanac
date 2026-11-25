@@ -1,6 +1,7 @@
 "use client";
 import { MotionConfig } from "motion/react";
 import { useEffect } from "react";
+import { paintSky } from "./theme-toggle";
 
 const BUILD = process.env.ALMANAC_BUILD;
 
@@ -19,9 +20,15 @@ export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     document.addEventListener("visibilitychange", reloadIfOutdated);
     window.addEventListener("focus", reloadIfOutdated);
+    // Sky look: its glow follows the sky, each minute and on coming back.
+    paintSky();
+    const sky = setInterval(paintSky, 60_000);
+    document.addEventListener("visibilitychange", paintSky);
     return () => {
       document.removeEventListener("visibilitychange", reloadIfOutdated);
       window.removeEventListener("focus", reloadIfOutdated);
+      clearInterval(sky);
+      document.removeEventListener("visibilitychange", paintSky);
     };
   }, []);
   return <MotionConfig reducedMotion="user">{children}</MotionConfig>;

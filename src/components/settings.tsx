@@ -125,10 +125,10 @@ export function Settings(props: {
                 {profileLine(props.profile) ? "Edit" : "Set up"}
               </button>
             </div>
-            <div className="mt-6 flex items-center justify-between gap-3">
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h3 className={h3}>Appearance</h3>
-                <p className="mt-1 text-sm">Light or dark</p>
+                <p className="mt-1 text-sm">Light, dark, or by time of day</p>
               </div>
               <ThemeMode />
             </div>

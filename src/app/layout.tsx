@@ -29,9 +29,10 @@ export const viewport: Viewport = {
   ],
 };
 
-// Runs before paint so the page never flashes the wrong theme or look (Paper, Frost or Ember: see globals.css), each light or dark;
-// Ember is coloured by its hue (--ember-hue). With no saved theme (System), light/dark follows the device live.
-const themeScript = `try{var d=document.documentElement,t=localStorage.theme,e=localStorage.look==='ember';if(t==='dark'||(!t&&matchMedia('(prefers-color-scheme: dark)').matches))d.classList.add('dark');if(e)d.classList.add('ember');if(localStorage.look==='frost')d.classList.add('frost');d.style.setProperty('--ember-hue',localStorage.emberHue||'44')}catch(x){}matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(m){try{if(!localStorage.theme)document.documentElement.classList.toggle('dark',m.matches)}catch(x){}});`;
+// Runs before paint so the page never flashes the wrong theme or look (Paper, Frost, Ember or Sky: see globals.css), each light or dark;
+// Ember is coloured by its hue (--ember-hue). With no saved theme (System), light/dark follows the device live; with
+// Day/Night ('auto'), the clock: light 6 am to 7 pm (the same hours as theme-toggle.tsx), checked each minute and on return.
+const themeScript = `try{var d=document.documentElement,t=localStorage.theme,e=localStorage.look==='ember',h=new Date().getHours();if(t==='dark'||(t==='auto'&&(h<6||h>=19))||(!t&&matchMedia('(prefers-color-scheme: dark)').matches))d.classList.add('dark');if(e)d.classList.add('ember');if(localStorage.look==='frost')d.classList.add('frost');if(localStorage.look==='sky')d.classList.add('sky');d.style.setProperty('--ember-hue',localStorage.emberHue||'44')}catch(x){}matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(m){try{if(!localStorage.theme)document.documentElement.classList.toggle('dark',m.matches)}catch(x){}});function dn(){try{if(localStorage.theme==='auto'){var h=new Date().getHours();document.documentElement.classList.toggle('dark',h<6||h>=19)}}catch(x){}}setInterval(dn,60000);document.addEventListener('visibilitychange',dn);`;
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

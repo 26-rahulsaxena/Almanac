@@ -3,8 +3,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { WEATHERS, type Weather } from "../lib/weather";
 
 // The picture at the top of Home: a desk in a high-rise office, looking out through a glass wall at the city, the
-// sky, birds and aeroplanes, following the time of day (dawn, day, golden hour, dusk, night) and fading into the
-// page. Drawn in SVG; the colours are CSS variables set once a minute, so nothing re-renders. The drawing spans
+// sky, birds and aeroplanes, following the time of day (dawn, day, golden hour, dusk, night), edge to edge and
+// fading into the page. Drawn in SVG; the colours are CSS variables set once a minute, so nothing re-renders. The drawing spans
 // y -150 (the ceiling) to 300.
 
 // Through the day: [hour, sky top, middle, horizon, foreground, leaves, night 0–1].
@@ -86,10 +86,14 @@ export function sceneVars(h: number, grey = 0): Record<string, string> {
   };
 }
 
-// Sun up 6:00–18:30, moon the rest, each on an arc across the sky; null: below the horizon.
+// Sun up 6:00–18:30, moon the rest, each on an arc across the sky: how far along (0–1) and how high; null: below the
+// horizon, as a CSS transform. Across the part of the sky Home's column shows and no higher than just under the top
+// bar (--arc-lo, --arc-w, --arc-h; see HomeScene), so it's never behind Priorities or the top bar.
 function arc(h: number, rise: number, hours: number) {
   const p = ((((h - rise) % 24) + 24) % 24) / hours;
-  return p >= 1 ? null : [80 + 1040 * p, 250 - 340 * Math.sin(Math.PI * p)];
+  if (p >= 1) return null;
+  const up = Math.sin(Math.PI * p).toFixed(4);
+  return `translate(calc(var(--arc-lo, 80px) + var(--arc-w, 1040px) * ${p.toFixed(4)}), calc(250px - var(--arc-h, 340px) * ${up}))`;
 }
 
 // The same city on every load (and on the server): a seeded random.
@@ -199,7 +203,7 @@ export function HomeScene({ greeting }: { greeting: ReactNode }) {
       ] as const) {
         if (!g) continue;
         g.style.opacity = at ? String(1 - grey * 0.9) : "0"; // behind the clouds
-        if (at) g.setAttribute("transform", `translate(${at[0]} ${at[1]})`);
+        if (at) g.style.transform = at;
       }
       root.current?.setAttribute("data-ready", "");
     };
@@ -207,6 +211,40 @@ export function HomeScene({ greeting }: { greeting: ReactNode }) {
     const id = setInterval(paint, 60_000);
     return () => clearInterval(id);
   }, [grey]);
+  // The picture spans the whole screen, but the desk, sun and moon belong to Home's column (on wide screens the
+  // Priorities panel covers the rest): the desk slides left so its right edge meets the column's, and the sun and
+  // moon arc between the screen's left edge and the column's right one, topping out a little below the top bar. In
+  // the picture's own units.
+  useEffect(() => {
+    const box = root.current;
+    const svg = box?.querySelector("svg");
+    if (!box || !svg) return;
+    const place = () => {
+      const m = svg.getScreenCTM()?.inverse();
+      if (!m) return;
+      const right = new DOMPoint(box.getBoundingClientRect().right, 0).matrixTransform(m).x;
+      const left = new DOMPoint(0, 0).matrixTransform(m).x;
+      // Below the top bar, or on phones below the greeting (it sits at the top of the picture there).
+      const at = box.getBoundingClientRect();
+      const hello = box.querySelector("h1")?.getBoundingClientRect();
+      const under = hello && hello.top < at.top + at.height / 2 ? hello.bottom : (document.querySelector("header")?.getBoundingClientRect().bottom ?? 0);
+      const top = new DOMPoint(0, under + 48).matrixTransform(m).y;
+      box.style.setProperty("--desk-x", `${Math.min(0, right - 1200)}px`);
+      box.style.setProperty("--arc-h", `${Math.max(60, 250 - top)}px`);
+      box.style.setProperty("--arc-lo", `${left + 80}px`);
+      box.style.setProperty("--arc-w", `${Math.max(0, right - left - 160)}px`);
+    };
+    place();
+    const watch = new ResizeObserver(place);
+    watch.observe(box);
+    const hello = box.querySelector("h1");
+    if (hello) watch.observe(hello); // it changes size as its words and font arrive
+    addEventListener("resize", place);
+    return () => {
+      watch.disconnect();
+      removeEventListener("resize", place);
+    };
+  }, []);
   const wet = kind === "rain" || kind === "storm";
 
   const fill = (v: string) => ({ fill: `var(${v})` });
@@ -251,8 +289,9 @@ export function HomeScene({ greeting }: { greeting: ReactNode }) {
   );
 
   return (
-    <div ref={root} className="home-scene relative -mb-12 h-78 overflow-hidden rounded-3xl lg:h-96">
-      <svg viewBox="0 -150 1200 450" preserveAspectRatio="xMaxYMax slice" aria-hidden className="absolute inset-0 size-full">
+    // The picture is pinned edge to edge across the top of the screen (globals.css); this box holds its place and the greeting.
+    <div ref={root} className="home-scene relative -mb-12 h-78 lg:h-96">
+      <svg viewBox="0 -150 1200 450" preserveAspectRatio="xMaxYMax slice" aria-hidden>
         <defs>
           <linearGradient id="hs-sky" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0" style={{ stopColor: "var(--sky0)" }} />
