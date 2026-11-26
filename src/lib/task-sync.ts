@@ -1,5 +1,5 @@
-// To-dos and Google Tasks are one list: each to-do is a task in the main account's Google Tasks (once that
-// account allowed full Tasks access), and a task added in Google shows up as a to-do. Almanac keeps what Google
+// To-dos and Google Tasks are one list: every account that allowed full Tasks access takes part. A task added in
+// any of them shows up as a to-do, and a new to-do becomes a task in the main account's. Almanac keeps what Google
 // Tasks has no room for on the to-do itself: how long it takes, its booked block, auto-planning, sessions.
 //
 // A sync reads the tasks changed in Google since the last one (all of them the first time). A linked task whose
@@ -38,36 +38,38 @@ export function signature(r: Pick<Row, "title" | "due_at" | "done">, timeZone: s
   return JSON.stringify([fields.title, fields.due, fields.status, minutes]);
 }
 
+type Account = { id: string; main: boolean; synced: Date | null };
+
 // Runs one sync for this user, unless one is already running (two at once could add a to-do to Google twice).
 export async function syncTasks(u: { id: string; timezone: string }) {
-  const [acct] = await sql<{ id: string }[]>`
-    select id from google_accounts where user_id = ${u.id} and is_main and broken_at is null and scope ~ '/auth/tasks( |$)'`;
-  if (!acct) return; // Tasks not allowed (yet): to-dos stay in Almanac only
+  const accounts = await sql<Account[]>`
+    select id, is_main as main, tasks_synced_at as synced from google_accounts
+    where user_id = ${u.id} and broken_at is null and scope ~ '/auth/tasks( |$)' order by is_main desc, created_at`;
+  if (!accounts.length) return; // Tasks not allowed (yet): to-dos stay in Almanac only
   const [mine] = await sql`
     update users set tasks_sync_lock = now() where id = ${u.id} and (tasks_sync_lock is null or tasks_sync_lock < now() - interval '2 minutes')
     returning id`;
   if (!mine) return;
   try {
-    await sync(u, TASKS + acct.id);
+    for (const a of accounts) await sync(u, a);
   } finally {
     await sql`update users set tasks_sync_lock = null where id = ${u.id}`;
   }
 }
 
 // A to-do deleted in Almanac takes its task with it (a sync can't tell a deleted to-do from one never linked).
-export async function deleteLinkedTask(userId: string, taskId: string) {
-  const [acct] = await sql<{ id: string }[]>`select id from google_accounts where user_id = ${userId} and is_main`;
-  if (acct) await deleteTask(userId, TASKS + acct.id, taskId);
-}
+export const deleteLinkedTask = (userId: string, taskCal: string, taskId: string) => deleteTask(userId, taskCal, taskId);
 
-async function sync(u: { id: string; timezone: string }, calendarId: string) {
+// One account's tasks. New to-dos go to the main account's Google Tasks (taking part only when it allowed Tasks).
+async function sync(u: { id: string; timezone: string }, a: Account) {
+  const calendarId = TASKS + a.id;
   const call = <T>(url: string, init?: RequestInit) => google<T>(u.id, url, init, calendarId);
-  const [[state], lists] = await Promise.all([
-    sql<{ since: Date | null; now: Date }[]>`select tasks_synced_at as since, now() from users where id = ${u.id}`,
+  const [[{ now }], lists] = await Promise.all([
+    sql<{ now: Date }[]>`select now()`,
     call<{ items?: { id: string }[] }>(`${TASKS_API}/users/@me/lists?maxResults=100&fields=items(id)`),
   ]);
   // Changed since the last sync, a few minutes back in case Google's clock and ours differ; everything the first time.
-  const since = state.since && new Date(+state.since - 5 * 60_000).toISOString();
+  const since = a.synced && new Date(+a.synced - 5 * 60_000).toISOString();
   const tasks = new Map<string, GTask>(); // by "<list id>~<task id>"
   await Promise.all(
     (lists.items ?? []).map(async (l) => {
@@ -94,7 +96,7 @@ async function sync(u: { id: string; timezone: string }, calendarId: string) {
   const [rows, timeRows, known] = await Promise.all([
     sql<Row[]>`
       select id, title, due_at, done, task_id, task_updated, task_sig from todos
-      where user_id = ${u.id} and (task_id is not null or not done)`,
+      where user_id = ${u.id} and (task_cal = ${calendarId} or (${a.main} and task_id is null and not done))`,
     sql<(TaskTime & { task_id: string })[]>`select task_id, minutes, time_zone from task_times where user_id = ${u.id}`,
     sql<{ task_id: string }[]>`select task_id from todos where user_id = ${u.id} and task_id is not null`, // done ones older than the list shows too
   ]);
@@ -120,7 +122,7 @@ async function sync(u: { id: string; timezone: string }, calendarId: string) {
       : await call<GTask>(`${TASKS_API}/lists/@default/tasks?fields=id,updated,selfLink`, taskJson("POST", fields));
     // The real list id (not "@default"), so the next read finds this task linked.
     const key = r.task_id ?? `${g.selfLink!.split("/lists/")[1].split("/")[0]}~${g.id}`;
-    await sql`update todos set task_id = ${key}, task_updated = ${g.updated}, task_sig = ${signature(r, u.timezone)} where id = ${r.id}`;
+    await sql`update todos set task_id = ${key}, task_cal = ${calendarId}, task_updated = ${g.updated}, task_sig = ${signature(r, u.timezone)} where id = ${r.id}`;
     linked.add(key);
     await setTime(key, minutes);
   }
@@ -151,9 +153,9 @@ async function sync(u: { id: string; timezone: string }, calendarId: string) {
     if (linked.has(key) || g.deleted || g.status === "completed") continue;
     const t = asTodo(g, times.get(g.id), u.timezone);
     await sql`
-      insert into todos (user_id, title, due_at, task_id, task_updated, task_sig)
-      values (${u.id}, ${t.title}, ${t.due_at}, ${key}, ${g.updated}, ${signature(t, u.timezone)})
+      insert into todos (user_id, title, due_at, task_id, task_cal, task_updated, task_sig)
+      values (${u.id}, ${t.title}, ${t.due_at}, ${key}, ${calendarId}, ${g.updated}, ${signature(t, u.timezone)})
       on conflict (user_id, task_id) where task_id is not null do nothing`;
   }
-  await sql`update users set tasks_synced_at = ${state.now} where id = ${u.id}`;
+  await sql`update google_accounts set tasks_synced_at = ${now} where id = ${a.id}`;
 }

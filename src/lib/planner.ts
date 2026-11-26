@@ -29,6 +29,7 @@ export type Todo = {
   auto: boolean; // Almanac finds a time and keeps it clear of new events
   group_id: string | null; // parts of one task split into sessions
   task_id: string | null; // its Google Task, "<list id>~<task id>" (task-sync.ts)
+  task_cal?: string | null; // the "tasks~<account id>" that task is in
 };
 export type Routine = { id: string; title: string; minutes: number; per_week: number; time_of_day: TimeOfDay };
 

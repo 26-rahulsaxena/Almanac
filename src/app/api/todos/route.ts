@@ -30,10 +30,12 @@ async function respond(u: User, change: () => Promise<unknown>, plan = false) {
   }
 }
 
-// The list now, then a sync with Google Tasks once it's sent (a sync takes a few Google calls; the list shouldn't
-// wait). A change made in Google shows on the next load; one made here reaches Google within seconds.
+// The list after a sync with Google Tasks, so tasks added there show straight away. A slow sync (Google can take
+// a while) finishes after the list is sent, and what it brings shows on the next load.
 async function fresh(u: User) {
-  after(() => syncTasks(u).catch((err) => console.error("Google Tasks sync:", err)));
+  const sync = syncTasks(u).catch((err) => console.error("Google Tasks sync:", err));
+  await Promise.race([sync, new Promise((done) => setTimeout(done, 2500))]);
+  after(() => sync);
   return Response.json(await listTodos(u.id));
 }
 
@@ -132,6 +134,6 @@ export async function DELETE(req: Request) {
   return respond(u, async () => {
     const [t] = await sql<Todo[]>`delete from todos where id = ${b.id} and user_id = ${u.id} returning *`;
     if (t?.event_id && b.removeBlock === true) await deleteBlock(u, t.calendar_id!, t.event_id).catch(() => {}); // already gone is fine
-    if (t?.task_id) await deleteLinkedTask(u.id, t.task_id).catch(() => {}); // already gone is fine
+    if (t?.task_id && t.task_cal) await deleteLinkedTask(u.id, t.task_cal, t.task_id).catch(() => {}); // already gone is fine
   });
 }

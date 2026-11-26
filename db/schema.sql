@@ -341,6 +341,10 @@ alter table todos add column if not exists task_updated text;
 create unique index if not exists todos_task on todos(user_id, task_id) where task_id is not null;
 alter table users add column if not exists tasks_sync_lock timestamptz;
 -- task_sig: the to-do's title, day, done and time when it last matched its task, so a change made in Almanac is
--- seen without reading the task. tasks_synced_at: when the last sync started; the next reads only tasks changed since.
+-- seen without reading the task.
 alter table todos add column if not exists task_sig text;
-alter table users add column if not exists tasks_synced_at timestamptz;
+-- Every account that allowed Tasks takes part: task_cal is the "tasks~<account id>" calendar a to-do's task is in
+-- (new to-dos go to the main account's). tasks_synced_at: when that account's last sync started; the next reads
+-- only tasks changed since (all of them the first time).
+alter table todos add column if not exists task_cal text;
+alter table google_accounts add column if not exists tasks_synced_at timestamptz;
