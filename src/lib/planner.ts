@@ -28,6 +28,7 @@ export type Todo = {
   scheduled_at: Date | null;
   auto: boolean; // Almanac finds a time and keeps it clear of new events
   group_id: string | null; // parts of one task split into sessions
+  task_id: string | null; // its Google Task, "<list id>~<task id>" (task-sync.ts)
 };
 export type Routine = { id: string; title: string; minutes: number; per_week: number; time_of_day: TimeOfDay };
 
@@ -117,7 +118,7 @@ export const deleteBlock = (u: User, calendarId: string, eventId: string) =>
 
 export const listTodos = (userId: string) =>
   sql<Todo[]>`
-    select id, title, due_at, minutes, done, calendar_id, event_id, scheduled_at, auto, group_id from todos
+    select id, title, due_at, minutes, done, calendar_id, event_id, scheduled_at, auto, group_id, task_id from todos
     where user_id = ${userId} and (not done or created_at > now() - interval '2 days')
     order by done, due_at nulls last, created_at`;
 

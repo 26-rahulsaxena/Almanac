@@ -66,10 +66,10 @@ type GEvent = {
 // changed when the account allowed full Tasks access (older sign-ins allowed reading only).
 // Completed ones show crossed out (done), as in Google Calendar, and aren't priorities.
 export const TASKS = "tasks~";
-const TASKS_API = "https://tasks.googleapis.com/tasks/v1";
+export const TASKS_API = "https://tasks.googleapis.com/tasks/v1";
 const TASK_MS = 30 * 60_000;
 type GTask = { id: string; title?: string; notes?: string; due?: string; status?: string };
-type TaskTime = { minutes: number; time_zone: string };
+export type TaskTime = { minutes: number; time_zone: string };
 
 export function taskEvent(t: GTask, list: string, calendarId: string, at?: TaskTime): Ev {
   const day = t.due!.slice(0, 10); // Google keeps the date as midnight UTC
@@ -98,11 +98,17 @@ async function listTasks(userId: string, calendarId: string, from: string, to: s
     maxResults: "100", // shortcut: no paging, so a list with >100 tasks due in one range gets cut off; loop on nextPageToken if that happens
     fields: "items(id,title,notes,due,status)",
   });
-  const times = new Map((await sql<(TaskTime & { task_id: string })[]>`select task_id, minutes, time_zone from task_times where user_id = ${userId}`).map((r) => [r.task_id, r]));
+  const [timeRows, booked] = await Promise.all([
+    sql<(TaskTime & { task_id: string })[]>`select task_id, minutes, time_zone from task_times where user_id = ${userId}`,
+    // A to-do with its own block on the calendar shows as that block, not again as its task (task-sync.ts).
+    sql<{ task_id: string }[]>`select task_id from todos where user_id = ${userId} and task_id is not null and event_id is not null and not done`,
+  ]);
+  const times = new Map(timeRows.map((r) => [r.task_id, r]));
+  const hide = new Set(booked.map((r) => r.task_id));
   const all = await Promise.all(
     (lists.items ?? []).map(async (l) => {
       const r = await google<{ items?: GTask[] }>(userId, `${TASKS_API}/lists/${encodeURIComponent(l.id)}/tasks?${q}`, undefined, calendarId);
-      return (r.items ?? []).filter((t) => t.due).map((t) => taskEvent(t, l.id, calendarId, times.get(t.id)));
+      return (r.items ?? []).filter((t) => t.due && !hide.has(`${l.id}~${t.id}`)).map((t) => taskEvent(t, l.id, calendarId, times.get(t.id)));
     }),
   );
   const words = query?.toLowerCase();
@@ -116,12 +122,12 @@ export async function getTask(userId: string, calendarId: string, id: string): P
   return { summary: t.title, start: { date: (t.due ?? new Date().toISOString()).slice(0, 10) } };
 }
 
-const taskUrl = (id: string) => {
+export const taskUrl = (id: string) => {
   const [list, task] = id.split("~");
   return `${TASKS_API}/lists/${encodeURIComponent(list)}/tasks/${encodeURIComponent(task)}`;
 };
-const json = (method: string, body: object): RequestInit => ({ method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-const status = (done: boolean) => (done ? { status: "completed" } : { status: "needsAction", completed: null });
+export const taskJson = (method: string, body: object): RequestInit => ({ method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+export const taskStatus = (done: boolean) => (done ? { status: "completed" } : { status: "needsAction", completed: null });
 
 // The day and minutes after midnight of a moment, where the person is.
 export function localDayTime(iso: string, timeZone: string) {
@@ -141,11 +147,11 @@ export async function saveTask(userId: string, t: SaveInput) {
     title: t.title,
     notes: t.description,
     due: `${at?.day ?? t.start}T00:00:00.000Z`,
-    ...(t.done !== undefined && status(t.done)),
+    ...(t.done !== undefined && taskStatus(t.done)),
   };
   const saved = t.id
-    ? await google<GTask>(userId, taskUrl(t.id), json("PATCH", body), t.calendarId)
-    : await google<GTask>(userId, `${TASKS_API}/lists/@default/tasks`, json("POST", body), t.calendarId);
+    ? await google<GTask>(userId, taskUrl(t.id), taskJson("PATCH", body), t.calendarId)
+    : await google<GTask>(userId, `${TASKS_API}/lists/@default/tasks`, taskJson("POST", body), t.calendarId);
   if (at) {
     await sql`
       insert into task_times (user_id, task_id, minutes, time_zone) values (${userId}, ${saved.id}, ${at.minutes}, ${t.timeZone})
@@ -160,7 +166,7 @@ export async function deleteTask(userId: string, calendarId: string, id: string)
 
 // Ticking a task Done in Priorities completes it in Google too (and reopening it, the reverse).
 export async function setTaskDone(userId: string, calendarId: string, id: string, done: boolean) {
-  if (calendarId.startsWith(TASKS)) await google(userId, taskUrl(id), json("PATCH", status(done)), calendarId);
+  if (calendarId.startsWith(TASKS)) await google(userId, taskUrl(id), taskJson("PATCH", taskStatus(done)), calendarId);
 }
 
 // Every calendar from every connected Google account: the main account's first, each account's own calendar first

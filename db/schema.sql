@@ -333,3 +333,14 @@ create table if not exists task_times (
   primary key (user_id, task_id)
 );
 alter table task_times enable row level security;
+-- To-dos and Google Tasks are one list (task-sync.ts): each to-do is a task in the main account's Google Tasks.
+-- task_id: "<list id>~<task id>"; task_updated: Google's "updated" stamp when the two last matched, so a sync can
+-- tell which side changed since. tasks_sync_lock: a sync is running (only one at a time, or a to-do could be added twice).
+alter table todos add column if not exists task_id text;
+alter table todos add column if not exists task_updated text;
+create unique index if not exists todos_task on todos(user_id, task_id) where task_id is not null;
+alter table users add column if not exists tasks_sync_lock timestamptz;
+-- task_sig: the to-do's title, day, done and time when it last matched its task, so a change made in Almanac is
+-- seen without reading the task. tasks_synced_at: when the last sync started; the next reads only tasks changed since.
+alter table todos add column if not exists task_sig text;
+alter table users add column if not exists tasks_synced_at timestamptz;

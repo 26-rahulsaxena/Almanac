@@ -569,7 +569,7 @@ export function CalendarApp({
   // Open to-dos that have no time booked yet: at their due time (a 30-minute item), all day on their due day when
   // it has no real time ("by Friday" is saved as 23:59), or all day today when there's no due date or it's an
   // earlier day. Booked ones are already on the calendar as their own block.
-  const [todoList, setTodoList] = useState<{ id: string; title: string; due_at: string | null; done: boolean; event_id: string | null }[]>([]);
+  const [todoList, setTodoList] = useState<{ id: string; title: string; due_at: string | null; done: boolean; event_id: string | null; task_id: string | null }[]>([]);
   useEffect(() => {
     fetch("/api/todos")
       .then((r) => (r.ok ? r.json() : null))
@@ -581,7 +581,8 @@ export function CalendarApp({
     const today = new Date(todayKey);
     const ymd = (d: Date) => d.toLocaleDateString("en-CA"); // YYYY-MM-DD, local
     return todoList
-      .filter((t) => !t.done && !t.event_id)
+      // One linked to a Google Task shows as that task on its day; an overdue one still shows today as well.
+      .filter((t) => !t.done && !t.event_id && !(t.task_id && t.due_at && new Date(t.due_at) >= today))
       .map((t): Ev => {
         const item = { id: t.id, calendarId: TODO_CAL, title: `☐ ${t.title}`, busy: false, isOrganizer: false };
         const at = t.due_at ? new Date(t.due_at) : null;

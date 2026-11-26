@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
+import { after } from "next/server";
 import { auth } from "@/auth";
 import { sql } from "@/lib/db";
 import { ReauthError } from "@/lib/google";
 import { deleteBlock, listTodos, me, renameBlock, replan, scheduleTodo, setTodoDone, type Todo, type User } from "@/lib/planner";
+import { deleteLinkedTask, syncTasks } from "@/lib/task-sync";
 import { InvalidInput } from "@/lib/validate";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -19,13 +21,20 @@ async function respond(u: User, change: () => Promise<unknown>, plan = false) {
   try {
     await change();
     if (plan) await replan(u);
-    return Response.json(await listTodos(u.id));
+    return await fresh(u);
   } catch (err) {
     if (err instanceof InvalidInput) return fail(err.message);
     if (err instanceof ReauthError) return fail("reauth", 401);
     console.error(err);
     return fail("Couldn't update your to-do list. Try again.", 502);
   }
+}
+
+// The list now, then a sync with Google Tasks once it's sent (a sync takes a few Google calls; the list shouldn't
+// wait). A change made in Google shows on the next load; one made here reaches Google within seconds.
+async function fresh(u: User) {
+  after(() => syncTasks(u).catch((err) => console.error("Google Tasks sync:", err)));
+  return Response.json(await listTodos(u.id));
 }
 
 function parseTitle(v: unknown) {
@@ -51,7 +60,7 @@ function parseMinutes(v: unknown) {
 export async function GET() {
   const u = await user();
   if (!u) return fail("signin", 401);
-  return Response.json(await listTodos(u.id));
+  return fresh(u);
 }
 
 // POST /api/todos {title, due?, minutes?, auto?, split?} → adds one. auto: Almanac books and keeps a time for it.
@@ -123,5 +132,6 @@ export async function DELETE(req: Request) {
   return respond(u, async () => {
     const [t] = await sql<Todo[]>`delete from todos where id = ${b.id} and user_id = ${u.id} returning *`;
     if (t?.event_id && b.removeBlock === true) await deleteBlock(u, t.calendar_id!, t.event_id).catch(() => {}); // already gone is fine
+    if (t?.task_id) await deleteLinkedTask(u.id, t.task_id).catch(() => {}); // already gone is fine
   });
 }
