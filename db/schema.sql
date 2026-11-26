@@ -323,3 +323,13 @@ alter table users add column if not exists memories jsonb not null default '[]';
 -- The accounts Almanac works with (the ☰ menu): Home, Calendar, Mail and the assistant use only these. Empty: all of
 -- them. Background reminders and email reading still cover every account, so nothing slips while one is switched off.
 alter table users add column if not exists active_accounts uuid[] not null default '{}';
+-- A Google Task's time of day, which Almanac keeps itself: Google's Tasks API saves the date only. The task shows
+-- and reminds at this time in Almanac (Google Calendar doesn't see it). minutes: after midnight in time_zone.
+create table if not exists task_times (
+  user_id uuid not null references users(id) on delete cascade,
+  task_id text not null,
+  minutes int not null check (minutes between 0 and 1439),
+  time_zone text not null,
+  primary key (user_id, task_id)
+);
+alter table task_times enable row level security;

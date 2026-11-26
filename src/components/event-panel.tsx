@@ -183,7 +183,9 @@ export function EventPanel({ initial, event, calendars, priority, onDeadline, on
     if (task) {
       const { calendarId, title, date, description } = f;
       const blank = { location: "", colorId: null, recurrence: null, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone };
-      return { ...blank, calendarId, id: event?.id, title: title.trim(), description, allDay: true, start: date, end: shiftDate(date, 1), done: event ? done : undefined };
+      // A time is kept by Almanac (Google keeps the day only); the half hour is only how long it shows.
+      const when = f.allDay ? { start: date, end: shiftDate(date, 1) } : { start: startDate.toISOString(), end: new Date(+startDate + 30 * 60_000).toISOString() };
+      return { ...blank, ...when, calendarId, id: event?.id, title: title.trim(), description, allDay: f.allDay, done: event ? done : undefined };
     }
     const start = f.allDay ? f.date : startDate.toISOString();
     const end = f.allDay ? shiftDate(f.endDate, 1) : new Date(`${f.endDate}T${f.endTime}`).toISOString();
@@ -286,9 +288,16 @@ export function EventPanel({ initial, event, calendars, priority, onDeadline, on
 
             {task ? (
               <div className="space-y-2">
-                <span className={label}>Due</span>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center justify-between">
+                  <span className={label}>Due</span>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={f.allDay} onChange={(e) => set("allDay", e.target.checked)} className="accent-[var(--accent)]" />
+                    All day
+                  </label>
+                </div>
+                <div className="flex items-center gap-2">
                   <input type="date" aria-label="Due date" value={f.date} onChange={(e) => setF((x) => ({ ...x, date: e.target.value, endDate: e.target.value }))} className={field} required />
+                  {!f.allDay && <TimeWheel aria-label="Due time" value={f.startTime} onChange={(v) => set("startTime", v)} className={`${field.replace("w-full", "")} w-auto shrink-0`} />}
                   {event && (
                     <label className="flex shrink-0 items-center gap-2 text-sm">
                       <input type="checkbox" checked={done} onChange={(e) => setDone(e.target.checked)} className="size-4 accent-[var(--accent)]" />
