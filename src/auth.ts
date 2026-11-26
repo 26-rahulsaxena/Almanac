@@ -5,7 +5,7 @@ import { cookies } from "next/headers";
 import { encrypt } from "@/lib/crypto";
 import { attachAccount, linkDone, LINK_COOKIE, readTicket } from "@/lib/accounts";
 
-// Scopes: sign-in, list calendars, read/write events, read Google Tasks (the tasks Google Calendar shows; see
+// Scopes: sign-in, list calendars, read/write events, read/write Google Tasks (the tasks Google Calendar shows; see
 // calendar.ts), and read Gmail ("Read my email": meetings, calls and deadlines in new mail). All on one Google screen,
 // at sign-in and when adding another account; Google lets people untick Gmail or Tasks there, and then Settings
 // offers Allow later. Nothing else from the Google account.
@@ -19,7 +19,7 @@ const scope = [
   "profile",
   "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
   "https://www.googleapis.com/auth/calendar.events",
-  "https://www.googleapis.com/auth/tasks.readonly",
+  "https://www.googleapis.com/auth/tasks",
   GMAIL_SCOPE,
 ].join(" ");
 export const withGmail = { scope }; // shortcut: the same as the default now; kept for Settings' Connect Gmail and the app

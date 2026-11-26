@@ -1,5 +1,5 @@
 import { auth } from "@/auth";
-import { getMaster, listEvents } from "@/lib/calendar";
+import { deleteTask, getMaster, listEvents, saveTask, TASKS } from "@/lib/calendar";
 import { gcal, ReauthError } from "@/lib/google";
 import { planDelete, planSave } from "@/lib/recurrence";
 import { InvalidInput, parseDelete, parseSave } from "@/lib/validate";
@@ -57,6 +57,11 @@ async function write(req: Request, kind: "save" | "delete") {
 
   return withGoogle(async () => {
     const { input } = parsed;
+    if (input.calendarId.startsWith(TASKS)) {
+      if (parsed.kind === "save") await saveTask(userId, parsed.input);
+      else await deleteTask(userId, input.calendarId, parsed.input.id);
+      return Response.json({ ok: true });
+    }
     const master = input.recurringEventId && input.scope !== "this" ? await getMaster(userId, input.calendarId, input.recurringEventId) : undefined;
     const ops = parsed.kind === "save" ? planSave(parsed.input, master) : planDelete(parsed.input, master);
     // Run one at a time, in order: for "this and following" the new series is created before the old one is shortened.

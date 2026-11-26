@@ -1,5 +1,6 @@
 import { auth } from "@/auth";
 import { sql } from "@/lib/db";
+import { setTaskDone } from "@/lib/calendar";
 import { ReauthError } from "@/lib/google";
 import { ensureState, loadPriorities } from "@/lib/priorities";
 import { SAFETY_MS, SEVERITIES, titleKey } from "@/lib/priority";
@@ -71,6 +72,7 @@ export async function POST(req: Request) {
         break;
       }
       case "done":
+        await setTaskDone(u.id, calendarId, eventId, true);
         await sql`update deadline_states set status = 'done', next_check_at = null ${where}`;
         await sql`update todos set done = true, done_at = now() where user_id = ${u.id} and calendar_id = ${calendarId} and event_id = ${eventId}`;
         break;
@@ -78,6 +80,7 @@ export async function POST(req: Request) {
         await sql`update deadline_states set status = 'stuck', next_check_at = now() + interval '1 hour' ${where}`;
         break;
       case "open":
+        await setTaskDone(u.id, calendarId, eventId, false);
         await sql`update deadline_states set status = 'open', next_check_at = null ${where}`;
         await sql`update todos set done = false, done_at = null where user_id = ${u.id} and calendar_id = ${calendarId} and event_id = ${eventId}`;
         break;

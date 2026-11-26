@@ -29,6 +29,7 @@ export type SaveInput = {
   addMeet?: boolean;
   sendUpdates?: SendUpdates;
   reminders?: { method: "popup" | "email"; minutes: number }[] | "default"; // missing = leave as is
+  done?: boolean; // Google Tasks only: completed or not (missing = leave as is)
 };
 export type DeleteInput = Pick<SaveInput, "calendarId" | "recurringEventId" | "originalStart" | "scope" | "allDay" | "sendUpdates"> & {
   id: string;

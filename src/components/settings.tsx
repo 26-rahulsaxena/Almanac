@@ -334,10 +334,10 @@ function GoogleAccounts({ accounts, linked }: { accounts: Account[]; linked?: Li
                 </button>
               )}
             </div>
-            {/* Signed in before Tasks were asked for, or unticked on Google's screen: Google asks again for this account. */}
+            {/* Signed in before Tasks could be changed (or at all), or unticked on Google's screen: Google asks again. */}
             {!a.broken && !a.tasks && (
               <div className="mt-2 flex items-center gap-3 text-xs text-muted">
-                <span className="min-w-0 flex-1">Its Google Tasks aren&rsquo;t shown yet.</span>
+                <span className="min-w-0 flex-1">Allow Almanac to add, edit and complete its Google Tasks.</span>
                 {a.main ? (
                   <GoogleSignIn className="shrink-0">
                     <button type="submit" className="rounded-full border border-line px-3 py-1 text-xs text-ink hover:border-ink/40">

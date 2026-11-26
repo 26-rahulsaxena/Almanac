@@ -108,6 +108,7 @@ export function parseSave(raw: unknown): SaveInput {
     addMeet: o.addMeet === true,
     sendUpdates: sendUpdates(o),
     reminders: reminders(o.reminders),
+    done: typeof o.done === "boolean" ? o.done : undefined,
   };
 }
 

@@ -1,6 +1,6 @@
 import { sql } from "./db";
 import { gcal, gcalAs, google, ReauthError, rememberCalendars, type GoogleAccount } from "./google";
-import type { Attendee, Master } from "./recurrence";
+import type { Attendee, Master, SaveInput } from "./recurrence";
 import type { Reminder } from "./reminders";
 
 // account / accountId: the Google account it comes from (its email / Almanac's id). primary: that account's own calendar.
@@ -60,8 +60,9 @@ type GEvent = {
 };
 
 // Google Tasks (the tasks Google Calendar shows beside events) live in a separate Google service. Each account that
-// allowed it gets one read-only calendar, "Tasks" (id "tasks~<account id>"), whose events are its tasks with a due
-// date, on that date, all day: the Tasks API gives the date only, never a time. Each is "<list id>~<task id>".
+// allowed it gets one calendar, "Tasks" (id "tasks~<account id>"), whose events are its tasks with a due date, on
+// that date, all day: the Tasks API keeps the date only, never a time. Each is "<list id>~<task id>". It can be
+// changed when the account allowed full Tasks access (older sign-ins allowed reading only).
 // Completed ones show crossed out (done), as in Google Calendar, and aren't priorities.
 export const TASKS = "tasks~";
 const TASKS_API = "https://tasks.googleapis.com/tasks/v1";
@@ -109,11 +110,38 @@ export async function getTask(userId: string, calendarId: string, id: string): P
   return { summary: t.title, start: { date: (t.due ?? new Date().toISOString()).slice(0, 10) } };
 }
 
+const taskUrl = (id: string) => {
+  const [list, task] = id.split("~");
+  return `${TASKS_API}/lists/${encodeURIComponent(list)}/tasks/${encodeURIComponent(task)}`;
+};
+const json = (method: string, body: object): RequestInit => ({ method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+const status = (done: boolean) => (done ? { status: "completed" } : { status: "needsAction", completed: null });
+
+// Creates (in the account's default list) or edits a task. Only the title, notes, day and done carry over.
+export async function saveTask(userId: string, t: SaveInput) {
+  const body = {
+    title: t.title,
+    notes: t.description,
+    due: `${t.start.slice(0, 10)}T00:00:00.000Z`, // the day as picked (a timed start is local, so its date part is too)
+    ...(t.done !== undefined && status(t.done)),
+  };
+  if (t.id) await google(userId, taskUrl(t.id), json("PATCH", body), t.calendarId);
+  else await google(userId, `${TASKS_API}/lists/@default/tasks`, json("POST", body), t.calendarId);
+}
+
+export const deleteTask = (userId: string, calendarId: string, id: string) => google(userId, taskUrl(id), { method: "DELETE" }, calendarId);
+
+// Ticking a task Done in Priorities completes it in Google too (and reopening it, the reverse).
+export async function setTaskDone(userId: string, calendarId: string, id: string, done: boolean) {
+  if (calendarId.startsWith(TASKS)) await google(userId, taskUrl(id), json("PATCH", status(done)), calendarId);
+}
+
 // Every calendar from every connected Google account: the main account's first, each account's own calendar first
 // within it, then its Tasks. A calendar shared with two of the accounts shows once, from one that can change it.
 export async function listCalendars(userId: string): Promise<Cal[]> {
-  const accounts = await sql<(GoogleAccount & { email: string; tasks: boolean })[]>`
-    select id, email, is_main as main, coalesce(scope like '%/auth/tasks%', false) as tasks
+  const accounts = await sql<(GoogleAccount & { email: string; tasks: boolean; edit_tasks: boolean })[]>`
+    select id, email, is_main as main, coalesce(scope like '%/auth/tasks%', false) as tasks,
+      coalesce(scope ~ '/auth/tasks( |$)', false) as edit_tasks
     from google_accounts where user_id = ${userId} order by is_main desc, created_at`;
   if (!accounts[0]?.main) throw new ReauthError();
   const lists = await Promise.all(
@@ -132,7 +160,7 @@ export async function listCalendars(userId: string): Promise<Cal[]> {
             accountId: a.id,
           }))
           .sort((x, y) => Number(y.primary) - Number(x.primary));
-        if (a.tasks) cals.push({ id: TASKS + a.id, name: "Tasks", color: "#4285f4", primary: false, canEdit: false, defaultReminders: [], account: a.email, accountId: a.id });
+        if (a.tasks) cals.push({ id: TASKS + a.id, name: "Tasks", color: "#4285f4", primary: false, canEdit: a.edit_tasks, defaultReminders: [], account: a.email, accountId: a.id });
         return cals;
       } catch (err) {
         if (a.main) throw err;

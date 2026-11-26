@@ -68,7 +68,7 @@ export type Account = { id: string; email: string; main: boolean; broken: boolea
 export const listAccounts = (uid: string) =>
   sql<Account[]>`
     select id, email, is_main as main, broken_at is not null as broken, scope like '%/auth/gmail.%' as gmail,
-      coalesce(scope like '%/auth/tasks%', false) as tasks,
+      coalesce(scope ~ '/auth/tasks( |$)', false) as tasks, -- may change them; tasks.readonly alone gets "Allow Tasks" again
       (select cardinality(active_accounts) = 0 or google_accounts.id = any(active_accounts) from users where users.id = google_accounts.user_id) as active
     from google_accounts
     where user_id = ${uid} order by is_main desc, created_at`;

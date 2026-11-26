@@ -142,7 +142,10 @@ export function EventPanel({ initial, event, calendars, priority, onDeadline, on
 
   const cal = calendars.find((c) => c.id === f.calendarId);
   const readOnly = !cal?.canEdit;
-  const canEditGuests = !readOnly && (event?.isOrganizer ?? true);
+  // A Google Task: a title, a day, notes and done; nothing else carries over (calendar.ts saveTask).
+  const task = f.calendarId.startsWith("tasks~");
+  const [done, setDone] = useState(!!event?.done);
+  const canEditGuests = !readOnly && !task && (event?.isOrganizer ?? true);
   const before = (event?.attendees ?? []).filter((a) => !a.self);
   const guests = f.attendees.filter((a) => !a.self);
   const isNew = (a: Attendee) => !before.some((b) => b.email.toLowerCase() === a.email.toLowerCase());
@@ -177,6 +180,11 @@ export function EventPanel({ initial, event, calendars, priority, onDeadline, on
   }, [event]);
 
   function build(scope?: Scope, sendUpdates?: SendUpdates): SaveInput | string {
+    if (task) {
+      const { calendarId, title, date, description } = f;
+      const blank = { location: "", colorId: null, recurrence: null, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone };
+      return { ...blank, calendarId, id: event?.id, title: title.trim(), description, allDay: true, start: date, end: shiftDate(date, 1), done: event ? done : undefined };
+    }
     const start = f.allDay ? f.date : startDate.toISOString();
     const end = f.allDay ? shiftDate(f.endDate, 1) : new Date(`${f.endDate}T${f.endTime}`).toISOString();
     if (f.allDay ? f.endDate < f.date : +new Date(end) <= +startDate) return "End must be after start.";
@@ -246,7 +254,7 @@ export function EventPanel({ initial, event, calendars, priority, onDeadline, on
         <div className="h-1.5 shrink-0" style={{ background: CATEGORIES.find((c) => c.id === f.colorId)?.hex ?? cal?.color }} />
         <div className="flex items-center justify-between px-5 pt-4">
           <h2 id="panel-title" className={label}>
-            {readOnly ? "Event" : event ? "Edit event" : "New event"}
+            {task ? (readOnly ? "Task" : event ? "Edit task" : "New task") : readOnly ? "Event" : event ? "Edit event" : "New event"}
           </h2>
           <button type="button" onClick={onClose} aria-label="Close" className="grid size-8 place-items-center rounded-full hover:bg-ink/5">
             ✕
@@ -276,6 +284,20 @@ export function EventPanel({ initial, event, calendars, priority, onDeadline, on
               className="w-full bg-transparent font-serif text-3xl placeholder:text-muted/60 focus:outline-none"
             />
 
+            {task ? (
+              <div className="space-y-2">
+                <span className={label}>Due</span>
+                <div className="flex items-center gap-3">
+                  <input type="date" aria-label="Due date" value={f.date} onChange={(e) => setF((x) => ({ ...x, date: e.target.value, endDate: e.target.value }))} className={field} required />
+                  {event && (
+                    <label className="flex shrink-0 items-center gap-2 text-sm">
+                      <input type="checkbox" checked={done} onChange={(e) => setDone(e.target.checked)} className="size-4 accent-[var(--accent)]" />
+                      Done
+                    </label>
+                  )}
+                </div>
+              </div>
+            ) : (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className={label}>When</span>
@@ -291,6 +313,7 @@ export function EventPanel({ initial, event, calendars, priority, onDeadline, on
                 {!f.allDay && <TimeWheel aria-label="End time" value={f.endTime} onChange={(v) => set("endTime", v)} className={field} />}
               </div>
             </div>
+            )}
 
             {event && (
               <div className="flex items-center justify-between gap-2 rounded-lg bg-ink/[0.04] px-3 py-2 text-sm">
@@ -314,6 +337,7 @@ export function EventPanel({ initial, event, calendars, priority, onDeadline, on
               </div>
             )}
 
+            {!task && (<>
             <div className="space-y-2">
               <label htmlFor="repeat" className={label}>
                 Repeat
@@ -525,6 +549,7 @@ export function EventPanel({ initial, event, calendars, priority, onDeadline, on
                 </motion.button>
               )}
             </div>
+            </>)}
 
             <div className="space-y-2">
               <label htmlFor="cal" className={label}>
@@ -548,12 +573,14 @@ export function EventPanel({ initial, event, calendars, priority, onDeadline, on
               )}
             </div>
 
-            <div className="space-y-2">
-              <label htmlFor="loc" className={label}>
-                Location
-              </label>
-              <input id="loc" value={f.location} onChange={(e) => set("location", e.target.value)} maxLength={500} className={field} placeholder="Add a place" />
-            </div>
+            {!task && (
+              <div className="space-y-2">
+                <label htmlFor="loc" className={label}>
+                  Location
+                </label>
+                <input id="loc" value={f.location} onChange={(e) => set("location", e.target.value)} maxLength={500} className={field} placeholder="Add a place" />
+              </div>
+            )}
             <div className="space-y-2">
               <label htmlFor="notes" className={label}>
                 Notes

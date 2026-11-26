@@ -1,4 +1,5 @@
 import { sql } from "@/lib/db";
+import { setTaskDone } from "@/lib/calendar";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -16,6 +17,8 @@ export async function POST(req: Request) {
       update deadline_states set status = 'done', next_check_at = null, checkin_sent_at = null where id = ${b.id}
       returning user_id, calendar_id, event_id`;
     if (s) await sql`update todos set done = true, done_at = now() where user_id = ${s.user_id} and calendar_id = ${s.calendar_id} and event_id = ${s.event_id}`;
+    // From the lock screen: if Google refuses, it's still done in Almanac.
+    if (s) await setTaskDone(s.user_id, s.calendar_id, s.event_id, true).catch((e) => console.error("Task not completed in Google:", e));
   }
   if (b.action === "more")
     await sql`update deadline_states set status = 'doing', next_check_at = now() + interval '30 minutes', checkin_sent_at = null where id = ${b.id}`;
