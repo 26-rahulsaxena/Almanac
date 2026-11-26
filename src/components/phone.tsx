@@ -1,5 +1,5 @@
 "use client";
-import { animate, motion, useMotionValue, useReducedMotion, useTransform } from "motion/react";
+import { animate, AnimatePresence, motion, useMotionValue, useReducedMotion, useTransform } from "motion/react";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { Ev } from "@/lib/calendar";
 import { addDays, parseWhen, startOfDay, startOfMonth, startOfWeek } from "@/lib/time";
@@ -187,12 +187,66 @@ const Dots = ({ colors }: { colors?: string[] }) => (
 );
 
 // Mon to Sun of the week being shown; tap a day to go to it.
+// Handlers for a swipe, as the calendar's own (calendar-app.tsx): with a finger, a quick, mostly sideways stroke (not
+// a tap or a scroll); on a laptop's trackpad, two fingers sideways. by: 1 for a swipe to the left (next), -1 to the
+// right (previous).
+function useSwipe(onSwipe: (by: 1 | -1) => void) {
+  const start = useRef<{ x: number; y: number; t: number } | null>(null);
+  const wheel = useRef({ dx: 0, last: 0, until: 0 });
+  return {
+    onWheel: (e: React.WheelEvent) => {
+      if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+      const w = wheel.current;
+      const t = Date.now();
+      // After a change, wait for the trackpad's glide to stop before the next one.
+      if (t < w.until) return void (w.until = t + 300);
+      if (t - w.last > 250) w.dx = 0;
+      w.last = t;
+      w.dx += e.deltaX;
+      if (Math.abs(w.dx) < 120) return;
+      onSwipe(w.dx > 0 ? 1 : -1);
+      w.dx = 0;
+      w.until = t + 300;
+    },
+    onTouchStart: (e: React.TouchEvent) => {
+      const t = e.touches[0];
+      start.current = e.touches.length === 1 ? { x: t.clientX, y: t.clientY, t: Date.now() } : null;
+    },
+    onTouchEnd: (e: React.TouchEvent) => {
+      const s = start.current;
+      start.current = null;
+      const t = e.changedTouches[0];
+      if (!s || !t) return;
+      const dx = t.clientX - s.x;
+      if (Math.abs(dx) > 50 && Math.abs(dx) > 2 * Math.abs(t.clientY - s.y) && Date.now() - s.t < 700) onSwipe(dx < 0 ? 1 : -1);
+    },
+  };
+}
+
+// Swiping it moves a week, to the same weekday.
 export function WeekStrip({ day, now, onPick, load, color, version }: { day: Date; now: Date; onPick: (d: Date) => void; load: Load; color: (e: Ev) => string; version: number }) {
   const first = startOfWeek(day);
   const dots = useDots(first, addDays(first, 7), load, color, version);
+  const swipe = useSwipe((by) => onPick(addDays(day, 7 * by)));
+  // Another week flows in from its side, like the calendar's pages; a day picked in the same week doesn't move it.
+  const [shown, setShown] = useState({ week: +first, dir: 0 });
+  if (shown.week !== +first) setShown({ week: +first, dir: Math.sign(+first - shown.week) });
+  return (
+    <div className="relative -mx-1 mb-2" {...swipe}>
+      <AnimatePresence mode="popLayout" custom={shown.dir} initial={false}>
+        <motion.div key={shown.week} custom={shown.dir} variants={FLOW} initial="enter" animate="center" exit="exit" transition={FLOW_SPRING}>
+          <WeekDays first={first} day={day} now={now} onPick={onPick} dots={dots} />
+        </motion.div>
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// One week's seven days, with its own marker (so a week sliding out keeps its own).
+function WeekDays({ first, day, now, onPick, dots }: { first: Date; day: Date; now: Date; onPick: (d: Date) => void; dots: Map<number, string[]> }) {
   const [picked, setPicked] = useState<HTMLSpanElement | null>(null);
   return (
-    <div className="relative -mx-1 mb-2 grid grid-cols-7">
+    <div className="relative grid grid-cols-7">
       {/* The dark marker on the day you're on, flowing like liquid to the day you pick. */}
       <LiquidBlob target={picked} className="rounded-[11px] bg-ink" />
       {Array.from({ length: 7 }, (_, i) => addDays(first, i)).map((d) => {
@@ -237,6 +291,15 @@ export function MonthPanel({
   const [year, setYear] = useState<number | null>(null);
   const next = new Date(month.getFullYear(), month.getMonth() + 1, 1);
   const dots = useDots(month, next, load, color, 0);
+  // The arrows, also by swiping: left for the next month (or year), right for the previous one. The new one flows in
+  // from that side, like the calendar's own pages (dir; 0 when switching between the days and the year).
+  const [dir, setDir] = useState(0);
+  const step = (by: 1 | -1) => {
+    setDir(by);
+    if (year === null) setMonth(new Date(month.getFullYear(), month.getMonth() + by, 1));
+    else setYear(year + by);
+  };
+  const swipe = useSwipe(step);
 
   useEffect(() => {
     const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -259,13 +322,13 @@ export function MonthPanel({
       aria-label="Pick a day"
       className="-mx-1 overflow-hidden"
     >
-      <div className="pb-3">
+      <div className="pb-3" {...swipe}>
         <div className="flex items-center justify-between px-1.5">
           <button
             type="button"
             aria-expanded={year !== null}
             aria-label={year === null ? `${fmt(month, { month: "long", year: "numeric" })}. Change the month or year` : `${year}. Back to the days`}
-            onClick={() => setYear(year === null ? month.getFullYear() : null)}
+            onClick={() => (setDir(0), setYear(year === null ? month.getFullYear() : null))}
             className="rounded-lg font-serif text-2xl leading-none text-accent hover:opacity-80 lg:text-xl"
           >
             <span aria-live="polite">{year === null ? `${fmt(month, { month: "long" })}, ${month.getFullYear()}` : year}</span>
@@ -274,20 +337,23 @@ export function MonthPanel({
             <button
               type="button"
               aria-label={year === null ? "Previous month" : "Previous year"}
-              onClick={() => (year === null ? setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1)) : setYear(year - 1))}
+              onClick={() => step(-1)}
               className={arrow}
             >
               <svg className="size-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
                 <path d="m15 6-6 6 6 6" />
               </svg>
             </button>
-            <button type="button" aria-label={year === null ? "Next month" : "Next year"} onClick={() => (year === null ? setMonth(next) : setYear(year + 1))} className={arrow}>
+            <button type="button" aria-label={year === null ? "Next month" : "Next year"} onClick={() => step(1)} className={arrow}>
               <svg className="size-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
                 <path d="m9 6 6 6-6 6" />
               </svg>
             </button>
           </div>
         </div>
+        <div className="relative">
+        <AnimatePresence mode="popLayout" custom={dir} initial={false}>
+        <motion.div key={year ?? `m${+month}`} custom={dir} variants={FLOW} initial="enter" animate="center" exit="exit" transition={FLOW_SPRING}>
         {year !== null ? (
           <div className="mt-3 grid grid-cols-3 gap-1.5 px-1.5">
             {Array.from({ length: 12 }, (_, i) => new Date(year, i, 1)).map((m) => {
@@ -299,7 +365,7 @@ export function MonthPanel({
                   type="button"
                   aria-pressed={here}
                   aria-label={fmt(m, { month: "long", year: "numeric" })}
-                  onClick={() => (setMonth(m), setYear(null))}
+                  onClick={() => (setDir(0), setMonth(m), setYear(null))}
                   className={`rounded-xl py-3 text-[15px] transition-colors lg:py-2 lg:text-[13px] ${here ? "bg-ink font-medium text-paper" : `hover:bg-ink/10 ${thisMonth ? "font-semibold text-accent" : ""}`}`}
                 >
                   {fmt(m, { month: "short" })}
@@ -329,6 +395,9 @@ export function MonthPanel({
           })}
         </div>
         )}
+        </motion.div>
+        </AnimatePresence>
+        </div>
         <div className="mt-2.5 flex justify-end px-1.5">
           <button type="button" onClick={() => onPick(startOfDay(now))} className="rounded-full border border-line px-3.5 py-1.5 text-sm hover:border-ink/40 lg:px-3 lg:py-1 lg:text-xs">
             Today

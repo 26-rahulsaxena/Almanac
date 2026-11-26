@@ -1263,6 +1263,12 @@ export function CalendarApp({
                 </svg>
               </button>
           </div>
+          {/* Wide screens, on the day view: the week as a strip of days, as on phones (the month is in the bubble). */}
+          {mounted && wide && view === "day" && !searching && (
+            <div className="mt-3">
+              <WeekStrip day={anchor} now={now} onPick={(d) => (setDir(Math.sign(+d - +anchor)), setAnchor(d))} load={loadShown} color={color} version={gen} />
+            </div>
+          )}
           {/* Phones: the month when the date at the top is tapped (it pushes the calendar down), otherwise on the
               day view the week as a strip of days. */}
           {phone && tab === "calendar" && !searching && (
@@ -1424,7 +1430,7 @@ export function CalendarApp({
                         onMove={moveEvent}
                         todoDrag={todoDrag}
                         onTodoDrop={dropTodo}
-                        hideHead={phone && view === "day"}
+                        hideHead={mounted && view === "day"}
                       />
                     )}
                   </motion.div>

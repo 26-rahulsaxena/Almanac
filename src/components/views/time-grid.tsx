@@ -54,7 +54,7 @@ type Props = {
   onMove?: (e: Ev, start: Date, end: Date) => void;
   todoDrag?: TodoDrag | null;
   onTodoDrop?: (start: Date | null) => void;
-  hideHead?: boolean; // phones show the days in their own strip above
+  hideHead?: boolean; // the day view shows the days in their own strip above
 };
 
 const minutesInto = (d: Date) => d.getHours() * 60 + d.getMinutes();
