@@ -65,6 +65,7 @@ export function classify(e: Item): { category: Category; word?: string; importan
 export function isTracked(e: Item, manual: boolean | null) {
   if (manual !== null) return manual;
   if (e.calendarId.includes("#holiday@")) return false;
+  if (e.calendarId.startsWith("tasks~")) return true; // a Google Task is something to do by its date (calendar.ts TASKS)
   return !!e.busy || ["deadline", "work"].includes(classify(e).category);
 }
 

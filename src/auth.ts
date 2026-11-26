@@ -5,9 +5,10 @@ import { cookies } from "next/headers";
 import { encrypt } from "@/lib/crypto";
 import { attachAccount, linkDone, LINK_COOKIE, readTicket } from "@/lib/accounts";
 
-// Scopes: sign-in, list calendars, read/write events, and read Gmail ("Read my email": meetings, calls and deadlines
-// in new mail). All on one Google screen, at sign-in and when adding another account; Google lets people untick
-// Gmail there, and then Settings offers Allow later. Nothing else from the Google account.
+// Scopes: sign-in, list calendars, read/write events, read Google Tasks (the tasks Google Calendar shows; see
+// calendar.ts), and read Gmail ("Read my email": meetings, calls and deadlines in new mail). All on one Google screen,
+// at sign-in and when adding another account; Google lets people untick Gmail or Tasks there, and then Settings
+// offers Allow later. Nothing else from the Google account.
 // Free/busy is computed from the events we already read, so the separate free/busy scope isn't needed.
 // Read only. Accounts that allowed gmail.modify for the old inbox still read with it; MAIL_READ matches either, in SQL like.
 export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
@@ -18,6 +19,7 @@ const scope = [
   "profile",
   "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
   "https://www.googleapis.com/auth/calendar.events",
+  "https://www.googleapis.com/auth/tasks.readonly",
   GMAIL_SCOPE,
 ].join(" ");
 export const withGmail = { scope }; // shortcut: the same as the default now; kept for Settings' Connect Gmail and the app

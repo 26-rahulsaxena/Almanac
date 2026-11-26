@@ -2,7 +2,7 @@
 import { motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { removeAccount, setDefaultCalendar, signOutNow, type AlertStages } from "@/app/actions";
-import { startLink } from "./google-sign-in";
+import { GoogleSignIn, startLink } from "./google-sign-in";
 import type { Account, LinkResult } from "@/lib/accounts";
 import type { Cal } from "@/lib/calendar";
 import { writableOptions } from "./event-panel";
@@ -282,7 +282,8 @@ const LINKED: Record<LinkResult, string> = {
 };
 
 // The connected Google accounts: Add (Google's account chooser; in the Android app, in the phone's browser, and the
-// app reloads once that's closed), Reconnect for one Google stopped accepting, Remove for any but the main one.
+// app reloads once that's closed), Reconnect for one Google stopped accepting, Allow Tasks for one whose Google Tasks
+// Almanac can't read yet, Remove for any but the main one.
 function GoogleAccounts({ accounts, linked }: { accounts: Account[]; linked?: LinkResult }) {
   const [removing, setRemoving] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -333,6 +334,23 @@ function GoogleAccounts({ accounts, linked }: { accounts: Account[]; linked?: Li
                 </button>
               )}
             </div>
+            {/* Signed in before Tasks were asked for, or unticked on Google's screen: Google asks again for this account. */}
+            {!a.broken && !a.tasks && (
+              <div className="mt-2 flex items-center gap-3 text-xs text-muted">
+                <span className="min-w-0 flex-1">Its Google Tasks aren&rsquo;t shown yet.</span>
+                {a.main ? (
+                  <GoogleSignIn className="shrink-0">
+                    <button type="submit" className="rounded-full border border-line px-3 py-1 text-xs text-ink hover:border-ink/40">
+                      Allow Tasks
+                    </button>
+                  </GoogleSignIn>
+                ) : (
+                  <button type="button" disabled={busy} onClick={add} className="shrink-0 rounded-full border border-line px-3 py-1 text-xs text-ink hover:border-ink/40 disabled:opacity-60">
+                    Allow Tasks
+                  </button>
+                )}
+              </div>
+            )}
             {removing === a.id && (
               <div className="mt-2 rounded-xl bg-ink/5 p-3 text-sm">
                 <p>Its calendars leave Almanac. Nothing is deleted in Google.</p>

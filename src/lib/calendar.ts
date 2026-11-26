@@ -1,5 +1,5 @@
 import { sql } from "./db";
-import { gcal, gcalAs, ReauthError, rememberCalendars, type GoogleAccount } from "./google";
+import { gcal, gcalAs, google, ReauthError, rememberCalendars, type GoogleAccount } from "./google";
 import type { Attendee, Master } from "./recurrence";
 import type { Reminder } from "./reminders";
 
@@ -59,17 +59,68 @@ type GEvent = {
   eventType?: string;
 };
 
+// Google Tasks (the tasks Google Calendar shows beside events) live in a separate Google service. Each account that
+// allowed it gets one read-only calendar, "Tasks" (id "tasks~<account id>"), whose events are its tasks with a due
+// date, on that date, all day: the Tasks API gives the date only, never a time. Each is "<list id>~<task id>".
+// Completed ones show crossed out (done), as in Google Calendar, and aren't priorities.
+export const TASKS = "tasks~";
+const TASKS_API = "https://tasks.googleapis.com/tasks/v1";
+type GTask = { id: string; title?: string; notes?: string; due?: string; status?: string };
+
+export function taskEvent(t: GTask, list: string, calendarId: string): Ev {
+  const day = t.due!.slice(0, 10); // Google keeps the date as midnight UTC
+  return {
+    id: `${list}~${t.id}`,
+    calendarId,
+    title: t.title || "(No title)",
+    start: day,
+    end: new Date(Date.parse(`${day}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10),
+    allDay: true,
+    busy: false,
+    description: t.notes,
+    isOrganizer: false,
+    ...(t.status === "completed" && { done: true }),
+  };
+}
+
+// One account's open tasks due in the range (a day either side, as due dates are UTC midnights), from all its lists.
+async function listTasks(userId: string, calendarId: string, from: string, to: string, query?: string): Promise<Ev[]> {
+  const lists = await google<{ items?: { id: string }[] }>(userId, `${TASKS_API}/users/@me/lists?maxResults=100&fields=items(id)`, undefined, calendarId);  const q = new URLSearchParams({
+    dueMin: new Date(Date.parse(from) - 86_400_000).toISOString(),
+    dueMax: new Date(Date.parse(to) + 86_400_000).toISOString(),
+    showCompleted: "true",
+    showHidden: "true", // completed in Google's own apps hides a task from the API unless asked for
+    maxResults: "100", // shortcut: no paging, so a list with >100 tasks due in one range gets cut off; loop on nextPageToken if that happens
+    fields: "items(id,title,notes,due,status)",
+  });
+  const all = await Promise.all(
+    (lists.items ?? []).map(async (l) => {
+      const r = await google<{ items?: GTask[] }>(userId, `${TASKS_API}/lists/${encodeURIComponent(l.id)}/tasks?${q}`, undefined, calendarId);      return (r.items ?? []).filter((t) => t.due).map((t) => taskEvent(t, l.id, calendarId));
+    }),
+  );
+  const words = query?.toLowerCase();
+  return all.flat().filter((e) => !words || `${e.title} ${e.description ?? ""}`.toLowerCase().includes(words));
+}
+
+// One task as the summary and start of an event (for a priority's state; see priorities.ts).
+export async function getTask(userId: string, calendarId: string, id: string): Promise<{ summary?: string; start: { date?: string; dateTime?: string } }> {
+  const [list, task] = id.split("~");
+  const t = await google<GTask>(userId, `${TASKS_API}/lists/${encodeURIComponent(list)}/tasks/${encodeURIComponent(task)}?fields=id,title,due`, undefined, calendarId);
+  return { summary: t.title, start: { date: (t.due ?? new Date().toISOString()).slice(0, 10) } };
+}
+
 // Every calendar from every connected Google account: the main account's first, each account's own calendar first
-// within it. A calendar shared with two of the accounts shows once, from one that can change it.
+// within it, then its Tasks. A calendar shared with two of the accounts shows once, from one that can change it.
 export async function listCalendars(userId: string): Promise<Cal[]> {
-  const accounts = await sql<(GoogleAccount & { email: string })[]>`
-    select id, email, is_main as main from google_accounts where user_id = ${userId} order by is_main desc, created_at`;
+  const accounts = await sql<(GoogleAccount & { email: string; tasks: boolean })[]>`
+    select id, email, is_main as main, coalesce(scope like '%/auth/tasks%', false) as tasks
+    from google_accounts where user_id = ${userId} order by is_main desc, created_at`;
   if (!accounts[0]?.main) throw new ReauthError();
   const lists = await Promise.all(
     accounts.map(async (a) => {
       try {
         const data = await gcalAs<{ items: GCal[] }>(a, "/users/me/calendarList?fields=items(id,summary,summaryOverride,backgroundColor,primary,accessRole,defaultReminders)");
-        return data.items
+        const cals: Cal[] = data.items
           .map((c) => ({
             id: c.id,
             name: c.summaryOverride ?? c.summary,
@@ -81,6 +132,8 @@ export async function listCalendars(userId: string): Promise<Cal[]> {
             accountId: a.id,
           }))
           .sort((x, y) => Number(y.primary) - Number(x.primary));
+        if (a.tasks) cals.push({ id: TASKS + a.id, name: "Tasks", color: "#4285f4", primary: false, canEdit: false, defaultReminders: [], account: a.email, accountId: a.id });
+        return cals;
       } catch (err) {
         if (a.main) throw err;
         console.error(`Skipping Google account ${a.id}:`, err); // an added account that needs reconnecting
@@ -113,6 +166,7 @@ export async function listEvents(userId: string, calendarIds: string[], from: st
   const lists = await Promise.all(
     calendarIds.map(async (calendarId) => {
       try {
+        if (calendarId.startsWith(TASKS)) return (await listTasks(userId, calendarId, from, to, query)).map((e): [undefined, Ev] => [undefined, e]);
         const data = await gcal<{ items: GEvent[] }>(userId, `/calendars/${encodeURIComponent(calendarId)}/events?${q}`);
         return data.items.map((e): [string | undefined, Ev] => [
           e.iCalUID,
